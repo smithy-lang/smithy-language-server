@@ -1,0 +1,233 @@
+package software.amazon.smithy.lsp;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.CompletionItemKind;
+import org.eclipse.lsp4j.CompletionList;
+import org.eclipse.lsp4j.CompletionParams;
+import org.eclipse.lsp4j.DefinitionParams;
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DidChangeTextDocumentParams;
+import org.eclipse.lsp4j.DidCloseTextDocumentParams;
+import org.eclipse.lsp4j.DidOpenTextDocumentParams;
+import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.LocationLink;
+import org.eclipse.lsp4j.MessageParams;
+import org.eclipse.lsp4j.MessageType;
+import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.TextDocumentIdentifier;
+import org.eclipse.lsp4j.TextDocumentItem;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.eclipse.lsp4j.services.LanguageClient;
+import org.eclipse.lsp4j.services.TextDocumentService;
+
+import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.validation.ValidatedResult;
+import software.amazon.smithy.model.validation.ValidationEvent;
+
+public class SmithyTextDocumentService implements TextDocumentService {
+
+  private Optional<LanguageClient> client = Optional.empty();
+  private List<CompletionItem> baseCompletions = new ArrayList<CompletionItem>();
+
+  private Map<String, List<? extends Location>> locations = new HashMap<String, List<? extends Location>>();
+
+  public SmithyTextDocumentService(Optional<LanguageClient> client) {
+    this.client = client;
+
+    List<CompletionItem> keywordCompletions = SmithyKeywords.keywords.stream()
+        .map(kw -> create(kw, CompletionItemKind.Keyword)).collect(Collectors.toList());
+
+    List<CompletionItem> baseTypesCompletions = SmithyKeywords.builtinTypes.stream()
+        .map(kw -> create(kw, CompletionItemKind.Class)).collect(Collectors.toList());
+
+    baseCompletions.addAll(keywordCompletions);
+    baseCompletions.addAll(baseTypesCompletions);
+  }
+
+  public void setClient(LanguageClient client) {
+    this.client = Optional.of(client);
+  }
+
+  private MessageParams msg(final MessageType sev, final String cont) {
+    return new MessageParams(sev, cont);
+  }
+
+  @Override
+  public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams position) {
+    return Utils.completableFuture(Either.forLeft(baseCompletions));
+  }
+
+  private CompletionItem create(String s, CompletionItemKind kind) {
+    CompletionItem ci = new CompletionItem(s);
+    ci.setKind(kind);
+    return ci;
+  }
+
+  private List<String> readAll(File f) throws IOException {
+    return Files.readAllLines(f.toPath());
+  }
+
+  private List<? extends Location> noLocations = Arrays.asList();
+
+  private String findToken(String path, Position p) throws IOException {
+    List<String> contents = readAll(new File(URI.create(path)));
+
+    String line = contents.get(p.getLine());
+    Integer col = p.getCharacter();
+
+    String before = line.substring(0, col);
+    String after = line.substring(col, line.length());
+
+    StringBuilder beforeAcc = new StringBuilder();
+    StringBuilder afterAcc = new StringBuilder();
+
+    int idx = 0;
+
+    while (idx < after.length()) {
+      if (Character.isLetterOrDigit(after.charAt(idx))) {
+        afterAcc.append(after.charAt(idx));
+        idx = idx + 1;
+      } else
+        idx = after.length();
+    }
+
+    idx = before.length() - 1;
+
+    while (idx > 0) {
+      char c = before.charAt(idx);
+      if (Character.isLetterOrDigit(c)) {
+        beforeAcc.append(c);
+        idx = idx - 1;
+      } else
+        idx = 0;
+    }
+
+    return beforeAcc.reverse().append(afterAcc).toString();
+  }
+
+  @Override
+  public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(
+      DefinitionParams params) {
+    try {
+      String found = findToken(params.getTextDocument().getUri(), params.getPosition());
+
+      // if(locations.containsKey(found))
+      // Utils.completableFuture(Either.forLeft(locations.get(found)));
+      // else Utils.completableFuture(Either.forLeft(List.of()));
+
+      return Utils.completableFuture(Either.forLeft(locations.getOrDefault(found, noLocations)));
+    } catch (Exception e) {
+      // TODO: handle exception
+
+      System.out.println(e);
+      e.printStackTrace();
+
+      return Utils.completableFuture(Either.forLeft(noLocations));
+    }
+  }
+
+  @Override
+  public void didChange(DidChangeTextDocumentParams params) {
+    File tempFile = null;
+
+    try {
+      tempFile = File.createTempFile("smithy", ".smithy");
+
+      Files.write(tempFile.toPath(), params.getContentChanges().get(0).getText().getBytes());
+
+    } catch (Exception e) {
+
+    }
+
+    recompile(tempFile, Optional.of(fileUri(params.getTextDocument())));
+  }
+
+  @Override
+  public void didOpen(DidOpenTextDocumentParams params) {
+    recompile(fileUri(params.getTextDocument()), Optional.empty());
+  }
+
+  @Override
+  public void didClose(DidCloseTextDocumentParams params) {
+    recompile(fileUri(params.getTextDocument()), Optional.empty());
+  }
+
+  @Override
+  public void didSave(DidSaveTextDocumentParams params) {
+    recompile(fileUri(params.getTextDocument()), Optional.empty());
+  }
+
+  private File fileUri(TextDocumentIdentifier tdi) {
+    return new File(URI.create(tdi.getUri()));
+  }
+
+  private File fileUri(TextDocumentItem tdi) {
+    return new File(URI.create(tdi.getUri()));
+  }
+
+  public void recompile(File path, Optional<File> original) {
+    Either<Exception, ValidatedResult<Model>> loadedModel = SmithyInterface.readModel(path);
+
+    String changedFileUri = original.map(f -> f.getAbsolutePath()).orElse(path.getAbsolutePath());
+
+    client.ifPresent(cl -> {
+      if (loadedModel.isLeft()) {
+        cl.showMessage(msg(MessageType.Error, changedFileUri + " is not okay!" + loadedModel.getLeft().toString()));
+      } else {
+        ValidatedResult<Model> result = loadedModel.getRight();
+
+        if (result.isBroken()) {
+          List<ValidationEvent> events = result.getValidationEvents();
+
+          List<Diagnostic> msgs = events.stream().map(ev -> ProtocolAdapter.toDiagnostic(ev))
+              .collect(Collectors.toList());
+
+          PublishDiagnosticsParams diagnostics = createDiagnostics(changedFileUri, msgs);
+
+          cl.publishDiagnostics(diagnostics);
+        } else {
+          if (!original.isPresent()) {
+            result.getResult().ifPresent(m -> updateLocations(path.getAbsolutePath(), m));
+          }
+          cl.publishDiagnostics(createDiagnostics(changedFileUri, Arrays.asList()));
+        }
+      }
+    });
+  }
+
+  public void updateLocations(String uri, Model m) {
+    m.shapes().forEach(shape -> {
+      String namespace = shape.getId().getNamespace();
+      if (!namespace.startsWith("smithy")) {
+        Position pos = new Position(shape.getSourceLocation().getLine() - 1, shape.getSourceLocation().getColumn() - 1);
+
+        Location location = new Location(uri, new Range(pos, pos));
+
+        System.out.println(shape.getId().getName() + " is located at " + pos.toString());
+
+        locations.put(shape.getId().getName(), Arrays.asList(location));
+      }
+    });
+  }
+
+  private PublishDiagnosticsParams createDiagnostics(String uri, final List<Diagnostic> diagnostics) {
+    return new PublishDiagnosticsParams(uri, diagnostics);
+  }
+
+}

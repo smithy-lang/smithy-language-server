@@ -1,0 +1,28 @@
+target
+project/target
+project/metals.sbt
+
+.vscode
+
+project/project
+.bloop
+.metals
+.idea
+.bsp
+# Ignore Gradle project-specific cache directory
+.gradle
+
+# Ignore Gradle build output directory
+build
+
+bin
+
+.classpath
+
+.project
+
+.settings
+
+.java-version
+*.smithy
+.ammonite
