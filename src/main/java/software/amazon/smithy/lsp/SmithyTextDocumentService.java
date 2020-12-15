@@ -1,3 +1,18 @@
+/*
+ * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+
 package software.amazon.smithy.lsp;
 
 import java.io.File;
@@ -42,18 +57,21 @@ import software.amazon.smithy.model.validation.ValidationEvent;
 
 public class SmithyTextDocumentService implements TextDocumentService {
 
-  private Optional<LanguageClient> client = Optional.empty();
   private List<CompletionItem> baseCompletions = new ArrayList<CompletionItem>();
-
+  private Optional<LanguageClient> client = Optional.empty();
   private Map<String, List<? extends Location>> locations = new HashMap<String, List<? extends Location>>();
+  private List<? extends Location> noLocations = Arrays.asList();
 
+  /**
+   * @param client Language Client to be used by text document service.
+   */
   public SmithyTextDocumentService(Optional<LanguageClient> client) {
     this.client = client;
 
-    List<CompletionItem> keywordCompletions = SmithyKeywords.keywords.stream()
+    List<CompletionItem> keywordCompletions = SmithyKeywords.KEYWORDS.stream()
         .map(kw -> create(kw, CompletionItemKind.Keyword)).collect(Collectors.toList());
 
-    List<CompletionItem> baseTypesCompletions = SmithyKeywords.builtinTypes.stream()
+    List<CompletionItem> baseTypesCompletions = SmithyKeywords.BUILT_IN_TYPES.stream()
         .map(kw -> create(kw, CompletionItemKind.Class)).collect(Collectors.toList());
 
     baseCompletions.addAll(keywordCompletions);
@@ -83,8 +101,6 @@ public class SmithyTextDocumentService implements TextDocumentService {
     return Files.readAllLines(f.toPath());
   }
 
-  private List<? extends Location> noLocations = Arrays.asList();
-
   private String findToken(String path, Position p) throws IOException {
     List<String> contents = readAll(new File(URI.create(path)));
 
@@ -103,8 +119,9 @@ public class SmithyTextDocumentService implements TextDocumentService {
       if (Character.isLetterOrDigit(after.charAt(idx))) {
         afterAcc.append(after.charAt(idx));
         idx = idx + 1;
-      } else
+      } else {
         idx = after.length();
+      }
     }
 
     idx = before.length() - 1;
@@ -114,8 +131,9 @@ public class SmithyTextDocumentService implements TextDocumentService {
       if (Character.isLetterOrDigit(c)) {
         beforeAcc.append(c);
         idx = idx - 1;
-      } else
+      } else {
         idx = 0;
+      }
     }
 
     return beforeAcc.reverse().append(afterAcc).toString();
@@ -181,6 +199,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
     return new File(URI.create(tdi.getUri()));
   }
 
+  /**
+   * @param path Path of new model file.
+   * @param original Original model file to compare against when recompiling.
+   */
   public void recompile(File path, Optional<File> original) {
     Either<Exception, ValidatedResult<Model>> loadedModel = SmithyInterface.readModel(path);
 
@@ -211,8 +233,13 @@ public class SmithyTextDocumentService implements TextDocumentService {
     });
   }
 
-  public void updateLocations(String uri, Model m) {
-    m.shapes().forEach(shape -> {
+  /**
+   *
+   * @param uri URI to set updated locations.
+   * @param model Model to get source locations of shapes.
+   */
+  public void updateLocations(String uri, Model model) {
+    model.shapes().forEach(shape -> {
       String namespace = shape.getId().getNamespace();
       if (!namespace.startsWith("smithy")) {
         Position pos = new Position(shape.getSourceLocation().getLine() - 1, shape.getSourceLocation().getColumn() - 1);
