@@ -31,6 +31,7 @@ plugins {
     id "maven-publish"
     id "com.palantir.git-version" version "0.12.3"
     id "checkstyle"
+    id 'com.github.johnrengelman.shadow' version '6.1.0'
 }
 
 
@@ -84,6 +85,10 @@ tasks["checkstyleTest"].enabled = false
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
     targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+shadowJar {
+    mergeServiceFiles()
 }
 
 jar {

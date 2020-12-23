@@ -15,10 +15,6 @@
 
 package software.amazon.smithy.lsp;
 
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.Socket;
-
 import org.eclipse.lsp4j.jsonrpc.Launcher;
 import org.eclipse.lsp4j.launch.LSPLauncher;
 import org.eclipse.lsp4j.services.LanguageClient;
@@ -33,17 +29,9 @@ public class Main {
    * @param args Arguments passed to launch server.
    */
   public static void main(String[] args) {
-
-    Socket socket = null;
-
     try {
-      String port = args[0];
-      socket = new Socket("localhost", Integer.parseInt(port));
-
-      InputStream in = socket.getInputStream();
-      OutputStream out = socket.getOutputStream();
       SmithyLanguageServer server = new SmithyLanguageServer();
-      Launcher<LanguageClient> launcher = LSPLauncher.createServerLauncher(server, in, out);
+      Launcher<LanguageClient> launcher = LSPLauncher.createServerLauncher(server, System.in, System.out);
       LanguageClient client = launcher.getRemoteProxy();
 
       server.connect(client);
@@ -57,16 +45,6 @@ public class Main {
       System.out.println(e);
 
       e.printStackTrace();
-    } finally {
-      try {
-        if (socket != null) {
-          socket.close();
-        }
-      } catch (Exception e) {
-        System.out.println("Failed to close the socket");
-        System.out.println(e);
-      }
     }
-
   }
 }
