@@ -1,11 +1,7 @@
-## My Project
+## Smithy Language Server
 
-TODO: Fill this README out!
-
-Be sure to:
-
-* Change the title in this README
-* Edit your repository description on GitHub
+A [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
+implementation for the [Smithy IDL](https://awslabs.github.io/smithy/).
 
 ## Security
 
