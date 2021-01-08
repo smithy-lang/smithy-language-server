@@ -37,10 +37,6 @@ public class Main {
       server.connect(client);
 
       launcher.startListening().get();
-    } catch (ArrayIndexOutOfBoundsException e) {
-      System.out.println("Missing port argument");
-    } catch (NumberFormatException e) {
-      System.out.println("Port number must be a valid integer");
     } catch (Exception e) {
       System.out.println(e);
 
