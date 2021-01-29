@@ -15,8 +15,15 @@
 
 package software.amazon.smithy.lsp;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 public final class Utils {
   private Utils() {
@@ -25,7 +32,7 @@ public final class Utils {
 
   /**
    * @param value Value to be used.
-   * @param <U> Type of Value.
+   * @param <U>   Type of Value.
    * @return Returns the value of a specific type as a CompletableFuture.
    */
   public static <U> CompletableFuture<U> completableFuture(U value) {
@@ -37,4 +44,42 @@ public final class Utils {
 
     return CompletableFuture.supplyAsync(supplier);
   }
+
+  public static Boolean isSmithyJarFile(String rawUri) throws IOException {
+    try {
+      String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
+      return uri.startsWith("smithyjar:");
+    } catch (IOException e) {
+      return false;
+    }
+  }
+
+  public static Boolean isFile(String rawUri) {
+    try {
+      String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
+      return uri.startsWith("file:");
+    } catch (IOException e) {
+      return false;
+    }
+  }
+
+  public static List<String> jarFileContents(String rawUri, ClassLoader classLoader) throws IOException {
+    if (Utils.isSmithyJarFile(rawUri)) {
+      String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
+      String[] pathArray = uri.split("!/");
+      String resourcePath = pathArray[1];
+      InputStream is = classLoader.getResourceAsStream(resourcePath);
+      try {
+        if (is != null) {
+          InputStreamReader isr = new InputStreamReader(is);
+          BufferedReader reader = new BufferedReader(isr);
+          return reader.lines().collect(Collectors.toList());
+        }
+      } finally {
+        is.close();
+      }
+    }
+    return null;
+  }
+
 }

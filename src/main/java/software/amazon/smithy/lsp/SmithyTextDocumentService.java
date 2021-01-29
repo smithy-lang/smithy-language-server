@@ -52,6 +52,7 @@ import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
 
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
@@ -91,6 +92,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
     return Utils.completableFuture(Either.forLeft(baseCompletions));
   }
 
+  @Override
+  public CompletableFuture<CompletionItem> resolveCompletionItem(CompletionItem unresolved) {
+    return Utils.completableFuture(unresolved);
+  }
+
   private CompletionItem create(String s, CompletionItemKind kind) {
     CompletionItem ci = new CompletionItem(s);
     ci.setKind(kind);
@@ -102,7 +108,12 @@ public class SmithyTextDocumentService implements TextDocumentService {
   }
 
   private String findToken(String path, Position p) throws IOException {
-    List<String> contents = readAll(new File(URI.create(path)));
+    List<String> contents;
+    if (Utils.isSmithyJarFile(path)) {
+      contents = Utils.jarFileContents(path, this.getClass().getClassLoader());
+    } else {
+      contents = readAll(new File(URI.create(path)));
+    }
 
     String line = contents.get(p.getLine());
     Integer col = p.getCharacter();
@@ -144,16 +155,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
       DefinitionParams params) {
     try {
       String found = findToken(params.getTextDocument().getUri(), params.getPosition());
-
-      // if(locations.containsKey(found))
-      // Utils.completableFuture(Either.forLeft(locations.get(found)));
-      // else Utils.completableFuture(Either.forLeft(List.of()));
-
       return Utils.completableFuture(Either.forLeft(locations.getOrDefault(found, noLocations)));
     } catch (Exception e) {
       // TODO: handle exception
 
-      System.out.println(e);
       e.printStackTrace();
 
       return Utils.completableFuture(Either.forLeft(noLocations));
@@ -178,7 +183,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
   @Override
   public void didOpen(DidOpenTextDocumentParams params) {
-    recompile(fileUri(params.getTextDocument()), Optional.empty());
+    String rawUri = params.getTextDocument().getUri();
+    if (Utils.isFile(rawUri)) {
+      recompile(fileUri(params.getTextDocument()), Optional.empty());
+    }
   }
 
   @Override
@@ -200,7 +208,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
   }
 
   /**
-   * @param path Path of new model file.
+   * @param path     Path of new model file.
    * @param original Original model file to compare against when recompiling.
    */
   public void recompile(File path, Optional<File> original) {
@@ -225,7 +233,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
           cl.publishDiagnostics(diagnostics);
         } else {
           if (!original.isPresent()) {
-            result.getResult().ifPresent(m -> updateLocations(path.getAbsolutePath(), m));
+            result.getResult().ifPresent(m -> updateLocations(m));
           }
           cl.publishDiagnostics(createDiagnostics(changedFileUri, Arrays.asList()));
         }
@@ -235,21 +243,22 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
   /**
    *
-   * @param uri URI to set updated locations.
+   * @param uri   URI to set updated locations.
    * @param model Model to get source locations of shapes.
    */
-  public void updateLocations(String uri, Model model) {
+  public void updateLocations(Model model) {
     model.shapes().forEach(shape -> {
-      String namespace = shape.getId().getNamespace();
-      if (!namespace.startsWith("smithy")) {
-        Position pos = new Position(shape.getSourceLocation().getLine() - 1, shape.getSourceLocation().getColumn() - 1);
-
-        Location location = new Location(uri, new Range(pos, pos));
-
-        System.out.println(shape.getId().getName() + " is located at " + pos.toString());
-
-        locations.put(shape.getId().getName(), Arrays.asList(location));
+      SourceLocation sourceLocation = shape.getSourceLocation();
+      String uri = sourceLocation.getFilename();
+      if (uri.startsWith("jar:file:")) {
+        uri = "smithyjar:" + uri.substring(9);
+      } else if (uri.startsWith("file:")) {
+        uri = uri.substring(5);
       }
+      Position pos = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
+      Location location = new Location(uri, new Range(pos, pos));
+
+      locations.put(shape.getId().getName(), Arrays.asList(location));
     });
   }
 

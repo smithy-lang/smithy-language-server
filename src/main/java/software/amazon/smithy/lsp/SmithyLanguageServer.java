@@ -16,9 +16,11 @@
 package software.amazon.smithy.lsp;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.InitializeParams;
@@ -26,6 +28,7 @@ import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.ServerCapabilities;
+import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageClientAware;
@@ -33,7 +36,7 @@ import org.eclipse.lsp4j.services.LanguageServer;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
 
-public class SmithyLanguageServer implements LanguageServer, LanguageClientAware {
+public class SmithyLanguageServer implements LanguageServer, LanguageClientAware, SmithyProtocolExtensions {
 
   private Optional<LanguageClient> client = Optional.empty();
 
@@ -72,7 +75,6 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
   }
 
-
   @Override
   public WorkspaceService getWorkspaceService() {
     // TODO Auto-generated method stub
@@ -93,6 +95,19 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     }
 
     client.showMessage(new MessageParams(MessageType.Info, "Hello from smithy-language-server !"));
+  }
+
+  @Override
+  public CompletableFuture<String> jarFileContents(TextDocumentIdentifier documentUri) {
+    try {
+      java.util.List<String> lines = Utils.jarFileContents(documentUri.getUri(), this.getClass().getClassLoader());
+      String contents = lines.stream().collect(Collectors.joining(System.lineSeparator()));
+      return CompletableFuture.completedFuture(contents);
+    } catch (IOException e) {
+      CompletableFuture<String> future = new CompletableFuture<String>();
+      future.completeExceptionally(e);
+      return future;
+    }
   }
 
 }
