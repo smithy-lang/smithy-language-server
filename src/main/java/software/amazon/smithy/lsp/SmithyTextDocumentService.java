@@ -243,7 +243,6 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
   /**
    *
-   * @param uri   URI to set updated locations.
    * @param model Model to get source locations of shapes.
    */
   public void updateLocations(Model model) {

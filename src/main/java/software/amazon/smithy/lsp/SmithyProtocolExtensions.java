@@ -22,7 +22,7 @@ import org.eclipse.lsp4j.jsonrpc.services.JsonRequest;
 import org.eclipse.lsp4j.jsonrpc.services.JsonSegment;
 
 /**
- * Interface for protocol extensions for Smithy
+ * Interface for protocol extensions for Smithy.
  */
 @JsonSegment("smithy")
 public interface SmithyProtocolExtensions {

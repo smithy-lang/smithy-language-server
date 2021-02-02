@@ -45,6 +45,10 @@ public final class Utils {
     return CompletableFuture.supplyAsync(supplier);
   }
 
+  /**
+   * @param rawUri String
+   * @return Returns whether the uri points to a file in jar.
+   */
   public static boolean isSmithyJarFile(String rawUri) throws IOException {
     try {
       String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
@@ -54,6 +58,11 @@ public final class Utils {
     }
   }
 
+  /**
+   * @param rawUri String
+   * @return Returns whether the uri points to a file in the filesystem (as
+   *         opposed to a file in a jar).
+   */
   public static boolean isFile(String rawUri) {
     try {
       String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
@@ -63,6 +72,12 @@ public final class Utils {
     }
   }
 
+  /**
+   * @param rawUri the uri to a file in a jar.
+   * @param classLoader a classloader used to retrieve resources.
+   * @return
+   * @throws IOException when rawUri cannot be URI-decoded.
+   */
   public static List<String> jarFileContents(String rawUri, ClassLoader classLoader) throws IOException {
     String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
     String[] pathArray = uri.split("!/");
