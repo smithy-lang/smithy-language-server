@@ -45,7 +45,7 @@ public final class Utils {
     return CompletableFuture.supplyAsync(supplier);
   }
 
-  public static Boolean isSmithyJarFile(String rawUri) throws IOException {
+  public static boolean isSmithyJarFile(String rawUri) throws IOException {
     try {
       String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
       return uri.startsWith("smithyjar:");
@@ -54,7 +54,7 @@ public final class Utils {
     }
   }
 
-  public static Boolean isFile(String rawUri) {
+  public static boolean isFile(String rawUri) {
     try {
       String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
       return uri.startsWith("file:");
@@ -64,22 +64,21 @@ public final class Utils {
   }
 
   public static List<String> jarFileContents(String rawUri, ClassLoader classLoader) throws IOException {
-    if (Utils.isSmithyJarFile(rawUri)) {
-      String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
-      String[] pathArray = uri.split("!/");
-      String resourcePath = pathArray[1];
-      InputStream is = classLoader.getResourceAsStream(resourcePath);
-      try {
-        if (is != null) {
-          InputStreamReader isr = new InputStreamReader(is);
-          BufferedReader reader = new BufferedReader(isr);
-          return reader.lines().collect(Collectors.toList());
-        }
-      } finally {
-        is.close();
+    String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
+    String[] pathArray = uri.split("!/");
+    String resourcePath = pathArray[1];
+    InputStream is = classLoader.getResourceAsStream(resourcePath);
+    List<String> result = null;
+    try {
+      if (is != null) {
+        InputStreamReader isr = new InputStreamReader(is);
+        BufferedReader reader = new BufferedReader(isr);
+        result = reader.lines().collect(Collectors.toList());
       }
+    } finally {
+      is.close();
     }
-    return null;
+    return result;
   }
 
 }
