@@ -75,7 +75,7 @@ public final class Utils {
   /**
    * @param rawUri the uri to a file in a jar.
    * @param classLoader a classloader used to retrieve resources.
-   * @return
+   * @return the lines of the jar file, as a list.
    * @throws IOException when rawUri cannot be URI-decoded.
    */
   public static List<String> jarFileContents(String rawUri, ClassLoader classLoader) throws IOException {
