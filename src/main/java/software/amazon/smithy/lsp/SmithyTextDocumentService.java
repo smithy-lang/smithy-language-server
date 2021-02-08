@@ -251,8 +251,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
       String uri = sourceLocation.getFilename();
       if (uri.startsWith("jar:file:")) {
         uri = "smithyjar:" + uri.substring(9);
-      } else if (uri.startsWith("file:")) {
-        uri = uri.substring(5);
+      } else if (!uri.startsWith("file:")) {
+        uri = "file:" + uri;
       }
       Position pos = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
       Location location = new Location(uri, new Range(pos, pos));
