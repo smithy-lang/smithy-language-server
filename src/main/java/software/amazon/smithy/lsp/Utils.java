@@ -15,8 +15,15 @@
 
 package software.amazon.smithy.lsp;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 public final class Utils {
   private Utils() {
@@ -25,7 +32,7 @@ public final class Utils {
 
   /**
    * @param value Value to be used.
-   * @param <U> Type of Value.
+   * @param <U>   Type of Value.
    * @return Returns the value of a specific type as a CompletableFuture.
    */
   public static <U> CompletableFuture<U> completableFuture(U value) {
@@ -37,4 +44,56 @@ public final class Utils {
 
     return CompletableFuture.supplyAsync(supplier);
   }
+
+  /**
+   * @param rawUri String
+   * @return Returns whether the uri points to a file in jar.
+   */
+  public static boolean isSmithyJarFile(String rawUri) throws IOException {
+    try {
+      String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
+      return uri.startsWith("smithyjar:");
+    } catch (IOException e) {
+      return false;
+    }
+  }
+
+  /**
+   * @param rawUri String
+   * @return Returns whether the uri points to a file in the filesystem (as
+   *         opposed to a file in a jar).
+   */
+  public static boolean isFile(String rawUri) {
+    try {
+      String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
+      return uri.startsWith("file:");
+    } catch (IOException e) {
+      return false;
+    }
+  }
+
+  /**
+   * @param rawUri the uri to a file in a jar.
+   * @param classLoader a classloader used to retrieve resources.
+   * @return the lines of the jar file, as a list.
+   * @throws IOException when rawUri cannot be URI-decoded.
+   */
+  public static List<String> jarFileContents(String rawUri, ClassLoader classLoader) throws IOException {
+    String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
+    String[] pathArray = uri.split("!/");
+    String resourcePath = pathArray[1];
+    InputStream is = classLoader.getResourceAsStream(resourcePath);
+    List<String> result = null;
+    try {
+      if (is != null) {
+        InputStreamReader isr = new InputStreamReader(is);
+        BufferedReader reader = new BufferedReader(isr);
+        result = reader.lines().collect(Collectors.toList());
+      }
+    } finally {
+      is.close();
+    }
+    return result;
+  }
+
 }
