@@ -35,13 +35,20 @@ public class Main {
   public static void main(String[] args) {
 
     Socket socket = null;
+    InputStream in;
+    OutputStream out;
 
     try {
       String port = args[0];
-      socket = new Socket("localhost", Integer.parseInt(port));
-
-      InputStream in = socket.getInputStream();
-      OutputStream out = socket.getOutputStream();
+      // If port is set to "0", use System.in/System.out.
+      if (port.equals("0")) {
+        in = System.in;
+        out = System.out;
+      } else {
+        socket = new Socket("localhost", Integer.parseInt(port));
+        in = socket.getInputStream();
+        out = socket.getOutputStream();
+      }
       SmithyLanguageServer server = new SmithyLanguageServer();
       Launcher<LanguageClient> launcher = LSPLauncher.createServerLauncher(server, in, out);
       LanguageClient client = launcher.getRemoteProxy();
@@ -67,6 +74,5 @@ public class Main {
         System.out.println(e);
       }
     }
-
   }
 }

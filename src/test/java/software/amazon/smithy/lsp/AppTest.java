@@ -15,12 +15,38 @@
 
 package software.amazon.smithy.lsp;
 
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
-import static org.junit.Assert.*;
 
 public class AppTest {
-    @Test public void testAppHasAGreeting() {
+    private final ByteArrayOutputStream outContent = new ByteArrayOutputStream();
+    private final PrintStream originalOut = System.out;
+
+    @Before
+    public void setUpStreams() {
+        System.setOut(new PrintStream(outContent));
+    }
+
+    @After
+    public void tearDownStreams() {
+        System.setOut(originalOut);
+    }
+
+    @Test
+    public void testAppHasAGreeting() {
         Main classUnderTest = new Main();
         assertNotNull("app should have a greeting", classUnderTest.getGreeting());
+    }
+
+    @Test
+    public void canConfigureSystemIo() {
+        Main.main(new String[] { "0" } );
+        assertTrue(outContent.toString().contains("Hello from smithy-language-server"));
     }
 }
