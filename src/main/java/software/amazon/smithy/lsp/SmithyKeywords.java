@@ -20,11 +20,12 @@ import java.util.List;
 
 public final class SmithyKeywords {
   public static final List<String> BUILT_IN_TYPES = Arrays.asList("Blob", "Boolean", "String", "Byte", "Short",
-      "Integer", "Long", "Float", "Double", "BigInteger", "BigDecimal", "Timestamp", "Document");
+          "Integer", "Long", "Float", "Double", "BigInteger", "BigDecimal", "Timestamp", "Document");
   public static final List<String> KEYWORDS = Arrays.asList("bigDecimal", "bigInteger", "blob", "boolean", "byte",
-      "document", "double", "errors", "float", "input", "integer", "integer", "list", "long", "map", "metadata",
-      "namespace", "operation", "output", "resource", "service", "set", "short", "string", "structure", "timestamp",
-      "union", "use");
+          "create", "collectionOperations", "delete", "document", "double", "errors", "float", "identifiers", "input",
+          "integer", "integer", "key", "list", "long", "map", "member", "metadata", "namespace", "operation",
+          "operations", "output", "put", "read", "resource", "resources", "service", "set", "short", "string",
+          "structure", "timestamp", "union", "update", "use", "value", "version");
 
   private SmithyKeywords() {
 
