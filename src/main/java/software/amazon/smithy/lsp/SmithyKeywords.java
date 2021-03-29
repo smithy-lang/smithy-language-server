@@ -24,8 +24,8 @@ public final class SmithyKeywords {
   public static final List<String> KEYWORDS = Arrays.asList("bigDecimal", "bigInteger", "blob", "boolean", "byte",
           "create", "collectionOperations", "delete", "document", "double", "errors", "float", "identifiers", "input",
           "integer", "integer", "key", "list", "long", "map", "member", "metadata", "namespace", "operation",
-          "operations", "output", "put", "read", "resource", "resources", "service", "set", "short", "string",
-          "structure", "timestamp", "union", "update", "use", "value", "version");
+          "operations", "output", "put", "read", "rename", "resource", "resources", "service", "set", "short",
+          "string", "structure", "timestamp", "union", "update", "use", "value", "version");
 
   private SmithyKeywords() {
 
