@@ -21,13 +21,13 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.CompletionList;
@@ -50,7 +50,6 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
-
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.validation.ValidatedResult;
@@ -121,7 +120,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     String line = contents.get(p.getLine());
-    Integer col = p.getCharacter();
+    int col = p.getCharacter();
 
     String before = line.substring(0, col);
     String after = line.substring(col, line.length());
@@ -217,7 +216,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
    * @param original Original model file to compare against when recompiling.
    */
   public void recompile(File path, Optional<File> original) {
-    Either<Exception, ValidatedResult<Model>> loadedModel = SmithyInterface.readModel(path);
+    Either<Exception, ValidatedResult<Model>> loadedModel = SmithyInterface.readModel(path, workspaceRoot);
 
     String changedFileUri = original.map(f -> f.getAbsolutePath()).orElse(path.getAbsolutePath());
 
@@ -226,21 +225,20 @@ public class SmithyTextDocumentService implements TextDocumentService {
         cl.showMessage(msg(MessageType.Error, changedFileUri + " is not okay!" + loadedModel.getLeft().toString()));
       } else {
         ValidatedResult<Model> result = loadedModel.getRight();
-
         if (result.isBroken()) {
           List<ValidationEvent> events = result.getValidationEvents();
 
-          List<Diagnostic> msgs = events.stream().map(ev -> ProtocolAdapter.toDiagnostic(ev))
+          List<Diagnostic> msgs = events.stream().map(ProtocolAdapter::toDiagnostic)
               .collect(Collectors.toList());
 
-          PublishDiagnosticsParams diagnostics = createDiagnostics(changedFileUri, msgs);
+          PublishDiagnosticsParams diagnostics = createDiagnostics("file:" + changedFileUri, msgs);
 
           cl.publishDiagnostics(diagnostics);
         } else {
           if (!original.isPresent()) {
-            result.getResult().ifPresent(m -> updateLocations(m));
+            result.getResult().ifPresent(this::updateLocations);
           }
-          cl.publishDiagnostics(createDiagnostics(changedFileUri, Arrays.asList()));
+          cl.publishDiagnostics(createDiagnostics("file:" + changedFileUri, Collections.emptyList()));
         }
       }
     });
@@ -264,7 +262,6 @@ public class SmithyTextDocumentService implements TextDocumentService {
       }
       Position pos = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
       Location location = new Location(uri, new Range(pos, pos));
-
       locations.put(shape.getId().getName(), Arrays.asList(location));
     });
   }
@@ -272,5 +269,4 @@ public class SmithyTextDocumentService implements TextDocumentService {
   private PublishDiagnosticsParams createDiagnostics(String uri, final List<Diagnostic> diagnostics) {
     return new PublishDiagnosticsParams(uri, diagnostics);
   }
-
 }

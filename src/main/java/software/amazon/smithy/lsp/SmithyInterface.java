@@ -16,10 +16,13 @@
 package software.amazon.smithy.lsp;
 
 import java.io.File;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
+import org.apache.commons.io.FileUtils;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
-
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.loader.ModelAssembler;
 import software.amazon.smithy.model.validation.ValidatedResult;
 
 public final class SmithyInterface {
@@ -29,14 +32,31 @@ public final class SmithyInterface {
 
   /**
    * @param path File of single-file model.
+   * @param workspaceRoot Workspace
    * @return Returns either an Exception, or the ValidatedResult of a model.
    */
-  public static Either<Exception, ValidatedResult<Model>> readModel(File path) {
-
+  public static Either<Exception, ValidatedResult<Model>> readModel(File path, File workspaceRoot) {
     try {
-      return Either.forRight(Model.assembler().discoverModels().addImport(path.getAbsolutePath()).assemble());
+      ModelAssembler assembler = Model.assembler();
+      assembler.discoverModels();
+      // If the workspace root has been set, get all the Smithy model files available.
+      if (workspaceRoot != null) {
+        List<File> modelFiles = getModelFiles(workspaceRoot);
+        modelFiles.forEach(f -> assembler.addImport(f.getAbsolutePath()));
+      } else {
+        // Fall back to the single model file.
+        assembler.addImport(path.getAbsolutePath());
+      }
+      return Either.forRight(assembler.assemble());
     } catch (Exception e) {
       return Either.forLeft(e);
     }
+  }
+
+  private static List<File> getModelFiles(File root) {
+    Collection<File> smithyModelFiles = FileUtils.listFiles(root, new String[]{"smithy"}, true);
+    // Filter out any any model files that have been generated during a previous build.
+    return smithyModelFiles.stream().filter(f -> !f.getAbsolutePath().contains(root.getAbsolutePath() + "/build"))
+            .collect(Collectors.toList());
   }
 }
