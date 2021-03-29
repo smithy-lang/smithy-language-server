@@ -62,6 +62,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
   private Optional<LanguageClient> client = Optional.empty();
   private Map<String, List<? extends Location>> locations = new HashMap<String, List<? extends Location>>();
   private List<? extends Location> noLocations = Arrays.asList();
+  private File workspaceRoot;
 
   /**
    * @param client Language Client to be used by text document service.
@@ -81,6 +82,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
   public void setClient(LanguageClient client) {
     this.client = Optional.of(client);
+  }
+
+  public void setWorkspaceRoot(File workspaceRoot) {
+    this.workspaceRoot = workspaceRoot;
   }
 
   private MessageParams msg(final MessageType sev, final String cont) {

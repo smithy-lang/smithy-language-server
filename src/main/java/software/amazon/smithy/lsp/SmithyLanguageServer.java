@@ -54,6 +54,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     if (params.getRootUri() != null) {
       try {
         workspaceRoot = new File(new URI(params.getRootUri()));
+        tds.setWorkspaceRoot(workspaceRoot);
       } catch (Exception e) {
         // TODO: handle exception
       }
