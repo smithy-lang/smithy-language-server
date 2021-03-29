@@ -246,7 +246,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
    * @param model Model to get source locations of shapes.
    */
   public void updateLocations(Model model) {
-    model.shapes().forEach(shape -> {
+    model.shapes()
+            // Filter member shapes to avoid polluting the locations map keys.
+            .filter(shape -> !shape.isMemberShape())
+            .forEach(shape -> {
       SourceLocation sourceLocation = shape.getSourceLocation();
       String uri = sourceLocation.getFilename();
       if (uri.startsWith("jar:file:")) {
