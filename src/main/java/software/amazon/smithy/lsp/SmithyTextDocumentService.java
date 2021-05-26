@@ -214,7 +214,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
   public void recompile(File path, Optional<File> original) {
     Either<Exception, ValidatedResult<Model>> loadedModel = SmithyInterface.readModel(path);
 
-    String changedFileUri = original.map(f -> f.getAbsolutePath()).orElse(path.getAbsolutePath());
+    String changedFileUri = original.map(File::getAbsolutePath).orElse(path.getAbsolutePath());
 
     client.ifPresent(cl -> {
       if (loadedModel.isLeft()) {
@@ -227,7 +227,6 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
           List<Diagnostic> msgs = events.stream().map(ev -> ProtocolAdapter.toDiagnostic(ev))
               .collect(Collectors.toList());
-
           PublishDiagnosticsParams diagnostics = createDiagnostics(changedFileUri, msgs);
 
           cl.publishDiagnostics(diagnostics);
@@ -262,6 +261,9 @@ public class SmithyTextDocumentService implements TextDocumentService {
   }
 
   private PublishDiagnosticsParams createDiagnostics(String uri, final List<Diagnostic> diagnostics) {
+    if (!uri.startsWith("file:")) {
+      uri = "file:" + uri;
+    }
     return new PublishDiagnosticsParams(uri, diagnostics);
   }
 
