@@ -16,9 +16,7 @@
 package software.amazon.smithy.lsp;
 
 import java.io.File;
-
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
-
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.validation.ValidatedResult;
 
