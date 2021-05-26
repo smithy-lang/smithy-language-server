@@ -16,7 +16,6 @@
 package software.amazon.smithy.lsp;
 
 import java.util.concurrent.CompletableFuture;
-
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest;
 import org.eclipse.lsp4j.jsonrpc.services.JsonSegment;
