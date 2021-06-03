@@ -37,7 +37,7 @@ public final class ProtocolAdapter {
 
     DiagnosticSeverity severity = toDiagnosticSeverity(event.getSeverity());
 
-    Range range = new Range(new Position(line, col), new Position(line, col));
+    Range range = new Range(new Position(line, 0), new Position(line, col));
 
     return new Diagnostic(range, event.getMessage(), severity, "Smithy LSP");
   }
