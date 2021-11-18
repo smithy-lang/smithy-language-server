@@ -18,7 +18,6 @@ package software.amazon.smithy.lsp;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import org.eclipse.lsp4j.jsonrpc.Launcher;
@@ -62,13 +61,16 @@ public class Main {
         out = socket.getOutputStream();
       }
 
-      throw launch(in, out).get();
+      Optional<Exception> launchFailure = launch(in, out);
+
+      if (launchFailure.isPresent())
+        throw launchFailure.get();
+      else
+        System.out.println("Server terminated without errors");
     } catch (ArrayIndexOutOfBoundsException e) {
       System.out.println("Missing port argument");
     } catch (NumberFormatException e) {
       System.out.println("Port number must be a valid integer");
-    } catch (NoSuchElementException e) {
-      System.out.println("Server terminated without errors");
     } catch (Exception e) {
       System.out.println(e);
 
