@@ -18,14 +18,27 @@ package software.amazon.smithy.lsp;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+
 import org.eclipse.lsp4j.jsonrpc.Launcher;
 import org.eclipse.lsp4j.launch.LSPLauncher;
 import org.eclipse.lsp4j.services.LanguageClient;
 
-
 public class Main {
-  public String getGreeting() {
-    return "Hello world.";
+
+  public static Optional<Exception> launch(InputStream in, OutputStream out) {
+    SmithyLanguageServer server = new SmithyLanguageServer();
+    Launcher<LanguageClient> launcher = LSPLauncher.createServerLauncher(server, in, out);
+    LanguageClient client = launcher.getRemoteProxy();
+
+    server.connect(client);
+    try {
+      launcher.startListening().get();
+      return Optional.empty();
+    } catch (Exception e) {
+      return Optional.of(e);
+    }
   }
 
   /**
@@ -48,17 +61,14 @@ public class Main {
         in = socket.getInputStream();
         out = socket.getOutputStream();
       }
-      SmithyLanguageServer server = new SmithyLanguageServer();
-      Launcher<LanguageClient> launcher = LSPLauncher.createServerLauncher(server, in, out);
-      LanguageClient client = launcher.getRemoteProxy();
 
-      server.connect(client);
-
-      launcher.startListening().get();
+      throw launch(in, out).get();
     } catch (ArrayIndexOutOfBoundsException e) {
       System.out.println("Missing port argument");
     } catch (NumberFormatException e) {
       System.out.println("Port number must be a valid integer");
+    } catch (NoSuchElementException e) {
+      System.out.println("Server terminated without errors");
     } catch (Exception e) {
       System.out.println(e);
 
