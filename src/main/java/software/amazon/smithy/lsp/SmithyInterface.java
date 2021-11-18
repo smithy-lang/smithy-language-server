@@ -16,8 +16,12 @@
 package software.amazon.smithy.lsp;
 
 import java.io.File;
+import java.util.Set;
+
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
+
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.loader.ModelAssembler;
 import software.amazon.smithy.model.validation.ValidatedResult;
 
 public final class SmithyInterface {
@@ -33,6 +37,36 @@ public final class SmithyInterface {
 
     try {
       return Either.forRight(Model.assembler().discoverModels().addImport(path.getAbsolutePath()).assemble());
+    } catch (Exception e) {
+      return Either.forLeft(e);
+    }
+  }
+
+  public static Either<Exception, ValidatedResult<Model>> readModel(File path, Set<String> externalJars) {
+
+    try {
+      ModelAssembler assembler = Model.assembler().discoverModels();
+      for (String jar : externalJars) {
+        assembler = assembler.addImport(jar);
+      }
+
+      assembler = assembler.addImport(path.getAbsolutePath());
+
+      return Either.forRight(assembler.assemble());
+    } catch (Exception e) {
+      return Either.forLeft(e);
+    }
+  }
+
+  public static Either<Exception, ValidatedResult<Model>> readModel(Set<String> externalJars) {
+
+    try {
+      ModelAssembler assembler = Model.assembler().discoverModels();
+      for (String jar : externalJars) {
+        assembler = assembler.addImport(jar);
+      }
+
+      return Either.forRight(assembler.assemble());
     } catch (Exception e) {
       return Either.forLeft(e);
     }
