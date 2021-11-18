@@ -4,7 +4,6 @@ import java.io.File;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -16,8 +15,6 @@ import coursierapi.Repository;
 import coursierapi.error.CoursierError;
 
 public class DependencyDownloader {
-  private List<Repository> repositories;
-  private List<Dependency> artifacts;
   private Fetch fetch;
 
   private static List<Repository> toRepositories(List<String> repos) {
@@ -47,11 +44,9 @@ public class DependencyDownloader {
   }
 
   private DependencyDownloader(SmithyBuildExtensions extensions) throws ValidationException {
-    repositories = toRepositories(extensions.getRepositories());
-    artifacts = toDependencies(extensions.getArtifacts());
     fetch = Fetch.create();
-    repositories.forEach(repo -> fetch.addRepositories(repo));
-    artifacts.forEach(dep -> fetch.addDependencies(dep));
+    toRepositories(extensions.getMavenRepositories()).forEach(repo -> fetch.addRepositories(repo));
+    toDependencies(extensions.getMavenDependencies()).forEach(dep -> fetch.addDependencies(dep));
   }
 
   public static DependencyDownloader create(SmithyBuildExtensions extensions) throws ValidationException {
@@ -76,7 +71,6 @@ public class DependencyDownloader {
   }
 
   public List<File> download() throws CoursierError {
-    // TODO: REMOVE THE SUBLIST
     return filterOutSmithyJars(fetch.fetch());
   }
 }
