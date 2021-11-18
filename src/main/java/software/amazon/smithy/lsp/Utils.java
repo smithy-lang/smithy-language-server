@@ -16,14 +16,18 @@
 package software.amazon.smithy.lsp;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import java.util.jar.JarFile;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
 
 public final class Utils {
   private Utils() {
@@ -72,17 +76,7 @@ public final class Utils {
     }
   }
 
-  /**
-   * @param rawUri the uri to a file in a jar.
-   * @param classLoader a classloader used to retrieve resources.
-   * @return the lines of the jar file, as a list.
-   * @throws IOException when rawUri cannot be URI-decoded.
-   */
-  public static List<String> jarFileContents(String rawUri, ClassLoader classLoader) throws IOException {
-    String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
-    String[] pathArray = uri.split("!/");
-    String resourcePath = pathArray[1];
-    InputStream is = classLoader.getResourceAsStream(resourcePath);
+  private static List<String> getLines(InputStream is) throws IOException {
     List<String> result = null;
     try {
       if (is != null) {
@@ -93,7 +87,50 @@ public final class Utils {
     } finally {
       is.close();
     }
+
     return result;
+  }
+
+  /**
+   * @param rawUri      the uri to a file in a jar.
+   * @param classLoader a classloader used to retrieve resources.
+   * @return the lines of the jar file, as a list.
+   * @throws IOException when rawUri cannot be URI-decoded.
+   */
+  public static List<String> jarFileContents(String rawUri, ClassLoader classLoader) throws IOException {
+    String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
+    String[] pathArray = uri.split("!/");
+    String resourcePath = pathArray[1];
+    InputStream is = classLoader.getResourceAsStream(resourcePath);
+
+    return getLines(is);
+  }
+
+  /**
+   * @param rawUri      the uri to a file in a jar.
+   * @param classLoader a classloader used to retrieve resources.
+   * @return the lines of the jar file, as a list.
+   * @throws IOException when rawUri cannot be URI-decoded.
+   */
+  public static List<String> jarFileContents(String rawUri) throws IOException {
+    String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
+    String[] pathArray = uri.split("!/");
+    String jarPath = Utils.jarPath(rawUri);
+    String file = pathArray[1];
+
+    try (JarFile jar = new JarFile(new File(jarPath))) {
+      ZipEntry entry = jar.getEntry(file);
+
+      return getLines(jar.getInputStream(entry));
+    }
+  }
+
+  public static String jarPath(String rawUri) throws UnsupportedEncodingException {
+    String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
+    if (uri.startsWith("smithyjar:"))
+      uri = uri.replaceFirst("smithyjar:", "");
+    String[] pathArray = uri.split("!/");
+    return pathArray[0];
   }
 
 }
