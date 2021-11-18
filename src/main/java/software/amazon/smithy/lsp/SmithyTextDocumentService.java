@@ -27,6 +27,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+
+import com.google.common.collect.ImmutableSet;
+
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.CompletionList;
@@ -49,6 +52,10 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
+
+import software.amazon.smithy.lsp.ext.DependencyDownloader;
+import software.amazon.smithy.lsp.ext.LspLog;
+import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.validation.ValidatedResult;
@@ -60,6 +67,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
   private Optional<LanguageClient> client = Optional.empty();
   private Map<String, List<? extends Location>> locations = new HashMap<String, List<? extends Location>>();
   private List<? extends Location> noLocations = Arrays.asList();
+  private ImmutableSet<String> externalJars = ImmutableSet.of();
 
   /**
    * @param client Language Client to be used by text document service.
@@ -79,6 +87,25 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
   public void setClient(LanguageClient client) {
     this.client = Optional.of(client);
+  }
+
+  public void setExtensions(SmithyBuildExtensions ext) {
+    try {
+      DependencyDownloader manager = DependencyDownloader.create(ext);
+      this.externalJars = ImmutableSet
+          .copyOf(manager.download().stream().map(f -> f.getAbsolutePath()).collect(Collectors.toSet()));
+      sendInfo("Downloaded " + externalJars.size() + " external Smithy jars");
+      Either<Exception, ValidatedResult<Model>> externalModel = SmithyInterface.readModel(this.externalJars);
+      if (externalModel.isRight()) {
+        externalModel.getRight().getResult().ifPresent(model -> {
+          sendInfo("Imported " + model.getShapeIds().size() + " definitions from external jars");
+
+          updateLocations(model);
+        });
+      }
+    } catch (Exception e) {
+      sendError("Failed to download dependencies: " + e.toString());
+    }
   }
 
   private MessageParams msg(final MessageType sev, final String cont) {
@@ -101,14 +128,33 @@ public class SmithyTextDocumentService implements TextDocumentService {
     return ci;
   }
 
+  public Boolean isExternalJarURI(String uri) {
+    try {
+      if (!Utils.isSmithyJarFile(uri))
+        return false;
+      else {
+        String path = Utils.jarPath(uri);
+
+        return this.externalJars.contains(path);
+      }
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
   private List<String> readAll(File f) throws IOException {
     return Files.readAllLines(f.toPath());
   }
 
   private String findToken(String path, Position p) throws IOException {
     List<String> contents;
+    LspLog.println("Looking for " + path);
     if (Utils.isSmithyJarFile(path)) {
-      contents = Utils.jarFileContents(path, this.getClass().getClassLoader());
+      String jarPath = Utils.jarPath(path);
+      if (this.externalJars.contains(jarPath))
+        contents = Utils.jarFileContents(path);
+      else
+        contents = Utils.jarFileContents(path, this.getClass().getClassLoader());
     } else {
       contents = readAll(new File(URI.create(path)));
     }
@@ -210,7 +256,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
    * @param original Original model file to compare against when recompiling.
    */
   public void recompile(File path, Optional<File> original) {
-    Either<Exception, ValidatedResult<Model>> loadedModel = SmithyInterface.readModel(path);
+    Either<Exception, ValidatedResult<Model>> loadedModel = SmithyInterface.readModel(path, this.externalJars);
 
     String changedFileUri = original.map(File::getAbsolutePath).orElse(path.getAbsolutePath());
 
@@ -235,6 +281,18 @@ public class SmithyTextDocumentService implements TextDocumentService {
           cl.publishDiagnostics(createDiagnostics(changedFileUri, Arrays.asList()));
         }
       }
+    });
+  }
+
+  private void sendInfo(String msg) {
+    this.client.ifPresent(client -> {
+      client.showMessage(new MessageParams(MessageType.Info, msg));
+    });
+  }
+
+  private void sendError(String msg) {
+    this.client.ifPresent(client -> {
+      client.showMessage(new MessageParams(MessageType.Error, msg));
     });
   }
 
