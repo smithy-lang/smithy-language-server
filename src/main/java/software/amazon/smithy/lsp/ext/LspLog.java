@@ -3,6 +3,7 @@ package software.amazon.smithy.lsp.ext;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -21,9 +22,9 @@ public class LspLog {
   private LspLog() {
   }
 
-  public static void setWorkspaceFolder(String folder) {
+  public static void setWorkspaceFolder(File folder) {
     try {
-      fw = new FileWriter(new File(folder + "/.smithy.lsp.log"));
+      fw = new FileWriter(Paths.get(folder.getAbsolutePath(), "/.smithy.lsp.log").toFile());
       synchronized (buffer) {
         buffer.ifPresent(buf -> buf.forEach(line -> println(line)));
         buffer = Optional.empty();
