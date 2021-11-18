@@ -13,6 +13,10 @@
  * permissions and limitations under the License.
  */
 
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+
+
 buildscript {
   repositories {
     maven { url "https://plugins.gradle.org/m2/" }
@@ -41,7 +45,7 @@ allprojects {
     apply plugin: "java"
     apply plugin: "maven-publish"
     group = "software.amazon.smithy"
-    version = "0.0.0"
+    version = "0.0.0-SNAPSHOT"
 }
 
 repositories {
@@ -66,10 +70,22 @@ publishing {
 dependencies {
     implementation "org.eclipse.lsp4j:org.eclipse.lsp4j:0.9.0"
     implementation "software.amazon.smithy:smithy-model:[1.0, 2.0["
+    implementation 'io.get-coursier:interface:1.0.4'
 
     // Use JUnit test framework
     testImplementation "junit:junit:4.13"
 }
+
+tasks.withType(Test) {
+    testLogging {
+        events TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED, TestLogEvent.STANDARD_OUT, TestLogEvent.STANDARD_ERROR
+        exceptionFormat TestExceptionFormat.FULL
+        showExceptions true
+        showCauses true
+        showStackTraces true
+    }
+}
+
 
 application {
     // Define the main class for the application.
@@ -100,4 +116,3 @@ jar {
         attributes("Main-Class": "software.amazon.smithy.lsp.Main")
     }
 }
-
