@@ -43,8 +43,8 @@ import org.eclipse.lsp4j.services.WorkspaceService;
 import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
-import software.amazon.smithy.lsp.ext.ValidationException;
 import software.amazon.smithy.lsp.ext.SmithyBuildLoader;
+import software.amazon.smithy.lsp.ext.ValidationException;
 
 public class SmithyLanguageServer implements LanguageServer, LanguageClientAware, SmithyProtocolExtensions {
 
@@ -139,21 +139,13 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     client.showMessage(new MessageParams(MessageType.Info, "Hello from smithy-language-server !"));
   }
 
-  private Boolean isExternalJar(String uri) {
-    return this.tds.map(tds -> tds.isExternalJarURI(uri)).orElse(false);
-  }
-
   @Override
   public CompletableFuture<String> jarFileContents(TextDocumentIdentifier documentUri) {
     String uri = documentUri.getUri();
 
     try {
       LspLog.println("Trying to resolve " + uri);
-      List<String> lines = null;
-      if (isExternalJar(uri))
-        lines = Utils.jarFileContents(uri);
-      else
-        lines = Utils.jarFileContents(uri, this.getClass().getClassLoader());
+      List<String> lines = Utils.jarFileContents(uri);
       String contents = lines.stream().collect(Collectors.joining(System.lineSeparator()));
       return CompletableFuture.completedFuture(contents);
     } catch (IOException e) {

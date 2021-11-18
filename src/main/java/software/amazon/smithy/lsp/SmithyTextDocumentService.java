@@ -150,11 +150,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
     List<String> contents;
     LspLog.println("Looking for " + path);
     if (Utils.isSmithyJarFile(path)) {
-      String jarPath = Utils.jarPath(path);
-      if (this.externalJars.contains(jarPath))
-        contents = Utils.jarFileContents(path);
-      else
-        contents = Utils.jarFileContents(path, this.getClass().getClassLoader());
+      contents = Utils.jarFileContents(path);
     } else {
       contents = readAll(new File(URI.create(path)));
     }
