@@ -97,21 +97,6 @@ public final class Utils {
    * @return the lines of the jar file, as a list.
    * @throws IOException when rawUri cannot be URI-decoded.
    */
-  public static List<String> jarFileContents(String rawUri, ClassLoader classLoader) throws IOException {
-    String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
-    String[] pathArray = uri.split("!/");
-    String resourcePath = pathArray[1];
-    InputStream is = classLoader.getResourceAsStream(resourcePath);
-
-    return getLines(is);
-  }
-
-  /**
-   * @param rawUri      the uri to a file in a jar.
-   * @param classLoader a classloader used to retrieve resources.
-   * @return the lines of the jar file, as a list.
-   * @throws IOException when rawUri cannot be URI-decoded.
-   */
   public static List<String> jarFileContents(String rawUri) throws IOException {
     String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
     String[] pathArray = uri.split("!/");
