@@ -20,6 +20,7 @@ import static org.junit.Assert.fail;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 
 import com.google.common.collect.ImmutableList;
 
@@ -68,5 +69,19 @@ public class SmithyBuildExtensionsTest {
         } catch (ValidationException e) {
             fail(e.toString());
         }
+    }
+
+    @Test
+    public void merging() {
+        SmithyBuildExtensions.Builder builder = SmithyBuildExtensions.builder();
+
+        SmithyBuildExtensions other = SmithyBuildExtensions.builder().mavenDependencies(Arrays.asList("hello", "world"))
+                .mavenRepositories(Arrays.asList("hi", "there")).build();
+
+        SmithyBuildExtensions result = builder.mavenDependencies(Arrays.asList("d1", "d2"))
+                .mavenRepositories(Arrays.asList("r1", "r2")).merge(other).build();
+
+        assertEquals(ImmutableList.of("d1", "d2", "hello", "world"), result.getMavenDependencies());
+        assertEquals(ImmutableList.of("r1", "r2", "hi", "there"), result.getMavenRepositories());
     }
 }
