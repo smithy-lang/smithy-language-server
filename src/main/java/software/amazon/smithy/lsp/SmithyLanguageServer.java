@@ -40,14 +40,15 @@ import org.eclipse.lsp4j.services.LanguageServer;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
 
+import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
 import software.amazon.smithy.lsp.ext.ValidationException;
+import software.amazon.smithy.lsp.ext.SmithyBuildLoader;
 
 public class SmithyLanguageServer implements LanguageServer, LanguageClientAware, SmithyProtocolExtensions {
 
   private Optional<LanguageClient> client = Optional.empty();
-  private Optional<SmithyBuildExtensions> ext = Optional.empty();
 
   private File workspaceRoot = null;
 
@@ -59,10 +60,22 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
   }
 
   private void loadSmithyBuild(File root) throws ValidationException, FileNotFoundException {
-    File smithyBuild = Paths.get(root.getAbsolutePath(), "smithy-build.json").toFile();
-    SmithyBuildExtensions ext = SmithyBuildExtensions.load(smithyBuild);
-    LspLog.println("Loaded build extensions from " + smithyBuild.getAbsolutePath() + ": " + ext.toString());
-    tds.ifPresent(client -> client.setExtensions(ext));
+    SmithyBuildExtensions.Builder result = SmithyBuildExtensions.builder();
+
+    for (String file : Constants.BUILD_FILES) {
+      File smithyBuild = Paths.get(root.getAbsolutePath(), file).toFile();
+      if (smithyBuild.isFile()) {
+        try {
+          result.merge(SmithyBuildLoader.load(smithyBuild.toPath()));
+          LspLog.println("Loaded build extensions " + result + " from " + smithyBuild.getAbsolutePath());
+        } catch (Exception e) {
+          LspLog.println("Failed to load " + result + ": " + e.toString());
+        }
+      }
+    }
+
+    if (this.tds.isPresent())
+      tds.get().setExtensions(result.build());
   }
 
   @Override
@@ -83,7 +96,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     for (WorkspaceFolder ws : params.getWorkspaceFolders()) {
       try {
         File root = new File(new URI(ws.getUri()));
-        LspLog.setWorkspaceFolder(root.getAbsolutePath());
+        LspLog.setWorkspaceFolder(root);
         loadSmithyBuild(root);
       } catch (Exception e) {
         LspLog.println("Error when loading workspace folder " + ws.toString() + ": " + e.toString());
