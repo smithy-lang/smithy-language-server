@@ -17,9 +17,7 @@ package software.amazon.smithy.lsp;
 
 import java.io.File;
 import java.util.Set;
-
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
-
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.ModelAssembler;
 import software.amazon.smithy.model.validation.ValidatedResult;
@@ -48,7 +46,7 @@ public final class SmithyInterface {
      * @param path         path to smithy file
      * @param externalJars set of external jars
      * @return either an exception encountered during model building, or the result
-     * of model building
+     *         of model building
      */
     public static Either<Exception, ValidatedResult<Model>> readModel(File path, Set<String> externalJars) {
 
@@ -71,7 +69,7 @@ public final class SmithyInterface {
      *
      * @param externalJars set of external jars
      * @return either an exception encountered during model building, or the result
-     * of model building
+     *         of model building
      */
     public static Either<Exception, ValidatedResult<Model>> readModel(Set<String> externalJars) {
 

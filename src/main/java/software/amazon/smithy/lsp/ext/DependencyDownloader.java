@@ -20,7 +20,6 @@ import coursierapi.Fetch;
 import coursierapi.MavenRepository;
 import coursierapi.Repository;
 import coursierapi.error.CoursierError;
-
 import java.io.File;
 import java.util.Collections;
 import java.util.LinkedList;

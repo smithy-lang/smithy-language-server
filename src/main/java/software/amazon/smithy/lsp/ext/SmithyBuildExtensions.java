@@ -18,7 +18,6 @@ package software.amazon.smithy.lsp.ext;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.SmithyBuilder;
 import software.amazon.smithy.utils.ToSmithyBuilder;
@@ -62,7 +61,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
          * Adds configuration from other instance to this builder.
          *
          * @param other configuration
-         * @return
+         * @return builder
          */
         public Builder merge(SmithyBuildExtensions other) {
             mavenDependencies.addAll(other.mavenDependencies);
@@ -75,7 +74,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
          * Adds resolvers to the builder.
          *
          * @param mavenRepositories list of maven-compatible repositories
-         * @return
+         * @return builder
          */
         public Builder mavenRepositories(Collection<String> mavenRepositories) {
             this.mavenRepositories.clear();
@@ -87,7 +86,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
          * Adds dependencies to the builder.
          *
          * @param mavenDependencies list of artifacts in the org:name:version format
-         * @return
+         * @return builder
          */
 
         public Builder mavenDependencies(Collection<String> mavenDependencies) {

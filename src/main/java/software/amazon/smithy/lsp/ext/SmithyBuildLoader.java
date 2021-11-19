@@ -17,7 +17,6 @@ package software.amazon.smithy.lsp.ext;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-
 import software.amazon.smithy.model.loader.ModelSyntaxException;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.node.NodeMapper;
