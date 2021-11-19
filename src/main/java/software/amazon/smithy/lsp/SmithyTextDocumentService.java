@@ -16,7 +16,6 @@
 package software.amazon.smithy.lsp;
 
 import com.google.common.collect.ImmutableSet;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -29,7 +28,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.CompletionList;
@@ -52,7 +50,6 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
-
 import software.amazon.smithy.lsp.ext.DependencyDownloader;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
@@ -252,8 +249,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
         client.ifPresent(cl -> {
             if (loadedModel.isLeft()) {
-                cl.showMessage(msg(MessageType.Error, changedFileUri + " is not okay!"
-                        + loadedModel.getLeft().toString()));
+                cl.showMessage(
+                        msg(MessageType.Error, changedFileUri + " is not okay!" + loadedModel.getLeft().toString()));
             } else {
                 ValidatedResult<Model> result = loadedModel.getRight();
 
