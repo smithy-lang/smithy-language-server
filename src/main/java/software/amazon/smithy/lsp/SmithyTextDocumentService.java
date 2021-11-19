@@ -15,6 +15,7 @@
 
 package software.amazon.smithy.lsp;
 
+import com.google.common.collect.ImmutableSet;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -49,6 +50,9 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
+import software.amazon.smithy.lsp.ext.DependencyDownloader;
+import software.amazon.smithy.lsp.ext.LspLog;
+import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.validation.ValidatedResult;
@@ -56,213 +60,254 @@ import software.amazon.smithy.model.validation.ValidationEvent;
 
 public class SmithyTextDocumentService implements TextDocumentService {
 
-  private List<CompletionItem> baseCompletions = new ArrayList<CompletionItem>();
-  private Optional<LanguageClient> client = Optional.empty();
-  private Map<String, List<? extends Location>> locations = new HashMap<String, List<? extends Location>>();
-  private List<? extends Location> noLocations = Arrays.asList();
+    private List<CompletionItem> baseCompletions = new ArrayList<CompletionItem>();
+    private Optional<LanguageClient> client = Optional.empty();
+    private Map<String, List<? extends Location>> locations = new HashMap<String, List<? extends Location>>();
+    private List<? extends Location> noLocations = Arrays.asList();
+    private ImmutableSet<String> externalJars = ImmutableSet.of();
 
-  /**
-   * @param client Language Client to be used by text document service.
-   */
-  public SmithyTextDocumentService(Optional<LanguageClient> client) {
-    this.client = client;
+    /**
+     * @param client Language Client to be used by text document service.
+     */
+    public SmithyTextDocumentService(Optional<LanguageClient> client) {
+        this.client = client;
 
-    List<CompletionItem> keywordCompletions = SmithyKeywords.KEYWORDS.stream()
-        .map(kw -> create(kw, CompletionItemKind.Keyword)).collect(Collectors.toList());
+        List<CompletionItem> keywordCompletions = SmithyKeywords.KEYWORDS.stream()
+                .map(kw -> create(kw, CompletionItemKind.Keyword)).collect(Collectors.toList());
 
-    List<CompletionItem> baseTypesCompletions = SmithyKeywords.BUILT_IN_TYPES.stream()
-        .map(kw -> create(kw, CompletionItemKind.Class)).collect(Collectors.toList());
+        List<CompletionItem> baseTypesCompletions = SmithyKeywords.BUILT_IN_TYPES.stream()
+                .map(kw -> create(kw, CompletionItemKind.Class)).collect(Collectors.toList());
 
-    baseCompletions.addAll(keywordCompletions);
-    baseCompletions.addAll(baseTypesCompletions);
-  }
-
-  public void setClient(LanguageClient client) {
-    this.client = Optional.of(client);
-  }
-
-  private MessageParams msg(final MessageType sev, final String cont) {
-    return new MessageParams(sev, cont);
-  }
-
-  @Override
-  public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams position) {
-    return Utils.completableFuture(Either.forLeft(baseCompletions));
-  }
-
-  @Override
-  public CompletableFuture<CompletionItem> resolveCompletionItem(CompletionItem unresolved) {
-    return Utils.completableFuture(unresolved);
-  }
-
-  private CompletionItem create(String s, CompletionItemKind kind) {
-    CompletionItem ci = new CompletionItem(s);
-    ci.setKind(kind);
-    return ci;
-  }
-
-  private List<String> readAll(File f) throws IOException {
-    return Files.readAllLines(f.toPath());
-  }
-
-  private String findToken(String path, Position p) throws IOException {
-    List<String> contents;
-    if (Utils.isSmithyJarFile(path)) {
-      contents = Utils.jarFileContents(path, this.getClass().getClassLoader());
-    } else {
-      contents = readAll(new File(URI.create(path)));
+        baseCompletions.addAll(keywordCompletions);
+        baseCompletions.addAll(baseTypesCompletions);
     }
 
-    String line = contents.get(p.getLine());
-    Integer col = p.getCharacter();
-
-    String before = line.substring(0, col);
-    String after = line.substring(col, line.length());
-
-    StringBuilder beforeAcc = new StringBuilder();
-    StringBuilder afterAcc = new StringBuilder();
-
-    int idx = 0;
-
-    while (idx < after.length()) {
-      if (Character.isLetterOrDigit(after.charAt(idx))) {
-        afterAcc.append(after.charAt(idx));
-        idx = idx + 1;
-      } else {
-        idx = after.length();
-      }
+    public void setClient(LanguageClient client) {
+        this.client = Optional.of(client);
     }
 
-    idx = before.length() - 1;
+    /**
+     * Processes extensions.
+     * <p>
+     * 1. Downloads external dependencies as jars 2. Creates a model from just
+     * external jars 3. Updates locations index with symbols found in external jars
+     *
+     * @param ext extensions
+     */
+    public void setExtensions(SmithyBuildExtensions ext) {
+        try {
+            DependencyDownloader manager = DependencyDownloader.create(ext);
+            this.externalJars = ImmutableSet
+                    .copyOf(manager.download().stream().map(f -> f.getAbsolutePath()).collect(Collectors.toSet()));
+            sendInfo("Downloaded " + externalJars.size() + " external Smithy jars");
+            Either<Exception, ValidatedResult<Model>> externalModel = SmithyInterface.readModel(this.externalJars);
+            if (externalModel.isRight()) {
+                externalModel.getRight().getResult().ifPresent(model -> {
+                    sendInfo("Imported " + model.getShapeIds().size() + " definitions from external jars");
 
-    while (idx > 0) {
-      char c = before.charAt(idx);
-      if (Character.isLetterOrDigit(c)) {
-        beforeAcc.append(c);
-        idx = idx - 1;
-      } else {
-        idx = 0;
-      }
-    }
-
-    return beforeAcc.reverse().append(afterAcc).toString();
-  }
-
-  @Override
-  public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(
-      DefinitionParams params) {
-    try {
-      String found = findToken(params.getTextDocument().getUri(), params.getPosition());
-      return Utils.completableFuture(Either.forLeft(locations.getOrDefault(found, noLocations)));
-    } catch (Exception e) {
-      // TODO: handle exception
-
-      e.printStackTrace();
-
-      return Utils.completableFuture(Either.forLeft(noLocations));
-    }
-  }
-
-  @Override
-  public void didChange(DidChangeTextDocumentParams params) {
-    File tempFile = null;
-
-    try {
-      tempFile = File.createTempFile("smithy", ".smithy");
-
-      Files.write(tempFile.toPath(), params.getContentChanges().get(0).getText().getBytes());
-
-    } catch (Exception e) {
-
-    }
-
-    recompile(tempFile, Optional.of(fileUri(params.getTextDocument())));
-  }
-
-  @Override
-  public void didOpen(DidOpenTextDocumentParams params) {
-    String rawUri = params.getTextDocument().getUri();
-    if (Utils.isFile(rawUri)) {
-      recompile(fileUri(params.getTextDocument()), Optional.empty());
-    }
-  }
-
-  @Override
-  public void didClose(DidCloseTextDocumentParams params) {
-    recompile(fileUri(params.getTextDocument()), Optional.empty());
-  }
-
-  @Override
-  public void didSave(DidSaveTextDocumentParams params) {
-    recompile(fileUri(params.getTextDocument()), Optional.empty());
-  }
-
-  private File fileUri(TextDocumentIdentifier tdi) {
-    return new File(URI.create(tdi.getUri()));
-  }
-
-  private File fileUri(TextDocumentItem tdi) {
-    return new File(URI.create(tdi.getUri()));
-  }
-
-  /**
-   * @param path     Path of new model file.
-   * @param original Original model file to compare against when recompiling.
-   */
-  public void recompile(File path, Optional<File> original) {
-    Either<Exception, ValidatedResult<Model>> loadedModel = SmithyInterface.readModel(path);
-
-    String changedFileUri = original.map(File::getAbsolutePath).orElse(path.getAbsolutePath());
-
-    client.ifPresent(cl -> {
-      if (loadedModel.isLeft()) {
-        cl.showMessage(msg(MessageType.Error, changedFileUri + " is not okay!" + loadedModel.getLeft().toString()));
-      } else {
-        ValidatedResult<Model> result = loadedModel.getRight();
-
-        if (result.isBroken()) {
-          List<ValidationEvent> events = result.getValidationEvents();
-
-          List<Diagnostic> msgs = events.stream().map(ev -> ProtocolAdapter.toDiagnostic(ev))
-              .collect(Collectors.toList());
-          PublishDiagnosticsParams diagnostics = createDiagnostics(changedFileUri, msgs);
-
-          cl.publishDiagnostics(diagnostics);
-        } else {
-          if (!original.isPresent()) {
-            result.getResult().ifPresent(m -> updateLocations(m));
-          }
-          cl.publishDiagnostics(createDiagnostics(changedFileUri, Arrays.asList()));
+                    updateLocations(model);
+                });
+            }
+        } catch (Exception e) {
+            sendError("Failed to download dependencies: " + e.toString());
         }
-      }
-    });
-  }
-
-  /**
-   *
-   * @param model Model to get source locations of shapes.
-   */
-  public void updateLocations(Model model) {
-    model.shapes().forEach(shape -> {
-      SourceLocation sourceLocation = shape.getSourceLocation();
-      String uri = sourceLocation.getFilename();
-      if (uri.startsWith("jar:file:")) {
-        uri = "smithyjar:" + uri.substring(9);
-      } else if (!uri.startsWith("file:")) {
-        uri = "file:" + uri;
-      }
-      Position pos = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
-      Location location = new Location(uri, new Range(pos, pos));
-
-      locations.put(shape.getId().getName(), Arrays.asList(location));
-    });
-  }
-
-  private PublishDiagnosticsParams createDiagnostics(String uri, final List<Diagnostic> diagnostics) {
-    if (!uri.startsWith("file:")) {
-      uri = "file:" + uri;
     }
-    return new PublishDiagnosticsParams(uri, diagnostics);
-  }
+
+    private MessageParams msg(final MessageType sev, final String cont) {
+        return new MessageParams(sev, cont);
+    }
+
+    @Override
+    public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams position) {
+        return Utils.completableFuture(Either.forLeft(baseCompletions));
+    }
+
+    @Override
+    public CompletableFuture<CompletionItem> resolveCompletionItem(CompletionItem unresolved) {
+        return Utils.completableFuture(unresolved);
+    }
+
+    private CompletionItem create(String s, CompletionItemKind kind) {
+        CompletionItem ci = new CompletionItem(s);
+        ci.setKind(kind);
+        return ci;
+    }
+
+    private List<String> readAll(File f) throws IOException {
+        return Files.readAllLines(f.toPath());
+    }
+
+    private String findToken(String path, Position p) throws IOException {
+        List<String> contents;
+        LspLog.println("Looking for " + path);
+        if (Utils.isSmithyJarFile(path)) {
+            contents = Utils.jarFileContents(path);
+        } else {
+            contents = readAll(new File(URI.create(path)));
+        }
+
+        String line = contents.get(p.getLine());
+        Integer col = p.getCharacter();
+
+        String before = line.substring(0, col);
+        String after = line.substring(col, line.length());
+
+        StringBuilder beforeAcc = new StringBuilder();
+        StringBuilder afterAcc = new StringBuilder();
+
+        int idx = 0;
+
+        while (idx < after.length()) {
+            if (Character.isLetterOrDigit(after.charAt(idx))) {
+                afterAcc.append(after.charAt(idx));
+                idx = idx + 1;
+            } else {
+                idx = after.length();
+            }
+        }
+
+        idx = before.length() - 1;
+
+        while (idx > 0) {
+            char c = before.charAt(idx);
+            if (Character.isLetterOrDigit(c)) {
+                beforeAcc.append(c);
+                idx = idx - 1;
+            } else {
+                idx = 0;
+            }
+        }
+
+        return beforeAcc.reverse().append(afterAcc).toString();
+    }
+
+    @Override
+    public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(
+            DefinitionParams params) {
+        try {
+            String found = findToken(params.getTextDocument().getUri(), params.getPosition());
+            return Utils.completableFuture(Either.forLeft(locations.getOrDefault(found, noLocations)));
+        } catch (Exception e) {
+            // TODO: handle exception
+
+            e.printStackTrace();
+
+            return Utils.completableFuture(Either.forLeft(noLocations));
+        }
+    }
+
+    @Override
+    public void didChange(DidChangeTextDocumentParams params) {
+        File tempFile = null;
+
+        try {
+            tempFile = File.createTempFile("smithy", ".smithy");
+
+            Files.write(tempFile.toPath(), params.getContentChanges().get(0).getText().getBytes());
+
+        } catch (Exception e) {
+
+        }
+
+        recompile(tempFile, Optional.of(fileUri(params.getTextDocument())));
+    }
+
+    @Override
+    public void didOpen(DidOpenTextDocumentParams params) {
+        String rawUri = params.getTextDocument().getUri();
+        if (Utils.isFile(rawUri)) {
+            recompile(fileUri(params.getTextDocument()), Optional.empty());
+        }
+    }
+
+    @Override
+    public void didClose(DidCloseTextDocumentParams params) {
+        recompile(fileUri(params.getTextDocument()), Optional.empty());
+    }
+
+    @Override
+    public void didSave(DidSaveTextDocumentParams params) {
+        recompile(fileUri(params.getTextDocument()), Optional.empty());
+    }
+
+    private File fileUri(TextDocumentIdentifier tdi) {
+        return new File(URI.create(tdi.getUri()));
+    }
+
+    private File fileUri(TextDocumentItem tdi) {
+        return new File(URI.create(tdi.getUri()));
+    }
+
+    /**
+     * @param path     Path of new model file.
+     * @param original Original model file to compare against when recompiling.
+     */
+    public void recompile(File path, Optional<File> original) {
+        Either<Exception, ValidatedResult<Model>> loadedModel = SmithyInterface.readModel(path, this.externalJars);
+
+        String changedFileUri = original.map(File::getAbsolutePath).orElse(path.getAbsolutePath());
+
+        client.ifPresent(cl -> {
+            if (loadedModel.isLeft()) {
+                cl.showMessage(
+                        msg(MessageType.Error, changedFileUri + " is not okay!" + loadedModel.getLeft().toString()));
+            } else {
+                ValidatedResult<Model> result = loadedModel.getRight();
+
+                if (result.isBroken()) {
+                    List<ValidationEvent> events = result.getValidationEvents();
+
+                    List<Diagnostic> msgs = events.stream().map(ev -> ProtocolAdapter.toDiagnostic(ev))
+                            .collect(Collectors.toList());
+                    PublishDiagnosticsParams diagnostics = createDiagnostics(changedFileUri, msgs);
+
+                    cl.publishDiagnostics(diagnostics);
+                } else {
+                    if (!original.isPresent()) {
+                        result.getResult().ifPresent(m -> updateLocations(m));
+                    }
+                    cl.publishDiagnostics(createDiagnostics(changedFileUri, Arrays.asList()));
+                }
+            }
+        });
+    }
+
+    private void sendInfo(String msg) {
+        this.client.ifPresent(client -> {
+            client.showMessage(new MessageParams(MessageType.Info, msg));
+        });
+    }
+
+    private void sendError(String msg) {
+        this.client.ifPresent(client -> {
+            client.showMessage(new MessageParams(MessageType.Error, msg));
+        });
+    }
+
+    /**
+     * @param model Model to get source locations of shapes.
+     */
+    public void updateLocations(Model model) {
+        model.shapes().forEach(shape -> {
+            SourceLocation sourceLocation = shape.getSourceLocation();
+            String uri = sourceLocation.getFilename();
+            if (uri.startsWith("jar:file:")) {
+                uri = "smithyjar:" + uri.substring(9);
+            } else if (!uri.startsWith("file:")) {
+                uri = "file:" + uri;
+            }
+            Position pos = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
+            Location location = new Location(uri, new Range(pos, pos));
+
+            locations.put(shape.getId().getName(), Arrays.asList(location));
+        });
+    }
+
+    private PublishDiagnosticsParams createDiagnostics(String uri, final List<Diagnostic> diagnostics) {
+        if (!uri.startsWith("file:")) {
+            uri = "file:" + uri;
+        }
+        return new PublishDiagnosticsParams(uri, diagnostics);
+    }
 
 }

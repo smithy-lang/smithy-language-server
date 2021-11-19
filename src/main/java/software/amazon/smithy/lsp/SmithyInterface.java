@@ -16,25 +16,72 @@
 package software.amazon.smithy.lsp;
 
 import java.io.File;
+import java.util.Set;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.loader.ModelAssembler;
 import software.amazon.smithy.model.validation.ValidatedResult;
 
 public final class SmithyInterface {
-  private SmithyInterface() {
+    private SmithyInterface() {
 
-  }
-
-  /**
-   * @param path File of single-file model.
-   * @return Returns either an Exception, or the ValidatedResult of a model.
-   */
-  public static Either<Exception, ValidatedResult<Model>> readModel(File path) {
-
-    try {
-      return Either.forRight(Model.assembler().discoverModels().addImport(path.getAbsolutePath()).assemble());
-    } catch (Exception e) {
-      return Either.forLeft(e);
     }
-  }
+
+    /**
+     * @param path File of single-file model.
+     * @return Returns either an Exception, or the ValidatedResult of a model.
+     */
+    public static Either<Exception, ValidatedResult<Model>> readModel(File path) {
+
+        try {
+            return Either.forRight(Model.assembler().discoverModels().addImport(path.getAbsolutePath()).assemble());
+        } catch (Exception e) {
+            return Either.forLeft(e);
+        }
+    }
+
+    /**
+     * Reads the model in a specified file, adding external jars to model builder.
+     *
+     * @param path         path to smithy file
+     * @param externalJars set of external jars
+     * @return either an exception encountered during model building, or the result
+     *         of model building
+     */
+    public static Either<Exception, ValidatedResult<Model>> readModel(File path, Set<String> externalJars) {
+
+        try {
+            ModelAssembler assembler = Model.assembler().discoverModels();
+            for (String jar : externalJars) {
+                assembler = assembler.addImport(jar);
+            }
+
+            assembler = assembler.addImport(path.getAbsolutePath());
+
+            return Either.forRight(assembler.assemble());
+        } catch (Exception e) {
+            return Either.forLeft(e);
+        }
+    }
+
+    /**
+     * Creates a model from a set of external jars.
+     *
+     * @param externalJars set of external jars
+     * @return either an exception encountered during model building, or the result
+     *         of model building
+     */
+    public static Either<Exception, ValidatedResult<Model>> readModel(Set<String> externalJars) {
+
+        try {
+            ModelAssembler assembler = Model.assembler().discoverModels();
+            for (String jar : externalJars) {
+                assembler = assembler.addImport(jar);
+            }
+
+            return Either.forRight(assembler.assemble());
+        } catch (Exception e) {
+            return Either.forLeft(e);
+        }
+    }
 }

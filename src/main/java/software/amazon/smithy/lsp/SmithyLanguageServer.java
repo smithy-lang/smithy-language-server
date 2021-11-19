@@ -16,8 +16,11 @@
 package software.amazon.smithy.lsp;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Paths;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -29,11 +32,17 @@ import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
+import org.eclipse.lsp4j.WorkspaceFolder;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageClientAware;
 import org.eclipse.lsp4j.services.LanguageServer;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
+import software.amazon.smithy.lsp.ext.Constants;
+import software.amazon.smithy.lsp.ext.LspLog;
+import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
+import software.amazon.smithy.lsp.ext.SmithyBuildLoader;
+import software.amazon.smithy.lsp.ext.ValidationException;
 
 public class SmithyLanguageServer implements LanguageServer, LanguageClientAware, SmithyProtocolExtensions {
 
@@ -41,20 +50,56 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
   private File workspaceRoot = null;
 
-  private SmithyTextDocumentService tds = null;
+  private Optional<SmithyTextDocumentService> tds = Optional.empty();
 
   @Override
   public CompletableFuture<Object> shutdown() {
     return Utils.completableFuture(new Object());
   }
 
+  private void loadSmithyBuild(File root) throws ValidationException, FileNotFoundException {
+    SmithyBuildExtensions.Builder result = SmithyBuildExtensions.builder();
+
+    for (String file : Constants.BUILD_FILES) {
+      File smithyBuild = Paths.get(root.getAbsolutePath(), file).toFile();
+      if (smithyBuild.isFile()) {
+        try {
+          result.merge(SmithyBuildLoader.load(smithyBuild.toPath()));
+          LspLog.println("Loaded build extensions " + result + " from " + smithyBuild.getAbsolutePath());
+        } catch (Exception e) {
+          LspLog.println("Failed to load " + result + ": " + e.toString());
+        }
+      }
+    }
+
+    if (this.tds.isPresent()) {
+      tds.get().setExtensions(result.build());
+    }
+  }
+
   @Override
   public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
+    LspLog.println(params.getWorkspaceFolders());
     if (params.getRootUri() != null) {
       try {
         workspaceRoot = new File(new URI(params.getRootUri()));
+        loadSmithyBuild(workspaceRoot);
       } catch (Exception e) {
-        // TODO: handle exception
+        LspLog.println("Failure trying to load extensions from workspace root: " + workspaceRoot.getAbsolutePath());
+        LspLog.println(e.toString());
+      }
+    } else {
+      LspLog.println("Workspace root was null");
+    }
+
+    // TODO: This will break on multi-root workspaces
+    for (WorkspaceFolder ws : params.getWorkspaceFolders()) {
+      try {
+        File root = new File(new URI(ws.getUri()));
+        LspLog.setWorkspaceFolder(root);
+        loadSmithyBuild(root);
+      } catch (Exception e) {
+        LspLog.println("Error when loading workspace folder " + ws.toString() + ": " + e.toString());
       }
     }
 
@@ -83,27 +128,28 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
   @Override
   public TextDocumentService getTextDocumentService() {
-    tds = new SmithyTextDocumentService(this.client);
-    return this.tds;
+    SmithyTextDocumentService local = new SmithyTextDocumentService(this.client);
+    tds = Optional.of(local);
+    return local;
   }
 
   @Override
   public void connect(LanguageClient client) {
-
-    if (this.tds != null) {
-      this.tds.setClient(client);
-    }
-
+    tds.ifPresent(tds -> tds.setClient(client));
     client.showMessage(new MessageParams(MessageType.Info, "Hello from smithy-language-server !"));
   }
 
   @Override
   public CompletableFuture<String> jarFileContents(TextDocumentIdentifier documentUri) {
+    String uri = documentUri.getUri();
+
     try {
-      java.util.List<String> lines = Utils.jarFileContents(documentUri.getUri(), this.getClass().getClassLoader());
+      LspLog.println("Trying to resolve " + uri);
+      List<String> lines = Utils.jarFileContents(uri);
       String contents = lines.stream().collect(Collectors.joining(System.lineSeparator()));
       return CompletableFuture.completedFuture(contents);
     } catch (IOException e) {
+      LspLog.println("Failed to resolve " + uri + " error: " + e.toString());
       CompletableFuture<String> future = new CompletableFuture<String>();
       future.completeExceptionally(e);
       return future;
