@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-
 import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
@@ -39,7 +38,6 @@ import org.eclipse.lsp4j.services.LanguageClientAware;
 import org.eclipse.lsp4j.services.LanguageServer;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
-
 import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
