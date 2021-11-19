@@ -74,8 +74,9 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
       }
     }
 
-    if (this.tds.isPresent())
+    if (this.tds.isPresent()) {
       tds.get().setExtensions(result.build());
+    }
   }
 
   @Override
@@ -89,8 +90,9 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
         LspLog.println("Failure trying to load extensions from workspace root: " + workspaceRoot.getAbsolutePath());
         LspLog.println(e.toString());
       }
-    } else
+    } else {
       LspLog.println("Workspace root was null");
+    }
 
     // TODO: This will break on multi-root workspaces
     for (WorkspaceFolder ws : params.getWorkspaceFolders()) {
