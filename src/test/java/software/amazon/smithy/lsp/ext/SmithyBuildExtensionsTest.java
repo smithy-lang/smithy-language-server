@@ -51,7 +51,7 @@ public class SmithyBuildExtensionsTest {
             assertEquals(ImmutableList.of(), loadedNoExtensions.getMavenDependencies());
             assertEquals(ImmutableList.of(), loadedNoExtensions.getMavenRepositories());
 
-            String noConfiguration = "{}";
+            String noConfiguration = "{\"imports\": [\".\"]}";
             SmithyBuildExtensions loadedNoConfiguration = SmithyBuildLoader.load(DUMMY_PATH, noConfiguration);
             assertEquals(ImmutableList.of(), loadedNoConfiguration.getMavenDependencies());
             assertEquals(ImmutableList.of(), loadedNoConfiguration.getMavenRepositories());
