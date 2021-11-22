@@ -15,16 +15,13 @@
 
 package software.amazon.smithy.lsp;
 
-import com.google.common.collect.ImmutableSet;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -44,17 +41,15 @@ import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
-import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
-import software.amazon.smithy.lsp.ext.DependencyDownloader;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
+import software.amazon.smithy.lsp.ext.SmithyProject;
 import software.amazon.smithy.model.Model;
-import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
@@ -62,9 +57,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     private List<CompletionItem> baseCompletions = new ArrayList<CompletionItem>();
     private Optional<LanguageClient> client = Optional.empty();
-    private Map<String, List<? extends Location>> locations = new HashMap<String, List<? extends Location>>();
-    private List<? extends Location> noLocations = Arrays.asList();
-    private ImmutableSet<String> externalJars = ImmutableSet.of();
+    private List<Location> noLocations = Arrays.asList();
+    private SmithyProject project;
 
     /**
      * @param client Language Client to be used by text document service.
@@ -94,22 +88,14 @@ public class SmithyTextDocumentService implements TextDocumentService {
      *
      * @param ext extensions
      */
-    public void setExtensions(SmithyBuildExtensions ext) {
-        try {
-            DependencyDownloader manager = DependencyDownloader.create(ext);
-            this.externalJars = ImmutableSet
-                    .copyOf(manager.download().stream().map(f -> f.getAbsolutePath()).collect(Collectors.toSet()));
-            sendInfo("Downloaded " + externalJars.size() + " external Smithy jars");
-            Either<Exception, ValidatedResult<Model>> externalModel = SmithyInterface.readModel(this.externalJars);
-            if (externalModel.isRight()) {
-                externalModel.getRight().getResult().ifPresent(model -> {
-                    sendInfo("Imported " + model.getShapeIds().size() + " definitions from external jars");
-
-                    updateLocations(model);
-                });
-            }
-        } catch (Exception e) {
-            sendError("Failed to download dependencies: " + e.toString());
+    public void createProject(SmithyBuildExtensions ext, File root) {
+        Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, root);
+        if (loaded.isRight()) {
+            this.project = loaded.getRight();
+            sendInfo("Project loaded with " + this.project.getExternalJars().size() + " external jars and "
+                    + this.project.getSmithyFiles().size() + " discovered smithy files");
+        } else {
+            sendError("Failed to create Smithy project: " + loaded.getLeft().toString());
         }
     }
 
@@ -186,7 +172,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
             DefinitionParams params) {
         try {
             String found = findToken(params.getTextDocument().getUri(), params.getPosition());
-            return Utils.completableFuture(Either.forLeft(locations.getOrDefault(found, noLocations)));
+            return Utils.completableFuture(Either.forLeft(project.getLocations().getOrDefault(found, noLocations)));
         } catch (Exception e) {
             // TODO: handle exception
 
@@ -243,8 +229,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
      * @param original Original model file to compare against when recompiling.
      */
     public void recompile(File path, Optional<File> original) {
-        Either<Exception, ValidatedResult<Model>> loadedModel = SmithyInterface.readModel(path, this.externalJars);
-
+        Either<Exception, SmithyProject> loadedModel = this.project.recompile(path);
         String changedFileUri = original.map(File::getAbsolutePath).orElse(path.getAbsolutePath());
 
         client.ifPresent(cl -> {
@@ -252,7 +237,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 cl.showMessage(
                         msg(MessageType.Error, changedFileUri + " is not okay!" + loadedModel.getLeft().toString()));
             } else {
-                ValidatedResult<Model> result = loadedModel.getRight();
+                ValidatedResult<Model> result = loadedModel.getRight().getModel();
 
                 if (result.isBroken()) {
                     List<ValidationEvent> events = result.getValidationEvents();
@@ -263,9 +248,6 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
                     cl.publishDiagnostics(diagnostics);
                 } else {
-                    if (!original.isPresent()) {
-                        result.getResult().ifPresent(m -> updateLocations(m));
-                    }
                     cl.publishDiagnostics(createDiagnostics(changedFileUri, Arrays.asList()));
                 }
             }
@@ -281,25 +263,6 @@ public class SmithyTextDocumentService implements TextDocumentService {
     private void sendError(String msg) {
         this.client.ifPresent(client -> {
             client.showMessage(new MessageParams(MessageType.Error, msg));
-        });
-    }
-
-    /**
-     * @param model Model to get source locations of shapes.
-     */
-    public void updateLocations(Model model) {
-        model.shapes().forEach(shape -> {
-            SourceLocation sourceLocation = shape.getSourceLocation();
-            String uri = sourceLocation.getFilename();
-            if (uri.startsWith("jar:file:")) {
-                uri = "smithyjar:" + uri.substring(9);
-            } else if (!uri.startsWith("file:")) {
-                uri = "file:" + uri;
-            }
-            Position pos = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
-            Location location = new Location(uri, new Range(pos, pos));
-
-            locations.put(shape.getId().getName(), Arrays.asList(location));
         });
     }
 

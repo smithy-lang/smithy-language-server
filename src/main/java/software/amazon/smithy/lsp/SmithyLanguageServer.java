@@ -73,7 +73,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     }
 
     if (this.tds.isPresent()) {
-      tds.get().setExtensions(result.build());
+      this.tds.ifPresent(tds -> tds.createProject(result.build(), root));
     }
   }
 
