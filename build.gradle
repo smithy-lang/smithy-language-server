@@ -58,7 +58,7 @@ repositories {
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            groupId = "software.amazon.smithy"
+            groupId = "com.disneystreaming.oss"
             artifactId = "smithy-language-server"
 
             from components.java

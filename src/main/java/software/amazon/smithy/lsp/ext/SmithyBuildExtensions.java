@@ -23,12 +23,14 @@ import software.amazon.smithy.utils.SmithyBuilder;
 import software.amazon.smithy.utils.ToSmithyBuilder;
 
 public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildExtensions> {
+    private final List<String> imports;
     private final List<String> mavenRepositories;
     private final List<String> mavenDependencies;
 
     private SmithyBuildExtensions(Builder b) {
         this.mavenDependencies = ListUtils.copyOf(b.mavenDependencies);
         this.mavenRepositories = ListUtils.copyOf(b.mavenRepositories);
+        this.imports = ListUtils.copyOf(b.imports);
     }
 
     public List<String> getMavenDependencies() {
@@ -37,6 +39,10 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
 
     public List<String> getMavenRepositories() {
         return mavenRepositories;
+    }
+
+    public List<String> getImports() {
+        return imports;
     }
 
     public static Builder builder() {
@@ -51,6 +57,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
     public static final class Builder implements SmithyBuilder<SmithyBuildExtensions> {
         private final List<String> mavenRepositories = new ArrayList<>();
         private final List<String> mavenDependencies = new ArrayList<>();
+        private final List<String> imports = new ArrayList<>();
 
         @Override
         public SmithyBuildExtensions build() {
@@ -92,6 +99,30 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
         public Builder mavenDependencies(Collection<String> mavenDependencies) {
             this.mavenDependencies.clear();
             this.mavenDependencies.addAll(mavenDependencies);
+            return this;
+        }
+
+        /**
+         * Adds imports to the builder.
+         *
+         * @param imports list of imports (relative folders of smithy files)
+         * @return builder
+         */
+
+        public Builder imports(Collection<String> imports) {
+            this.imports.clear();
+            this.imports.addAll(imports);
+            return this;
+        }
+
+        /**
+         * Adds import to the builder.
+         *
+         * @param imp import to add
+         * @return builder
+         */
+        public Builder addImport(String imp) {
+            this.imports.add(imp);
             return this;
         }
     }
