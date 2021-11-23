@@ -20,7 +20,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -55,9 +55,9 @@ import software.amazon.smithy.model.validation.ValidationEvent;
 
 public class SmithyTextDocumentService implements TextDocumentService {
 
-    private List<CompletionItem> baseCompletions = new ArrayList<CompletionItem>();
+    private final List<CompletionItem> baseCompletions = new ArrayList<CompletionItem>();
     private Optional<LanguageClient> client = Optional.empty();
-    private List<Location> noLocations = Arrays.asList();
+    private final List<Location> noLocations = Collections.emptyList();
     private SmithyProject project;
 
     /**
@@ -133,7 +133,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
         }
 
         String line = contents.get(p.getLine());
-        Integer col = p.getCharacter();
+        int col = p.getCharacter();
 
         String before = line.substring(0, col);
         String after = line.substring(col, line.length());
@@ -187,11 +187,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
         File tempFile = null;
 
         try {
-            tempFile = File.createTempFile("smithy", ".smithy");
+            tempFile = File.createTempFile("smithy", SmithyProject.SMITHY_EXTENSION);
 
             Files.write(tempFile.toPath(), params.getContentChanges().get(0).getText().getBytes());
 
-        } catch (Exception e) {
+        } catch (Exception ignored) {
 
         }
 
@@ -242,13 +242,13 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 if (result.isBroken()) {
                     List<ValidationEvent> events = result.getValidationEvents();
 
-                    List<Diagnostic> msgs = events.stream().map(ev -> ProtocolAdapter.toDiagnostic(ev))
+                    List<Diagnostic> messages = events.stream().map(ProtocolAdapter::toDiagnostic)
                             .collect(Collectors.toList());
-                    PublishDiagnosticsParams diagnostics = createDiagnostics(changedFileUri, msgs);
+                    PublishDiagnosticsParams diagnostics = createDiagnostics(changedFileUri, messages);
 
                     cl.publishDiagnostics(diagnostics);
                 } else {
-                    cl.publishDiagnostics(createDiagnostics(changedFileUri, Arrays.asList()));
+                    cl.publishDiagnostics(createDiagnostics(changedFileUri, Collections.emptyList()));
                 }
             }
         });
