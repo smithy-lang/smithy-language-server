@@ -73,6 +73,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
         public Builder merge(SmithyBuildExtensions other) {
             mavenDependencies.addAll(other.mavenDependencies);
             mavenRepositories.addAll(other.mavenRepositories);
+            imports.addAll(other.imports);
 
             return this;
         }
@@ -129,7 +130,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
 
     @Override
     public String toString() {
-        return "SmithyBuildExtensions(repositories=" + mavenRepositories.toString() + ",artifacts="
-                + mavenDependencies.toString() + ")";
+        return "SmithyBuildExtensions(repositories = " + mavenRepositories.toString() + ",artifacts = "
+                + mavenDependencies.toString() + ", imports = " + imports + ")";
     }
 }
