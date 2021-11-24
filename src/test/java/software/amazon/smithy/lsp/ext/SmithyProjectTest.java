@@ -18,11 +18,13 @@ package software.amazon.smithy.lsp.ext;
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.junit.Test;
 
@@ -31,10 +33,8 @@ import software.amazon.smithy.utils.MapUtils;
 
 public class SmithyProjectTest {
 
-    final Path DUMMY_PATH = Paths.get("smithy-build.json");
-
     @Test
-    public void walkingImports() throws Exception {
+    public void respectingImports() throws Exception {
         List<String> imports = Arrays.asList("bla", "foo");
         Map<String, String> files = MapUtils.ofEntries(MapUtils.entry("test.smithy", "namespace testRoot"),
                 MapUtils.entry("bar/test.smithy", "namespace testBar"),
@@ -51,4 +51,25 @@ public class SmithyProjectTest {
         }
 
     }
+
+    @Test
+    public void respectingEmptyConfig() throws Exception {
+        Map<String, String> files = MapUtils.ofEntries(MapUtils.entry("test.smithy", "namespace testRoot"),
+                MapUtils.entry("bar/test.smithy", "namespace testBar"),
+                MapUtils.entry("foo/test.smithy", "namespace testFoo"),
+                MapUtils.entry("bla/test.smithy", "namespace testBla"));
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+
+            List<File> expectedFiles = Files.walk(hs.getRoot().toPath())
+                    .filter(f -> f.getFileName().toString().endsWith(SmithyProject.SMITHY_EXTENSION))
+                    .map(Path::toFile).collect(Collectors.toList());
+
+            List<File> smithyFiles = hs.getProject().getSmithyFiles();
+
+            assertEquals(expectedFiles, smithyFiles);
+        }
+
+    }
+
 }
