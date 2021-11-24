@@ -64,10 +64,11 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
       File smithyBuild = Paths.get(root.getAbsolutePath(), file).toFile();
       if (smithyBuild.isFile()) {
         try {
-          result.merge(SmithyBuildLoader.load(smithyBuild.toPath()));
-          LspLog.println("Loaded build extensions " + result + " from " + smithyBuild.getAbsolutePath());
+          SmithyBuildExtensions local = SmithyBuildLoader.load(smithyBuild.toPath());
+          result.merge(local);
+          LspLog.println("Loaded build extensions " + local + " from " + smithyBuild.getAbsolutePath());
         } catch (Exception e) {
-          LspLog.println("Failed to load " + result + ": " + e.toString());
+          LspLog.println("Failed to load config from" + smithyBuild + ": " + e.toString());
         }
       }
     }

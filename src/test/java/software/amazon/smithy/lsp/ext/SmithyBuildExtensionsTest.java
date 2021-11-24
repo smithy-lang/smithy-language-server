@@ -76,12 +76,13 @@ public class SmithyBuildExtensionsTest {
         SmithyBuildExtensions.Builder builder = SmithyBuildExtensions.builder();
 
         SmithyBuildExtensions other = SmithyBuildExtensions.builder().mavenDependencies(Arrays.asList("hello", "world"))
-                .mavenRepositories(Arrays.asList("hi", "there")).build();
+                .mavenRepositories(Arrays.asList("hi", "there")).imports(Arrays.asList("i3", "i4")).build();
 
         SmithyBuildExtensions result = builder.mavenDependencies(Arrays.asList("d1", "d2"))
-                .mavenRepositories(Arrays.asList("r1", "r2")).merge(other).build();
+                .mavenRepositories(Arrays.asList("r1", "r2")).imports(Arrays.asList("i1", "i2")).merge(other).build();
 
         assertEquals(ImmutableList.of("d1", "d2", "hello", "world"), result.getMavenDependencies());
         assertEquals(ImmutableList.of("r1", "r2", "hi", "there"), result.getMavenRepositories());
+        assertEquals(ImmutableList.of("i1", "i2", "i3", "i4"), result.getImports());
     }
 }
