@@ -39,12 +39,16 @@ import software.amazon.smithy.model.shapes.ShapeType;
 import software.amazon.smithy.model.validation.ValidatedResult;
 
 public final class SmithyProject {
-    private List<Path> imports;
-    private List<File> smithyFiles;
-    private List<File> externalJars;
+    // TODO: handle smithy json files
+    public static final String SMITHY_EXTENSION = ".smithy";
+
+    private final List<Path> imports;
+    private final List<File> smithyFiles;
+    private final List<File> externalJars;
     private Map<String, List<Location>> locations = Collections.emptyMap();
     private ValidatedResult<Model> model;
-    private File root;
+    private final File root;
+
 
     private SmithyProject(List<Path> imports, List<File> smithyFiles, List<File> externalJars, File root,
                           ValidatedResult<Model> model) {
@@ -65,16 +69,20 @@ public final class SmithyProject {
      * @return either an error, or a loaded project
      */
     public Either<Exception, SmithyProject> recompile(File file) {
+
         // We aggressively re-build the model with only existing files
         // it's simpler than trying to manage which file was added/removed/closed etc.
-        List<File> newFiles = new ArrayList<File>();
-        newFiles.addAll(onlyExistingFiles(this.smithyFiles));
+        List<File> newFiles = new ArrayList<File>(onlyExistingFiles(this.smithyFiles));
 
         if (file.isFile()) {
             newFiles.add(file);
         }
 
-        return load(this.imports, this.smithyFiles, this.externalJars, this.root);
+        if (!newFiles.equals(this.smithyFiles)) {
+            LspLog.println("Recompilation changed the list of files: " + this.smithyFiles + " --> "
+                    + onlyExistingFiles(this.smithyFiles));
+        }
+        return load(this.imports, newFiles, this.externalJars, this.root);
     }
 
     public ValidatedResult<Model> getModel() {
@@ -109,7 +117,7 @@ public final class SmithyProject {
         List<Path> imports = config.getImports().stream().map(p -> Paths.get(root.getAbsolutePath(), p).normalize())
                 .collect(Collectors.toList());
 
-        if (!imports.contains(Paths.get("."))) {
+        if (imports.isEmpty()) {
             imports.add(root.toPath());
         }
 
@@ -172,21 +180,29 @@ public final class SmithyProject {
         return locations;
     }
 
+    private static Boolean isValidSmithyFile(Path file) {
+        String fName = file.getFileName().toString();
+        return fName.endsWith(SMITHY_EXTENSION);
+    }
+
+    private static List<File> walkSmithyFolder(Path path, File root) {
+
+        try (Stream<Path> walk = Files.walk(path)) {
+            return walk.filter(Files::isRegularFile).filter(SmithyProject::isValidSmithyFile).map(Path::toFile)
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            LspLog.println("Failed to walk import '" + path + "' from root " + root + ": " + e);
+            return new ArrayList<>();
+        }
+    }
+
     private static List<File> discoverSmithyFiles(List<Path> imports, File root) {
         List<File> smithyFiles = new ArrayList<>();
 
         imports.forEach(path -> {
             if (Files.isDirectory(path)) {
-
-                try (Stream<Path> walk = Files.walk(path)) {
-                    smithyFiles.addAll(walk.filter(Files::isRegularFile).filter(p -> {
-                        String fName = p.getFileName().toString();
-                        return fName.endsWith(".smithy");
-                    }).map(f -> f.toFile()).collect(Collectors.toList()));
-                } catch (IOException e) {
-                    LspLog.println("Failed to walk import '" + path + "' from root " + root + ": " + e);
-                }
-            } else if (path.getFileName().toString().endsWith(".smithy")) {
+                smithyFiles.addAll(walkSmithyFolder(path, root));
+            } else if (isValidSmithyFile(path)) {
                 smithyFiles.add(path.resolve(root.toPath()).toFile());
             }
         });
@@ -203,6 +219,6 @@ public final class SmithyProject {
     }
 
     private static List<File> onlyExistingFiles(Collection<File> files) {
-        return files.stream().filter(f -> f.isFile()).collect(Collectors.toList());
+        return files.stream().filter(File::isFile).collect(Collectors.toList());
     }
 }

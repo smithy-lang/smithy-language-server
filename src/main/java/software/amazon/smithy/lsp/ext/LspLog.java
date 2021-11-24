@@ -20,8 +20,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import software.amazon.smithy.utils.ListUtils;
 
 /**
  * This log interface buffers the messages until the server receives information
@@ -35,6 +37,23 @@ public final class LspLog {
     private static Optional<List<Object>> buffer = Optional.of(new ArrayList<Object>());
 
     private LspLog() {
+    }
+
+    /**
+     * Clears out the buffered messages.
+     */
+    public static void clearBuffer() {
+        synchronized (buffer) {
+            buffer.ifPresent(c -> c.clear());
+        }
+    }
+
+    /**
+     * Produces a snapshot of the current log buffer.
+     * @return a copy of the messages currently in the buffer
+     */
+    public static List<Object> getBuffer() {
+        return ListUtils.copyOf(buffer.orElse(Collections.emptyList()));
     }
 
     /**
