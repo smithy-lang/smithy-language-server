@@ -21,7 +21,9 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -50,6 +52,7 @@ import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
 import software.amazon.smithy.lsp.ext.SmithyProject;
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
@@ -187,33 +190,35 @@ public class SmithyTextDocumentService implements TextDocumentService {
         File tempFile = null;
 
         try {
-            tempFile = File.createTempFile("smithy", SmithyProject.SMITHY_EXTENSION);
+            if (params.getContentChanges().size() > 0) {
+                tempFile = File.createTempFile("smithy", SmithyProject.SMITHY_EXTENSION);
 
-            Files.write(tempFile.toPath(), params.getContentChanges().get(0).getText().getBytes());
+                Files.write(tempFile.toPath(), params.getContentChanges().get(0).getText().getBytes());
+            }
 
         } catch (Exception ignored) {
 
         }
 
-        recompile(tempFile, Optional.of(fileUri(params.getTextDocument())));
+        report(recompile(fileUri(params.getTextDocument()), Optional.ofNullable(tempFile)));
     }
 
     @Override
     public void didOpen(DidOpenTextDocumentParams params) {
         String rawUri = params.getTextDocument().getUri();
         if (Utils.isFile(rawUri)) {
-            recompile(fileUri(params.getTextDocument()), Optional.empty());
+            report(recompile(fileUri(params.getTextDocument()), Optional.empty()));
         }
     }
 
     @Override
     public void didClose(DidCloseTextDocumentParams params) {
-        recompile(fileUri(params.getTextDocument()), Optional.empty());
+        report(recompile(fileUri(params.getTextDocument()), Optional.empty()));
     }
 
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
-        recompile(fileUri(params.getTextDocument()), Optional.empty());
+        report(recompile(fileUri(params.getTextDocument()), Optional.empty()));
     }
 
     private File fileUri(TextDocumentIdentifier tdi) {
@@ -225,33 +230,112 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     /**
-     * @param path     Path of new model file.
-     * @param original Original model file to compare against when recompiling.
+     * @param result Either a fatal error message, or a list of diagnostics to
+     *               publish
      */
-    public void recompile(File path, Optional<File> original) {
-        Either<Exception, SmithyProject> loadedModel = this.project.recompile(path);
-        String changedFileUri = original.map(File::getAbsolutePath).orElse(path.getAbsolutePath());
-
+    public void report(Either<String, List<PublishDiagnosticsParams>> result) {
         client.ifPresent(cl -> {
-            if (loadedModel.isLeft()) {
-                cl.showMessage(
-                        msg(MessageType.Error, changedFileUri + " is not okay!" + loadedModel.getLeft().toString()));
+
+            if (result.isLeft()) {
+                cl.showMessage(msg(MessageType.Error, result.getLeft()));
             } else {
-                ValidatedResult<Model> result = loadedModel.getRight().getModel();
-
-                if (result.isBroken()) {
-                    List<ValidationEvent> events = result.getValidationEvents();
-
-                    List<Diagnostic> messages = events.stream().map(ProtocolAdapter::toDiagnostic)
-                            .collect(Collectors.toList());
-                    PublishDiagnosticsParams diagnostics = createDiagnostics(changedFileUri, messages);
-
-                    cl.publishDiagnostics(diagnostics);
-                } else {
-                    cl.publishDiagnostics(createDiagnostics(changedFileUri, Collections.emptyList()));
-                }
+                result.getRight().forEach(cl::publishDiagnostics);
             }
         });
+    }
+
+    /**
+     * Breaks down a list of validation events into a per-file list of diagnostics,
+     * explicitly publishing an empty list of diagnostics for files not present in
+     * validation events.
+     *
+     * @param events   output of the Smithy model builder
+     * @param allFiles all the files registered for the project
+     * @return a list of LSP diagnostics to publish
+     */
+    public List<PublishDiagnosticsParams> createPerFileDiagnostics(List<ValidationEvent> events, List<File> allFiles) {
+        Map<String, List<ValidationEvent>> byFile = new HashMap<String, List<ValidationEvent>>();
+
+        for (ValidationEvent ev : events) {
+            String file = ev.getSourceLocation().getFilename();
+            if (byFile.containsKey(file)) {
+                byFile.get(file).add(ev);
+            } else {
+                List<ValidationEvent> l = new ArrayList<ValidationEvent>();
+                l.add(ev);
+                byFile.put(file, l);
+            }
+        }
+
+        allFiles.forEach(f -> {
+            if (!byFile.containsKey(f.getAbsolutePath())) {
+                byFile.put(f.getAbsolutePath(), Collections.emptyList());
+            }
+        });
+
+        List<PublishDiagnosticsParams> diagnostics = new ArrayList<PublishDiagnosticsParams>();
+
+        byFile.entrySet().forEach(e -> {
+            diagnostics.add(createDiagnostics(e.getKey(),
+                    e.getValue().stream().map(ProtocolAdapter::toDiagnostic).collect(Collectors.toList())));
+        });
+
+        return diagnostics;
+
+    }
+
+    /**
+     * Main recompilation method, responsible for reloading the model, persisting it
+     * if necessary, and massaging validation events into publishable diagnostics.
+     *
+     * @param path      file that triggered recompilation
+     * @param temporary optional location of a temporary file with most recent
+     *                  contents
+     * @return either a fatal error message, or a list of diagnostics
+     */
+    public Either<String, List<PublishDiagnosticsParams>> recompile(File path, Optional<File> temporary) {
+        File latestContents = temporary.orElse(path);
+        Either<Exception, SmithyProject> loadedModel = this.project.recompile(latestContents);
+
+        if (loadedModel.isLeft()) {
+            return Either.forLeft(path + " is not okay!" + loadedModel.getLeft().toString());
+        } else {
+            ValidatedResult<Model> result = loadedModel.getRight().getModel();
+            // If we're working with a temporary file, we don't want to persist the result
+            // of the project
+            if (!temporary.isPresent()) {
+                this.project = loadedModel.getRight();
+            }
+
+            List<ValidationEvent> events = new ArrayList<ValidationEvent>();
+            List<File> allFiles;
+
+            if (temporary.isPresent()) {
+                allFiles = project.getSmithyFiles().stream().filter(f -> !f.equals(temporary.get()))
+                        .collect(Collectors.toList());
+                // We need to remap some validation events
+                // from temporary files to the one on which didChange was invoked
+                for (ValidationEvent ev : result.getValidationEvents()) {
+                    if (ev.getSourceLocation().getFilename().equals(temporary.get().getAbsolutePath())) {
+                        SourceLocation sl = new SourceLocation(path.getAbsolutePath(), ev.getSourceLocation().getLine(),
+                                ev.getSourceLocation().getColumn());
+                        ValidationEvent newEvent = ev.toBuilder().sourceLocation(sl).build();
+
+                        events.add(newEvent);
+                    } else {
+                        events.add(ev);
+                    }
+                }
+            } else {
+                events.addAll(result.getValidationEvents());
+                allFiles = project.getSmithyFiles();
+            }
+
+            LspLog.println(
+                    "Recompiling " + path + " (with temporary content " + temporary + ") raised diagnostics:" + events);
+            return Either.forRight(createPerFileDiagnostics(events, allFiles));
+        }
+
     }
 
     private void sendInfo(String msg) {

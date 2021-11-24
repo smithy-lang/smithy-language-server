@@ -13,10 +13,12 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 public class Harness implements AutoCloseable {
   private File root;
   private SmithyProject project;
+  private SmithyBuildExtensions config;
 
-  private Harness(File root, SmithyProject project) {
+  private Harness(File root, SmithyProject project, SmithyBuildExtensions config) {
     this.root = root;
     this.project = project;
+    this.config = config;
   }
 
   public File getRoot() {
@@ -25,6 +27,10 @@ public class Harness implements AutoCloseable {
 
   public SmithyProject getProject() {
     return this.project;
+  }
+
+  public SmithyBuildExtensions getConfig() {
+    return this.config;
   }
 
   private static File safeCreateFile(String path, String contents, File root) throws Exception {
@@ -63,7 +69,7 @@ public class Harness implements AutoCloseable {
     File hs = Files.createTempDir();
     Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, hs);
     if (loaded.isRight())
-      return new Harness(hs, loaded.getRight());
+      return new Harness(hs, loaded.getRight(), ext);
     else
       throw loaded.getLeft();
   }
@@ -76,7 +82,7 @@ public class Harness implements AutoCloseable {
     }
     Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, hs);
     if (loaded.isRight())
-      return new Harness(hs, loaded.getRight());
+      return new Harness(hs, loaded.getRight(), ext);
     else
       throw loaded.getLeft();
   }
