@@ -207,7 +207,6 @@ public class SmithyTextDocumentServiceTest {
     }
 
     private List<PublishDiagnosticsParams> fileDiagnostics(File f, List<PublishDiagnosticsParams> diags) {
-        // println()
         return diags.stream().filter(pds -> pds.getUri().equals(uri(f))).collect(Collectors.toList());
     }
 
@@ -217,7 +216,7 @@ public class SmithyTextDocumentServiceTest {
     }
 
     private TextDocumentItem textDocumentItem(File f, String text) {
-        return new TextDocumentItem("file:" + f.getAbsolutePath(), "smithy", 1, text);
+        return new TextDocumentItem(uri(f), "smithy", 1, text);
     }
 
     private String uri(File f) {
