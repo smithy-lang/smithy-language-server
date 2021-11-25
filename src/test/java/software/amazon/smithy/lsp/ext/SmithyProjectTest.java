@@ -62,8 +62,8 @@ public class SmithyProjectTest {
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
 
             List<File> expectedFiles = Files.walk(hs.getRoot().toPath())
-                    .filter(f -> f.getFileName().toString().endsWith(SmithyProject.SMITHY_EXTENSION))
-                    .map(Path::toFile).collect(Collectors.toList());
+                    .filter(f -> f.getFileName().toString().endsWith(Constants.SMITHY_EXTENSION)).map(Path::toFile)
+                    .collect(Collectors.toList());
 
             List<File> smithyFiles = hs.getProject().getSmithyFiles();
 

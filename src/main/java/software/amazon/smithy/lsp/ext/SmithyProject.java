@@ -28,6 +28,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
@@ -39,9 +42,6 @@ import software.amazon.smithy.model.shapes.ShapeType;
 import software.amazon.smithy.model.validation.ValidatedResult;
 
 public final class SmithyProject {
-    // TODO: handle smithy json files
-    public static final String SMITHY_EXTENSION = ".smithy";
-
     private final List<Path> imports;
     private final List<File> smithyFiles;
     private final List<File> externalJars;
@@ -49,9 +49,21 @@ public final class SmithyProject {
     private ValidatedResult<Model> model;
     private final File root;
 
+    List<CompletionItem> keywordCompletions = Constants.KEYWORDS.stream()
+            .map(kw -> createCompletion(kw, CompletionItemKind.Keyword)).collect(Collectors.toList());
+
+    // List<CompletionItem> baseTypesCompletions = Constants.BUILT_IN_TYPES.stream()
+    // .map(kw -> createCompletion(kw,
+    // CompletionItemKind.Class)).collect(Collectors.toList());
+
+    private CompletionItem createCompletion(String s, CompletionItemKind kind) {
+        CompletionItem ci = new CompletionItem(s);
+        ci.setKind(kind);
+        return ci;
+    }
 
     private SmithyProject(List<Path> imports, List<File> smithyFiles, List<File> externalJars, File root,
-                          ValidatedResult<Model> model) {
+            ValidatedResult<Model> model) {
         this.imports = imports;
         this.root = root;
         this.model = model;
@@ -78,10 +90,6 @@ public final class SmithyProject {
             newFiles.add(file);
         }
 
-        if (!newFiles.equals(this.smithyFiles)) {
-            LspLog.println("Recompilation changed the list of files: " + this.smithyFiles + " --> "
-                    + onlyExistingFiles(this.smithyFiles));
-        }
         return load(this.imports, newFiles, this.externalJars, this.root);
     }
 
@@ -95,6 +103,23 @@ public final class SmithyProject {
 
     public List<File> getSmithyFiles() {
         return this.smithyFiles;
+    }
+
+    public List<CompletionItem> getCompletions(String prefix) {
+        return this.model.getResult().map(model -> {
+            List<CompletionItem> comps = new ArrayList();
+
+            model.getShapeIds().forEach(shapeId -> {
+                if (shapeId.getName().startsWith(prefix))
+                    comps.add(createCompletion(shapeId.getName(), CompletionItemKind.Class));
+            });
+
+            keywordCompletions.forEach(kw -> {
+                if (kw.getLabel().startsWith(prefix))
+                    comps.add(kw);
+            });
+            return comps;
+        }).orElse(Collections.emptyList());
     }
 
     public Map<String, List<Location>> getLocations() {
@@ -134,7 +159,7 @@ public final class SmithyProject {
     }
 
     private static Either<Exception, SmithyProject> load(List<Path> imports, List<File> smithyFiles,
-                                                         List<File> externalJars, File root) {
+            List<File> externalJars, File root) {
         Either<Exception, ValidatedResult<Model>> model = createModel(smithyFiles, externalJars);
 
         if (model.isLeft()) {
@@ -145,7 +170,7 @@ public final class SmithyProject {
     }
 
     private static Either<Exception, ValidatedResult<Model>> createModel(List<File> discoveredFiles,
-                                                                         List<File> externalJars) {
+            List<File> externalJars) {
         return SmithyInterface.readModel(discoveredFiles, externalJars);
     }
 
@@ -182,7 +207,7 @@ public final class SmithyProject {
 
     private static Boolean isValidSmithyFile(Path file) {
         String fName = file.getFileName().toString();
-        return fName.endsWith(SMITHY_EXTENSION);
+        return fName.endsWith(Constants.SMITHY_EXTENSION);
     }
 
     private static List<File> walkSmithyFolder(Path path, File root) {
