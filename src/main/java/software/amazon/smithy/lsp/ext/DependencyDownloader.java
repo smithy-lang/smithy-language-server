@@ -71,7 +71,7 @@ public final class DependencyDownloader {
     try {
       JarFile jar = new JarFile(new File(path));
       ZipEntry manifestEntry = jar.getEntry("META-INF/smithy/manifest");
-      LspLog.println("Successfully found Smithy manifest in " + jar);
+      LspLog.println("Successfully found Smithy manifest in " + path);
       return manifestEntry != null;
     } catch (Exception e) {
       LspLog.println("Failed to open " + path + " to check if it's a Smithy jar: " + e.toString());
