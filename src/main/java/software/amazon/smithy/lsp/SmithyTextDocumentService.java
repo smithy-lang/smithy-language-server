@@ -254,10 +254,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
      * @return a list of LSP diagnostics to publish
      */
     public List<PublishDiagnosticsParams> createPerFileDiagnostics(List<ValidationEvent> events, List<File> allFiles) {
-        Map<String, List<ValidationEvent>> byFile = new HashMap<String, List<ValidationEvent>>();
+        Map<File, List<ValidationEvent>> byFile = new HashMap<File, List<ValidationEvent>>();
 
         for (ValidationEvent ev : events) {
-            String file = ev.getSourceLocation().getFilename();
+            File file = new File(ev.getSourceLocation().getFilename());
             if (byFile.containsKey(file)) {
                 byFile.get(file).add(ev);
             } else {
@@ -268,15 +268,15 @@ public class SmithyTextDocumentService implements TextDocumentService {
         }
 
         allFiles.forEach(f -> {
-            if (!byFile.containsKey(f.getAbsolutePath())) {
-                byFile.put(f.getAbsolutePath(), Collections.emptyList());
+            if (!byFile.containsKey(f)) {
+                byFile.put(f, Collections.emptyList());
             }
         });
 
         List<PublishDiagnosticsParams> diagnostics = new ArrayList<PublishDiagnosticsParams>();
 
         byFile.entrySet().forEach(e -> {
-            diagnostics.add(createDiagnostics(e.getKey(),
+            diagnostics.add(createDiagnostics(e.getKey().toURI().toString(),
                     e.getValue().stream().map(ProtocolAdapter::toDiagnostic).collect(Collectors.toList())));
         });
 
