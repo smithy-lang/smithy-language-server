@@ -13,7 +13,7 @@ jobs:
     name: Java ${{ matrix.java }} ${{ matrix.os }}
     strategy:
       matrix:
-        java: [8, 11]
+        java: [8, 11, 17]
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
@@ -54,5 +54,3 @@ jobs:
           PGP_SECRET: ${{ secrets.PGP_SECRET }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
-
-
