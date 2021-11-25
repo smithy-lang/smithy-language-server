@@ -221,6 +221,6 @@ public class SmithyTextDocumentServiceTest {
     }
 
     private String uri(File f) {
-        return "file:" + f.getAbsolutePath();
+        return f.toURI().toString();
     }
 }
