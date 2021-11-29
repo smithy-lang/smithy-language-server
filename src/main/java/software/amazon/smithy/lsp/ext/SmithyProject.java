@@ -28,9 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.eclipse.lsp4j.CompletionItem;
-import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
@@ -48,19 +46,6 @@ public final class SmithyProject {
     private Map<String, List<Location>> locations = Collections.emptyMap();
     private ValidatedResult<Model> model;
     private final File root;
-
-    List<CompletionItem> keywordCompletions = Constants.KEYWORDS.stream()
-            .map(kw -> createCompletion(kw, CompletionItemKind.Keyword)).collect(Collectors.toList());
-
-    // List<CompletionItem> baseTypesCompletions = Constants.BUILT_IN_TYPES.stream()
-    // .map(kw -> createCompletion(kw,
-    // CompletionItemKind.Class)).collect(Collectors.toList());
-
-    private CompletionItem createCompletion(String s, CompletionItemKind kind) {
-        CompletionItem ci = new CompletionItem(s);
-        ci.setKind(kind);
-        return ci;
-    }
 
     private SmithyProject(List<Path> imports, List<File> smithyFiles, List<File> externalJars, File root,
             ValidatedResult<Model> model) {
@@ -105,21 +90,8 @@ public final class SmithyProject {
         return this.smithyFiles;
     }
 
-    public List<CompletionItem> getCompletions(String prefix) {
-        return this.model.getResult().map(model -> {
-            List<CompletionItem> comps = new ArrayList();
-
-            model.getShapeIds().forEach(shapeId -> {
-                if (shapeId.getName().startsWith(prefix))
-                    comps.add(createCompletion(shapeId.getName(), CompletionItemKind.Class));
-            });
-
-            keywordCompletions.forEach(kw -> {
-                if (kw.getLabel().startsWith(prefix))
-                    comps.add(kw);
-            });
-            return comps;
-        }).orElse(Collections.emptyList());
+    public List<CompletionItem> getCompletions(String token) {
+        return this.model.getResult().map(model -> Completions.find(model, token)).orElse(Collections.emptyList());
     }
 
     public Map<String, List<Location>> getLocations() {
