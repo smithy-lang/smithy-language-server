@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
@@ -48,7 +49,7 @@ public final class SmithyProject {
     private final File root;
 
     private SmithyProject(List<Path> imports, List<File> smithyFiles, List<File> externalJars, File root,
-            ValidatedResult<Model> model) {
+                          ValidatedResult<Model> model) {
         this.imports = imports;
         this.root = root;
         this.model = model;
@@ -60,19 +61,26 @@ public final class SmithyProject {
     }
 
     /**
-     * Recompile the model, optionally adding a file to the tracked list of sources.
+     * Recompile the model, adding a file to list of tracked files, potentially
+     * excluding some other file.
+     * <p>
+     * This version of the method above is used when the
+     * file is in ephemeral storage (temporary location when file is being changed)
      *
-     * @param file file which may or may not be already tracked by this project
+     * @param changed file which may or may not be already tracked by this project
      * @return either an error, or a loaded project
      */
-    public Either<Exception, SmithyProject> recompile(File file) {
+    public Either<Exception, SmithyProject> recompile(File changed, File exclude) {
+        List<File> newFiles = new ArrayList<File>();
 
-        // We aggressively re-build the model with only existing files
-        // it's simpler than trying to manage which file was added/removed/closed etc.
-        List<File> newFiles = new ArrayList<File>(onlyExistingFiles(this.smithyFiles));
+        for (File existing : onlyExistingFiles(this.smithyFiles)) {
+            if (exclude != null && !existing.equals(exclude)) {
+                newFiles.add(existing);
+            }
+        }
 
-        if (file.isFile()) {
-            newFiles.add(file);
+        if (changed.isFile()) {
+            newFiles.add(changed);
         }
 
         return load(this.imports, newFiles, this.externalJars, this.root);
@@ -131,7 +139,7 @@ public final class SmithyProject {
     }
 
     private static Either<Exception, SmithyProject> load(List<Path> imports, List<File> smithyFiles,
-            List<File> externalJars, File root) {
+                                                         List<File> externalJars, File root) {
         Either<Exception, ValidatedResult<Model>> model = createModel(smithyFiles, externalJars);
 
         if (model.isLeft()) {
@@ -142,7 +150,7 @@ public final class SmithyProject {
     }
 
     private static Either<Exception, ValidatedResult<Model>> createModel(List<File> discoveredFiles,
-            List<File> externalJars) {
+                                                                         List<File> externalJars) {
         return SmithyInterface.readModel(discoveredFiles, externalJars);
     }
 
