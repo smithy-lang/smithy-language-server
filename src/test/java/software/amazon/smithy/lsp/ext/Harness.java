@@ -12,11 +12,13 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 
 public class Harness implements AutoCloseable {
   private File root;
+  private File temp;
   private SmithyProject project;
   private SmithyBuildExtensions config;
 
-  private Harness(File root, SmithyProject project, SmithyBuildExtensions config) {
+  private Harness(File root, File temporary, SmithyProject project, SmithyBuildExtensions config) {
     this.root = root;
+    this.temp = temporary;
     this.project = project;
     this.config = config;
   }
@@ -27,6 +29,10 @@ public class Harness implements AutoCloseable {
 
   public SmithyProject getProject() {
     return this.project;
+  }
+
+  public File getTempFolder() {
+    return this.temp;
   }
 
   public SmithyBuildExtensions getConfig() {
@@ -46,7 +52,7 @@ public class Harness implements AutoCloseable {
 
   public File addFile(String path, String contents) throws Exception {
     File f = safeCreateFile(path, contents, this.root);
-    Either<Exception, SmithyProject> loaded = this.project.recompile(f);
+    Either<Exception, SmithyProject> loaded = this.project.recompile(f, null);
     if (loaded.isRight())
       this.project = loaded.getRight();
     else
@@ -67,9 +73,11 @@ public class Harness implements AutoCloseable {
   public static Harness create(SmithyBuildExtensions ext) throws Exception {
     // TODO: How to make this safe?
     File hs = Files.createTempDir();
+    File tmp = Files.createTempDir();
+
     Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, hs);
     if (loaded.isRight())
-      return new Harness(hs, loaded.getRight(), ext);
+      return new Harness(hs, tmp, loaded.getRight(), ext);
     else
       throw loaded.getLeft();
   }
@@ -77,12 +85,13 @@ public class Harness implements AutoCloseable {
   public static Harness create(SmithyBuildExtensions ext, Map<String, String> files) throws Exception {
     // TODO: How to make this safe?
     File hs = Files.createTempDir();
+    File tmp = Files.createTempDir();
     for (Entry<String, String> entry : files.entrySet()) {
       safeCreateFile(entry.getKey(), entry.getValue(), hs);
     }
     Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, hs);
     if (loaded.isRight())
-      return new Harness(hs, loaded.getRight(), ext);
+      return new Harness(hs, tmp, loaded.getRight(), ext);
     else
       throw loaded.getLeft();
   }

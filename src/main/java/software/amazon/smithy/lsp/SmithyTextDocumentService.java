@@ -15,9 +15,12 @@
 
 package software.amazon.smithy.lsp;
 
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -27,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
@@ -63,16 +67,22 @@ public class SmithyTextDocumentService implements TextDocumentService {
     private Optional<LanguageClient> client = Optional.empty();
     private final List<Location> noLocations = Collections.emptyList();
     private SmithyProject project;
+    private File temporaryFolder;
 
     // when files are edited, their contents will be persisted in memory and removed
     // on didSave or didClose
-    private Map<File, String> temporaryContents = new HashMap();
+    private Map<File, String> temporaryContents = new ConcurrentHashMap<>();
+
+    // We use this function to has filepaths to the same location in temporary
+    // folder
+    private HashFunction hash = Hashing.murmur3_128();
 
     /**
      * @param client Language Client to be used by text document service.
      */
-    public SmithyTextDocumentService(Optional<LanguageClient> client) {
+    public SmithyTextDocumentService(Optional<LanguageClient> client, File tempFile) {
         this.client = client;
+        this.temporaryFolder = tempFile;
     }
 
     public void setClient(LanguageClient client) {
@@ -124,6 +134,12 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     private List<String> readAll(File f) throws IOException {
         return Files.readAllLines(f.toPath());
+    }
+
+    private File designatedTemporaryFile(File source) {
+        String hashed = hash.hashString(source.getAbsolutePath(), StandardCharsets.UTF_8).toString();
+
+        return new File(this.temporaryFolder, hashed + Constants.SMITHY_EXTENSION);
     }
 
     private String findToken(String path, Position p) throws IOException {
@@ -195,24 +211,25 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
+        File original = fileUri(params.getTextDocument());
         File tempFile = null;
 
         try {
             if (params.getContentChanges().size() > 0) {
-                tempFile = File.createTempFile("smithy", Constants.SMITHY_EXTENSION);
-
+                tempFile = designatedTemporaryFile(original);
                 String contents = params.getContentChanges().get(0).getText();
 
-                unstableContents(fileUri(params.getTextDocument()), contents);
+                unstableContents(original, contents);
 
                 Files.write(tempFile.toPath(), contents.getBytes());
             }
 
-        } catch (Exception ignored) {
-
+        } catch (Exception e) {
+            LspLog.println("Failed to write temporary contents for file " + original + " into temporary file "
+                    + tempFile + " : " + e);
         }
 
-        report(recompile(fileUri(params.getTextDocument()), Optional.ofNullable(tempFile)));
+        report(recompile(original, Optional.ofNullable(tempFile)));
     }
 
     private void stableContents(File file) {
@@ -220,6 +237,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     private void unstableContents(File file, String contents) {
+        LspLog.println("Hashed filename " + file + " into " + designatedTemporaryFile(file));
         this.temporaryContents.put(file, contents);
     }
 
@@ -303,10 +321,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
         List<PublishDiagnosticsParams> diagnostics = new ArrayList<PublishDiagnosticsParams>();
 
-        byFile.entrySet().forEach(e -> {
-            diagnostics.add(createDiagnostics(e.getKey().toURI().toString(),
-                    e.getValue().stream().map(ProtocolAdapter::toDiagnostic).collect(Collectors.toList())));
-        });
+        byFile.forEach((key, value) -> diagnostics.add(createDiagnostics(key.toURI().toString(),
+                value.stream().map(ProtocolAdapter::toDiagnostic).collect(Collectors.toList()))));
 
         return diagnostics;
 
@@ -322,8 +338,20 @@ public class SmithyTextDocumentService implements TextDocumentService {
      * @return either a fatal error message, or a list of diagnostics
      */
     public Either<String, List<PublishDiagnosticsParams>> recompile(File path, Optional<File> temporary) {
-        File latestContents = temporary.orElse(path);
-        Either<Exception, SmithyProject> loadedModel = this.project.recompile(latestContents);
+        // File latestContents = temporary.orElse(path);
+        Either<Exception, SmithyProject> loadedModel;
+        if (!temporary.isPresent()) {
+            // if there's no temporary file present (didOpen/didClose/didSave)
+            // we want to rebuild the model with the original path
+            // optionally removing a temporary file
+            // This protects against a conflict during the didChange -> didSave sequence
+            loadedModel = this.project.recompile(path, designatedTemporaryFile(path));
+        } else {
+            // If there's a temporary file present (didChange), we want to
+            // replace the original path with a temporary one (to avoid conflicting
+            // definitions)
+            loadedModel = this.project.recompile(temporary.get(), path);
+        }
 
         if (loadedModel.isLeft()) {
             return Either.forLeft(path + " is not okay!" + loadedModel.getLeft().toString());
@@ -360,7 +388,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
             }
 
             LspLog.println(
-                    "Recompiling " + path + " (with temporary content " + temporary + ") raised diagnostics:" + events);
+                    "Recompiling " + path + " (with temporary content " + temporary + ") raised " + events.size()
+                            + "  diagnostics");
             return Either.forRight(createPerFileDiagnostics(events, allFiles));
         }
 
