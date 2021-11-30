@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Optional;
@@ -48,7 +49,8 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
   private Optional<LanguageClient> client = Optional.empty();
 
-  private File workspaceRoot = null;
+  private File workspaceRoot;
+  // private File tempFolder = ;
 
   private Optional<SmithyTextDocumentService> tds = Optional.empty();
 
@@ -129,7 +131,15 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
   @Override
   public TextDocumentService getTextDocumentService() {
-    SmithyTextDocumentService local = new SmithyTextDocumentService(this.client);
+    File temp = null;
+    try {
+      temp = Files.createTempDirectory("smithy-lsp").toFile();
+      LspLog.println("Created a temporary folder for file contents " + temp);
+      temp.deleteOnExit();
+    } catch (IOException e) {
+      LspLog.println("Failed to create a temporary folder " + e);
+    }
+    SmithyTextDocumentService local = new SmithyTextDocumentService(this.client, temp);
     tds = Optional.of(local);
     return local;
   }

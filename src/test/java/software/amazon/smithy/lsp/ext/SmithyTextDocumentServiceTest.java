@@ -60,7 +60,7 @@ public class SmithyTextDocumentServiceTest {
                 MapUtils.entry(goodFileName, "namespace testBla"));
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
             tds.createProject(hs.getConfig(), hs.getRoot());
 
             File broken = hs.file(brokenFileName);
@@ -92,7 +92,7 @@ public class SmithyTextDocumentServiceTest {
                 MapUtils.entry(goodFileName, "namespace testBla"));
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
             StubClient client = new StubClient();
             tds.createProject(hs.getConfig(), hs.getRoot());
             tds.setClient(client);
@@ -140,7 +140,7 @@ public class SmithyTextDocumentServiceTest {
                 MapUtils.entry(fileName2, "namespace testBla"));
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
             StubClient client = new StubClient();
             tds.createProject(hs.getConfig(), hs.getRoot());
             tds.setClient(client);
