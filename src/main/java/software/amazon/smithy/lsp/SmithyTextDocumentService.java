@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -28,7 +29,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.CompletionItem;
-import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DefinitionParams;
@@ -48,6 +48,7 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
+import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
 import software.amazon.smithy.lsp.ext.SmithyProject;
@@ -63,20 +64,15 @@ public class SmithyTextDocumentService implements TextDocumentService {
     private final List<Location> noLocations = Collections.emptyList();
     private SmithyProject project;
 
+    // when files are edited, their contents will be persisted in memory and removed
+    // on didSave or didClose
+    private Map<File, String> temporaryContents = new HashMap();
+
     /**
      * @param client Language Client to be used by text document service.
      */
     public SmithyTextDocumentService(Optional<LanguageClient> client) {
         this.client = client;
-
-        List<CompletionItem> keywordCompletions = SmithyKeywords.KEYWORDS.stream()
-                .map(kw -> create(kw, CompletionItemKind.Keyword)).collect(Collectors.toList());
-
-        List<CompletionItem> baseTypesCompletions = SmithyKeywords.BUILT_IN_TYPES.stream()
-                .map(kw -> create(kw, CompletionItemKind.Class)).collect(Collectors.toList());
-
-        baseCompletions.addAll(keywordCompletions);
-        baseCompletions.addAll(baseTypesCompletions);
     }
 
     public void setClient(LanguageClient client) {
@@ -108,6 +104,16 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     @Override
     public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams position) {
+        LspLog.println("Asking to complete " + position + " in class " + position.getTextDocument().getClass());
+
+        try {
+            String found = findToken(position.getTextDocument().getUri(), position.getPosition());
+            LspLog.println("Token for completion: " + found + " in class " + position.getTextDocument().getClass());
+            return Utils.completableFuture(Either.forLeft(project.getCompletions(found)));
+        } catch (Exception e) {
+            LspLog.println(
+                    "Failed to identify token for completion in " + position.getTextDocument().getUri() + ": " + e);
+        }
         return Utils.completableFuture(Either.forLeft(baseCompletions));
     }
 
@@ -116,27 +122,29 @@ public class SmithyTextDocumentService implements TextDocumentService {
         return Utils.completableFuture(unresolved);
     }
 
-    private CompletionItem create(String s, CompletionItemKind kind) {
-        CompletionItem ci = new CompletionItem(s);
-        ci.setKind(kind);
-        return ci;
-    }
-
     private List<String> readAll(File f) throws IOException {
         return Files.readAllLines(f.toPath());
     }
 
     private String findToken(String path, Position p) throws IOException {
         List<String> contents;
-        LspLog.println("Looking for " + path);
         if (Utils.isSmithyJarFile(path)) {
             contents = Utils.jarFileContents(path);
         } else {
-            contents = readAll(new File(URI.create(path)));
+            String tempContents = temporaryContents.get(fileFromUri(path));
+            if (tempContents != null) {
+                LspLog.println("Path " + path + " was found in temporary buffer");
+                contents = Arrays.stream(tempContents.split("\n")).collect(Collectors.toList());
+            } else {
+                contents = readAll(new File(URI.create(path)));
+            }
+
         }
 
         String line = contents.get(p.getLine());
         int col = p.getCharacter();
+
+        LspLog.println("Trying to find a token in line '" + line + "' at position " + p);
 
         String before = line.substring(0, col);
         String after = line.substring(col, line.length());
@@ -191,9 +199,13 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
         try {
             if (params.getContentChanges().size() > 0) {
-                tempFile = File.createTempFile("smithy", SmithyProject.SMITHY_EXTENSION);
+                tempFile = File.createTempFile("smithy", Constants.SMITHY_EXTENSION);
 
-                Files.write(tempFile.toPath(), params.getContentChanges().get(0).getText().getBytes());
+                String contents = params.getContentChanges().get(0).getText();
+
+                unstableContents(fileUri(params.getTextDocument()), contents);
+
+                Files.write(tempFile.toPath(), contents.getBytes());
             }
 
         } catch (Exception ignored) {
@@ -201,6 +213,14 @@ public class SmithyTextDocumentService implements TextDocumentService {
         }
 
         report(recompile(fileUri(params.getTextDocument()), Optional.ofNullable(tempFile)));
+    }
+
+    private void stableContents(File file) {
+        this.temporaryContents.remove(file);
+    }
+
+    private void unstableContents(File file, String contents) {
+        this.temporaryContents.put(file, contents);
     }
 
     @Override
@@ -213,20 +233,28 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     @Override
     public void didClose(DidCloseTextDocumentParams params) {
-        report(recompile(fileUri(params.getTextDocument()), Optional.empty()));
+        File file = fileUri(params.getTextDocument());
+        stableContents(file);
+        report(recompile(file, Optional.empty()));
     }
 
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
-        report(recompile(fileUri(params.getTextDocument()), Optional.empty()));
+        File file = fileUri(params.getTextDocument());
+        stableContents(file);
+        report(recompile(file, Optional.empty()));
     }
 
     private File fileUri(TextDocumentIdentifier tdi) {
-        return new File(URI.create(tdi.getUri()));
+        return fileFromUri(tdi.getUri());
     }
 
     private File fileUri(TextDocumentItem tdi) {
-        return new File(URI.create(tdi.getUri()));
+        return fileFromUri(tdi.getUri());
+    }
+
+    private File fileFromUri(String uri) {
+        return new File(URI.create(uri));
     }
 
     /**
