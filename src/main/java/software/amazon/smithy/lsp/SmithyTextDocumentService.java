@@ -321,10 +321,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
         List<PublishDiagnosticsParams> diagnostics = new ArrayList<PublishDiagnosticsParams>();
 
-        byFile.entrySet().forEach(e -> {
-            diagnostics.add(createDiagnostics(e.getKey().toURI().toString(),
-                    e.getValue().stream().map(ProtocolAdapter::toDiagnostic).collect(Collectors.toList())));
-        });
+        byFile.forEach((key, value) -> diagnostics.add(createDiagnostics(key.toURI().toString(),
+                value.stream().map(ProtocolAdapter::toDiagnostic).collect(Collectors.toList()))));
 
         return diagnostics;
 
@@ -342,7 +340,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
     public Either<String, List<PublishDiagnosticsParams>> recompile(File path, Optional<File> temporary) {
         // File latestContents = temporary.orElse(path);
         Either<Exception, SmithyProject> loadedModel;
-        if (temporary.isEmpty()) {
+        if (!temporary.isPresent()) {
             // if there's no temporary file present (didOpen/didClose/didSave)
             // we want to rebuild the model with the original path
             // optionally removing a temporary file
