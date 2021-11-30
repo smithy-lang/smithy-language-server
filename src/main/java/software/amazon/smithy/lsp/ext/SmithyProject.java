@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
@@ -49,7 +48,7 @@ public final class SmithyProject {
     private final File root;
 
     private SmithyProject(List<Path> imports, List<File> smithyFiles, List<File> externalJars, File root,
-                          ValidatedResult<Model> model) {
+            ValidatedResult<Model> model) {
         this.imports = imports;
         this.root = root;
         this.model = model;
@@ -139,7 +138,7 @@ public final class SmithyProject {
     }
 
     private static Either<Exception, SmithyProject> load(List<Path> imports, List<File> smithyFiles,
-                                                         List<File> externalJars, File root) {
+            List<File> externalJars, File root) {
         Either<Exception, ValidatedResult<Model>> model = createModel(smithyFiles, externalJars);
 
         if (model.isLeft()) {
@@ -150,7 +149,7 @@ public final class SmithyProject {
     }
 
     private static Either<Exception, ValidatedResult<Model>> createModel(List<File> discoveredFiles,
-                                                                         List<File> externalJars) {
+            List<File> externalJars) {
         return SmithyInterface.readModel(discoveredFiles, externalJars);
     }
 
