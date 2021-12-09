@@ -24,9 +24,7 @@ import java.io.File;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.jar.JarFile;
 import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
 
 public final class DependencyDownloader {
   private Fetch fetch;
@@ -67,24 +65,7 @@ public final class DependencyDownloader {
     return new DependencyDownloader(extensions);
   }
 
-  private Boolean isSmithyJar(String path) {
-    try {
-      JarFile jar = new JarFile(new File(path));
-      ZipEntry manifestEntry = jar.getEntry("META-INF/smithy/manifest");
-      LspLog.println("Successfully found Smithy manifest in " + path);
-      return manifestEntry != null;
-    } catch (Exception e) {
-      LspLog.println("Failed to open " + path + " to check if it's a Smithy jar: " + e.toString());
-      return false;
-    }
-
-  }
-
-  private List<File> filterOutSmithyJars(List<File> jars) {
-    return jars.stream().filter(file -> isSmithyJar(file.getAbsolutePath())).collect(Collectors.toList());
-  }
-
   public List<File> download() throws CoursierError {
-    return filterOutSmithyJars(fetch.fetch());
+    return fetch.fetch();
   }
 }
