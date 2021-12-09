@@ -144,6 +144,7 @@ public final class SmithyProject {
         if (model.isLeft()) {
             return Either.forLeft(model.getLeft());
         } else {
+            model.getRight().getValidationEvents().forEach(event -> LspLog.println(event));
             return Either.forRight(new SmithyProject(imports, smithyFiles, externalJars, root, model.getRight()));
         }
     }
