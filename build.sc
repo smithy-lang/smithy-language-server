@@ -9,7 +9,7 @@ object lsp extends MavenModule with PublishModule {
 
   def ivyDeps = Agg(
     ivy"org.eclipse.lsp4j:org.eclipse.lsp4j:0.9.0",
-    ivy"software.amazon.smithy:smithy-model:1.14.1",
+    ivy"software.amazon.smithy:smithy-model:1.16.0",
     ivy"io.get-coursier:interface:1.0.4"
   )
 
