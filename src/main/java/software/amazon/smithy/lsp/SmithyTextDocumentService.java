@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -55,6 +56,7 @@ import org.eclipse.lsp4j.services.TextDocumentService;
 import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
+import software.amazon.smithy.lsp.ext.SmithyBuildLoader;
 import software.amazon.smithy.lsp.ext.SmithyProject;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
@@ -89,6 +91,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
         this.client = Optional.of(client);
     }
 
+    public Optional<File> getRoot() {
+        return Optional.ofNullable(project).map(proj -> proj.getRoot());
+    }
+
     /**
      * Processes extensions.
      * <p>
@@ -105,6 +111,33 @@ public class SmithyTextDocumentService implements TextDocumentService {
                     + this.project.getSmithyFiles().size() + " discovered smithy files");
         } else {
             sendError("Failed to create Smithy project: " + loaded.getLeft().toString());
+        }
+    }
+
+    public void createProject(File root) {
+        LspLog.println("Recreating project from " + root);
+        SmithyBuildExtensions.Builder result = SmithyBuildExtensions.builder();
+        List<String> brokenFiles = new ArrayList<String>();
+
+        for (String file : Constants.BUILD_FILES) {
+            File smithyBuild = Paths.get(root.getAbsolutePath(), file).toFile();
+            if (smithyBuild.isFile()) {
+                try {
+                    SmithyBuildExtensions local = SmithyBuildLoader.load(smithyBuild.toPath());
+                    result.merge(local);
+                    LspLog.println("Loaded build extensions " + local + " from " + smithyBuild.getAbsolutePath());
+                } catch (Exception e) {
+                    LspLog.println("Failed to load config from" + smithyBuild + ": " + e.toString());
+                    brokenFiles.add(smithyBuild.toString());
+                }
+            }
+        }
+
+        if (brokenFiles.isEmpty()) {
+            createProject(result.build(), root);
+        } else {
+            sendError("Failed to load the build, following files have problems: \n" + String.join("\n", brokenFiles));
+
         }
     }
 
@@ -213,6 +246,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
     public void didChange(DidChangeTextDocumentParams params) {
         File original = fileUri(params.getTextDocument());
         File tempFile = null;
+
+        LspLog.println("Change params: " + params);
 
         try {
             if (params.getContentChanges().size() > 0) {
