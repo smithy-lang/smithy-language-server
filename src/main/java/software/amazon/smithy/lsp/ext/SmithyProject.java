@@ -154,6 +154,10 @@ public final class SmithyProject {
         return SmithyInterface.readModel(discoveredFiles, externalJars);
     }
 
+    public File getRoot() {
+        return this.root;
+    }
+
     private static Map<String, List<Location>> collectLocations(Model model) {
         Map<String, List<Location>> locations = new HashMap<>();
         model.shapes().forEach(shape -> {
