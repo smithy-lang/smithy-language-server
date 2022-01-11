@@ -101,7 +101,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
      * 1. Downloads external dependencies as jars 2. Creates a model from just
      * external jars 3. Updates locations index with symbols found in external jars
      *
-     * @param ext extensions
+     * @param ext  extensions
+     * @param root workspace root
      */
     public void createProject(SmithyBuildExtensions ext, File root) {
         Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, root);
@@ -115,6 +116,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
         }
     }
 
+    /**
+     * Discovers Smithy build files and loads the smithy project defined by them.
+     *
+     * @param root workspace root
+     */
     public void createProject(File root) {
         LspLog.println("Recreating project from " + root);
         SmithyBuildExtensions.Builder result = SmithyBuildExtensions.builder();

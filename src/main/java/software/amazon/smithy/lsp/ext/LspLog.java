@@ -25,8 +25,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-
-import coursierapi.shaded.coursier.core.Versions.DateTime;
 import software.amazon.smithy.utils.ListUtils;
 
 /**
@@ -54,7 +52,7 @@ public final class LspLog {
 
     /**
      * Produces a snapshot of the current log buffer.
-     * 
+     *
      * @return a copy of the messages currently in the buffer
      */
     public static List<Object> getBuffer() {

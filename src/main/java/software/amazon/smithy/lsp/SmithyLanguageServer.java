@@ -20,20 +20,15 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.CompletionOptions;
-import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
-import org.eclipse.lsp4j.Registration;
-import org.eclipse.lsp4j.RegistrationParams;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
@@ -43,12 +38,8 @@ import org.eclipse.lsp4j.services.LanguageClientAware;
 import org.eclipse.lsp4j.services.LanguageServer;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
-import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.LspLog;
-import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
-import software.amazon.smithy.lsp.ext.SmithyBuildLoader;
 import software.amazon.smithy.lsp.ext.ValidationException;
-import software.amazon.smithy.utils.ListUtils;
 
 public class SmithyLanguageServer implements LanguageServer, LanguageClientAware, SmithyProtocolExtensions {
 
