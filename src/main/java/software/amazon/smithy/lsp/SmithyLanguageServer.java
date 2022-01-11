@@ -20,7 +20,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -39,10 +38,7 @@ import org.eclipse.lsp4j.services.LanguageClientAware;
 import org.eclipse.lsp4j.services.LanguageServer;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
-import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.LspLog;
-import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
-import software.amazon.smithy.lsp.ext.SmithyBuildLoader;
 import software.amazon.smithy.lsp.ext.ValidationException;
 
 public class SmithyLanguageServer implements LanguageServer, LanguageClientAware, SmithyProtocolExtensions {
@@ -50,7 +46,6 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
   private Optional<LanguageClient> client = Optional.empty();
 
   private File workspaceRoot;
-  // private File tempFolder = ;
 
   private Optional<SmithyTextDocumentService> tds = Optional.empty();
 
@@ -60,24 +55,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
   }
 
   private void loadSmithyBuild(File root) throws ValidationException, FileNotFoundException {
-    SmithyBuildExtensions.Builder result = SmithyBuildExtensions.builder();
-
-    for (String file : Constants.BUILD_FILES) {
-      File smithyBuild = Paths.get(root.getAbsolutePath(), file).toFile();
-      if (smithyBuild.isFile()) {
-        try {
-          SmithyBuildExtensions local = SmithyBuildLoader.load(smithyBuild.toPath());
-          result.merge(local);
-          LspLog.println("Loaded build extensions " + local + " from " + smithyBuild.getAbsolutePath());
-        } catch (Exception e) {
-          LspLog.println("Failed to load config from" + smithyBuild + ": " + e.toString());
-        }
-      }
-    }
-
-    if (this.tds.isPresent()) {
-      this.tds.ifPresent(tds -> tds.createProject(result.build(), root));
-    }
+    this.tds.ifPresent(tds -> tds.createProject(root));
   }
 
   @Override
@@ -125,8 +103,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
   @Override
   public WorkspaceService getWorkspaceService() {
-    // TODO Auto-generated method stub
-    return null;
+    return new SmithyWorkspaceService(this.tds);
   }
 
   @Override

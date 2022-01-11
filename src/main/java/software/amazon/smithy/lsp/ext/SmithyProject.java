@@ -154,6 +154,10 @@ public final class SmithyProject {
         return SmithyInterface.readModel(discoveredFiles, externalJars);
     }
 
+    public File getRoot() {
+        return this.root;
+    }
+
     private static Map<String, List<Location>> collectLocations(Model model) {
         Map<String, List<Location>> locations = new HashMap<>();
         model.shapes().forEach(shape -> {
@@ -215,6 +219,7 @@ public final class SmithyProject {
     }
 
     private static List<File> downloadExternalDependencies(SmithyBuildExtensions ext) {
+        LspLog.println("Downloading external dependencies for " + ext);
         try {
             return DependencyDownloader.create(ext).download();
         } catch (Exception e) {

@@ -15,20 +15,49 @@
 
 package software.amazon.smithy.lsp;
 
+import java.io.File;
+import java.net.URI;
+import java.util.Optional;
 import org.eclipse.lsp4j.DidChangeConfigurationParams;
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
 import org.eclipse.lsp4j.services.WorkspaceService;
+import software.amazon.smithy.lsp.ext.Constants;
+import software.amazon.smithy.lsp.ext.LspLog;
 
 public class SmithyWorkspaceService implements WorkspaceService {
-  @Override
-  public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
-    // TODO Auto-generated method stub
+    private Optional<SmithyTextDocumentService> tds = Optional.empty();
 
-  }
+    public SmithyWorkspaceService(Optional<SmithyTextDocumentService> tds) {
+        this.tds = tds;
+    }
 
-  @Override
-  public void didChangeConfiguration(DidChangeConfigurationParams params) {
-    // TODO Auto-generated method stub
+    @Override
+    public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
 
-  }
+        boolean buildFilesChanged = params.getChanges().stream().anyMatch(change -> {
+            String filename = fileFromUri(change.getUri()).getName();
+            return Constants.BUILD_FILES.contains(filename);
+        });
+
+        if (buildFilesChanged) {
+            LspLog.println("Build files changed, rebuilding the project");
+            this.tds.ifPresent(tds -> {
+                tds.getRoot().ifPresent(root -> {
+                    tds.createProject(root);
+                });
+            });
+        }
+
+    }
+
+    @Override
+    public void didChangeConfiguration(DidChangeConfigurationParams params) {
+        // TODO Auto-generated method stub
+
+    }
+
+    private File fileFromUri(String uri) {
+        return new File(URI.create(uri));
+    }
+
 }
