@@ -219,6 +219,7 @@ public final class SmithyProject {
     }
 
     private static List<File> downloadExternalDependencies(SmithyBuildExtensions ext) {
+        LspLog.println("Downloading external dependencies for " + ext);
         try {
             return DependencyDownloader.create(ext).download();
         } catch (Exception e) {

@@ -19,10 +19,14 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Paths;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+
+import coursierapi.shaded.coursier.core.Versions.DateTime;
 import software.amazon.smithy.utils.ListUtils;
 
 /**
@@ -50,6 +54,7 @@ public final class LspLog {
 
     /**
      * Produces a snapshot of the current log buffer.
+     * 
      * @return a copy of the messages currently in the buffer
      */
     public static List<Object> getBuffer() {
@@ -77,18 +82,23 @@ public final class LspLog {
 
     }
 
+    private static String currentTime() {
+        return LocalTime.now().withNano(0).format(DateTimeFormatter.ISO_LOCAL_TIME);
+    }
+
     /**
      * Write a line to the log.
      *
      * @param message object to write, will be converted to String
      */
     public static void println(Object message) {
+        String timestamped = "[" + currentTime() + "] " + message.toString();
         try {
             if (fw != null) {
-                fw.append(message.toString() + "\n").flush();
+                fw.append(timestamped + "\n").flush();
             } else {
                 synchronized (buffer) {
-                    buffer.ifPresent(buf -> buf.add(message));
+                    buffer.ifPresent(buf -> buf.add(timestamped));
                 }
             }
         } catch (Exception e) {
