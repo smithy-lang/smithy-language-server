@@ -107,6 +107,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
         Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, root);
         if (loaded.isRight()) {
             this.project = loaded.getRight();
+            clearAllDiagnostics();
             sendInfo("Project loaded with " + this.project.getExternalJars().size() + " external jars and "
                     + this.project.getSmithyFiles().size() + " discovered smithy files");
         } else {
@@ -361,6 +362,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
         return diagnostics;
 
+    }
+
+    public void clearAllDiagnostics() {
+        report(Either.forRight(createPerFileDiagnostics(this.project.getModel().getValidationEvents(),
+                this.project.getSmithyFiles())));
     }
 
     /**
