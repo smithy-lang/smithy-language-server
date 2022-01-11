@@ -48,20 +48,27 @@ import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
+import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
+import org.eclipse.lsp4j.util.Positions;
+
 import software.amazon.smithy.lsp.ext.Constants;
+import software.amazon.smithy.lsp.ext.DocumentPreamble;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
 import software.amazon.smithy.lsp.ext.SmithyBuildLoader;
+import software.amazon.smithy.lsp.ext.SmithyCompletionItem;
 import software.amazon.smithy.lsp.ext.SmithyProject;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
+import software.amazon.smithy.utils.ListUtils;
 
 public class SmithyTextDocumentService implements TextDocumentService {
 
@@ -157,9 +164,26 @@ public class SmithyTextDocumentService implements TextDocumentService {
         LspLog.println("Asking to complete " + position + " in class " + position.getTextDocument().getClass());
 
         try {
-            String found = findToken(position.getTextDocument().getUri(), position.getPosition());
+            String documentUri = position.getTextDocument().getUri();
+            String found = findToken(documentUri, position.getPosition());
+            DocumentPreamble preamble = documentPreamble(textBufferContents(documentUri));
+            LspLog.println("Import statements will be inserted at: " + preamble);
+            LspLog.println("Inserting a new line as text edit: " + insertLine("hello world", preamble));
             LspLog.println("Token for completion: " + found + " in class " + position.getTextDocument().getClass());
-            return Utils.completableFuture(Either.forLeft(project.getCompletions(found)));
+
+            List<CompletionItem> items = project.getCompletions1(found).stream().map(sci -> {
+                CompletionItem result = sci.getCompletionItem();
+                if (!sci.getImport().isEmpty()) {
+                    TextEdit te = insertLine("use " + sci.getImport().get(), preamble);
+                    result.setAdditionalTextEdits(ListUtils.of(te));
+                }
+
+                return result;
+            }).collect(Collectors.toList());
+
+            LspLog.println("Completion items: " + items);
+
+            return Utils.completableFuture(Either.forLeft(items));
         } catch (Exception e) {
             LspLog.println(
                     "Failed to identify token for completion in " + position.getTextDocument().getUri() + ": " + e);
@@ -182,7 +206,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
         return new File(this.temporaryFolder, hashed + Constants.SMITHY_EXTENSION);
     }
 
-    private String findToken(String path, Position p) throws IOException {
+    private List<String> textBufferContents(String path) throws IOException {
         List<String> contents;
         if (Utils.isSmithyJarFile(path)) {
             contents = Utils.jarFileContents(path);
@@ -196,6 +220,68 @@ public class SmithyTextDocumentService implements TextDocumentService {
             }
 
         }
+
+        return contents;
+    }
+
+    private Position blankPosition = new Position(-1, 0);
+    private Position documentStart = new Position(0, 0);
+
+    private TextEdit insertLine(String line, DocumentPreamble preamble) {
+        // case 1 - there's no use block at all, so we need to insert the line directly
+        // under namespace
+        if (preamble.getUseBlockRange().getStart() == blankPosition) {
+            // case 1.a - there's no namespace - that means the document is invalid
+            // so we'll just insert the line at the beginning of the document
+            if (preamble.getNamespaceRange().getStart() == blankPosition) {
+                return new TextEdit(new Range(documentStart, documentStart), line + "\n");
+            } else {
+                Position namespaceEnd = preamble.getNamespaceRange().getEnd();
+                return new TextEdit(new Range(namespaceEnd, namespaceEnd), "\n" + line + "\n");
+            }
+        } else {
+            Position useBlockEnd = preamble.getUseBlockRange().getEnd();
+            return new TextEdit(new Range(useBlockEnd, useBlockEnd), "\n" + line + "\n");
+        }
+    }
+
+    private DocumentPreamble documentPreamble(List<String> lines) {
+
+        Range namespace = new Range(blankPosition, blankPosition);
+        Range useBlock = new Range(blankPosition, blankPosition);
+
+        boolean collectUseBlock = true;
+
+        int lineNumber = 0;
+        for (String line : lines) {
+            if (line.trim().startsWith("namespace ")) {
+                if (namespace.getStart() == blankPosition) {
+                    namespace.setStart(new Position(lineNumber, 0));
+                    namespace.setEnd(new Position(lineNumber, line.length() - 1));
+                }
+            } else if (line.trim().startsWith("use ")) {
+                if (useBlock.getStart() == blankPosition) {
+                    useBlock.setStart(new Position(lineNumber, 0));
+                    useBlock.setEnd(new Position(lineNumber, line.length()));
+                } else if (collectUseBlock)
+                    useBlock.setEnd(new Position(lineNumber, line.length()));
+            } else if (line.isBlank()) {
+                if (collectUseBlock)
+                    useBlock.setEnd(new Position(lineNumber, line.length()));
+            } else if (line.trim().startsWith("//")) {
+
+            } else {
+                collectUseBlock = false;
+            }
+
+            lineNumber++;
+        }
+
+        return new DocumentPreamble(namespace, useBlock);
+    }
+
+    private String findToken(String path, Position p) throws IOException {
+        List<String> contents = textBufferContents(path);
 
         String line = contents.get(p.getLine());
         int col = p.getCharacter();
@@ -254,7 +340,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
         File original = fileUri(params.getTextDocument());
         File tempFile = null;
 
-        LspLog.println("Change params: " + params);
+        // LspLog.println("Change params: " + params);
 
         try {
             if (params.getContentChanges().size() > 0) {

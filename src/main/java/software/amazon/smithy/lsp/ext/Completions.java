@@ -28,6 +28,10 @@ public final class Completions {
     private static List<CompletionItem> keywordCompletions = Constants.KEYWORDS.stream()
             .map(kw -> createCompletion(kw, CompletionItemKind.Keyword)).collect(Collectors.toList());
 
+    private static List<SmithyCompletionItem> keywordCompletions1 = Constants.KEYWORDS.stream()
+            .map(kw -> new SmithyCompletionItem(createCompletion(kw, CompletionItemKind.Keyword)))
+            .collect(Collectors.toList());
+
     private Completions() {
     }
 
@@ -55,6 +59,30 @@ public final class Completions {
             keywordCompletions.forEach(kw -> {
                 if (kw.getLabel().toLowerCase().startsWith(lcase) && !comps.containsKey(kw.getLabel())) {
                     comps.put(kw.getLabel(), kw);
+                }
+            });
+        }
+        return ListUtils.copyOf(comps.values());
+    }
+
+    public static List<SmithyCompletionItem> find1(Model model, String token) {
+        Map<String, SmithyCompletionItem> comps = new HashMap();
+        String lcase = token.toLowerCase();
+
+        if (!token.trim().isEmpty()) {
+            model.getShapeIds().forEach(shapeId -> {
+                if (shapeId.getName().toLowerCase().startsWith(lcase) && !comps.containsKey(shapeId.getName())) {
+                    CompletionItem completionItem = createCompletion(shapeId.getName(), CompletionItemKind.Class);
+
+                    comps.put(shapeId.getName(),
+                            new SmithyCompletionItem(completionItem, shapeId.getNamespace() + "#" + shapeId.getName()));
+                }
+            });
+
+            keywordCompletions1.forEach(kw -> {
+                if (kw.getCompletionItem().getLabel().toLowerCase().startsWith(lcase)
+                        && !comps.containsKey(kw.getCompletionItem().getLabel())) {
+                    comps.put(kw.getCompletionItem().getLabel(), kw);
                 }
             });
         }
