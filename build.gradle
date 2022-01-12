@@ -48,12 +48,6 @@ allprojects {
     version = "0.0.0-SNAPSHOT"
 }
 
-repositories {
-    // Use jcenter for resolving dependencies.
-    // You can declare any Maven/Ivy/file repository here.
-    jcenter()
-}
-
 publishing {
     publications {
         mavenJava(MavenPublication) {
