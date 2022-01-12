@@ -1,13 +1,26 @@
+/*
+ * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+
 package software.amazon.smithy.lsp.ext;
 
 import java.util.Optional;
 import org.eclipse.lsp4j.CompletionItem;
-import org.eclipse.xtext.xbase.lib.Pure;
-
 import software.amazon.smithy.utils.Pair;
 
 public class SmithyCompletionItem {
-  private CompletionItem ci;
+  private final CompletionItem ci;
   private Optional<Pair<String, String>> smithyImport = Optional.empty();
 
   public SmithyCompletionItem(CompletionItem ci) {
@@ -33,31 +46,5 @@ public class SmithyCompletionItem {
 
   public Optional<String> getImportNamespace() {
     return smithyImport.map(f -> f.left);
-  }
-
-  @Override
-  @Pure
-  public boolean equals(final Object obj) {
-    if (this == obj)
-      return true;
-    if (obj == null)
-      return false;
-    if (getClass() != obj.getClass())
-      return false;
-    SmithyCompletionItem other = (SmithyCompletionItem) obj;
-    if (other.ci != this.ci)
-      return false;
-    if (other.smithyImport != this.smithyImport)
-      return false;
-    return true;
-  }
-
-  @Override
-  @Pure
-  public int hashCode() {
-    final int prime = 31;
-    int result = 1;
-    result = prime * result + ((this.ci == null) ? 0 : this.ci.hashCode());
-    return prime * result + ((this.smithyImport == null) ? 0 : this.smithyImport.hashCode());
   }
 }
