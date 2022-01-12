@@ -53,7 +53,10 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
+import software.amazon.smithy.lsp.ext.Completions;
 import software.amazon.smithy.lsp.ext.Constants;
+import software.amazon.smithy.lsp.ext.Document;
+import software.amazon.smithy.lsp.ext.DocumentPreamble;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
 import software.amazon.smithy.lsp.ext.SmithyBuildLoader;
@@ -157,9 +160,16 @@ public class SmithyTextDocumentService implements TextDocumentService {
         LspLog.println("Asking to complete " + position + " in class " + position.getTextDocument().getClass());
 
         try {
-            String found = findToken(position.getTextDocument().getUri(), position.getPosition());
+            String documentUri = position.getTextDocument().getUri();
+            String found = findToken(documentUri, position.getPosition());
+            DocumentPreamble preamble = Document.detectPreamble(textBufferContents(documentUri));
             LspLog.println("Token for completion: " + found + " in class " + position.getTextDocument().getClass());
-            return Utils.completableFuture(Either.forLeft(project.getCompletions(found)));
+
+            List<CompletionItem> items = Completions.resolveImports(project.getCompletions(found), preamble);
+
+            LspLog.println("Completion items: " + items);
+
+            return Utils.completableFuture(Either.forLeft(items));
         } catch (Exception e) {
             LspLog.println(
                     "Failed to identify token for completion in " + position.getTextDocument().getUri() + ": " + e);
@@ -182,7 +192,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
         return new File(this.temporaryFolder, hashed + Constants.SMITHY_EXTENSION);
     }
 
-    private String findToken(String path, Position p) throws IOException {
+    private List<String> textBufferContents(String path) throws IOException {
         List<String> contents;
         if (Utils.isSmithyJarFile(path)) {
             contents = Utils.jarFileContents(path);
@@ -196,6 +206,12 @@ public class SmithyTextDocumentService implements TextDocumentService {
             }
 
         }
+
+        return contents;
+    }
+
+    private String findToken(String path, Position p) throws IOException {
+        List<String> contents = textBufferContents(path);
 
         String line = contents.get(p.getLine());
         int col = p.getCharacter();
@@ -254,7 +270,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
         File original = fileUri(params.getTextDocument());
         File tempFile = null;
 
-        LspLog.println("Change params: " + params);
+        // LspLog.println("Change params: " + params);
 
         try {
             if (params.getContentChanges().size() > 0) {

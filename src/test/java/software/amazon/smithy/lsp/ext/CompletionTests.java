@@ -65,6 +65,7 @@ public class CompletionTests {
     }
 
     public Set<String> completeNames(SmithyProject proj, String token) {
-        return proj.getCompletions(token).stream().map(ci -> ci.getLabel()).collect(Collectors.toSet());
+        return proj.getCompletions(token).stream().map(ci -> ci.getCompletionItem().getLabel())
+                .collect(Collectors.toSet());
     }
 }

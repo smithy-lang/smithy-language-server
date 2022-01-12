@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
@@ -97,7 +96,7 @@ public final class SmithyProject {
         return this.smithyFiles;
     }
 
-    public List<CompletionItem> getCompletions(String token) {
+    public List<SmithyCompletionItem> getCompletions(String token) {
         return this.model.getResult().map(model -> Completions.find(model, token)).orElse(Collections.emptyList());
     }
 

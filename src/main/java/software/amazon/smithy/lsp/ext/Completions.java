@@ -18,15 +18,18 @@ package software.amazon.smithy.lsp.ext;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionItemKind;
+import org.eclipse.lsp4j.TextEdit;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.utils.ListUtils;
 
 public final class Completions {
-    private static List<CompletionItem> keywordCompletions = Constants.KEYWORDS.stream()
-            .map(kw -> createCompletion(kw, CompletionItemKind.Keyword)).collect(Collectors.toList());
+    private static final List<SmithyCompletionItem> KEYWORD_COMPLETIONS = Constants.KEYWORDS.stream()
+            .map(kw -> new SmithyCompletionItem(createCompletion(kw, CompletionItemKind.Keyword)))
+            .collect(Collectors.toList());
 
     private Completions() {
     }
@@ -40,25 +43,55 @@ public final class Completions {
      * @param token token
      * @return list of completion items
      */
-    public static List<CompletionItem> find(Model model, String token) {
-        Map<String, CompletionItem> comps = new HashMap();
+    public static List<SmithyCompletionItem> find(Model model, String token) {
+        Map<String, SmithyCompletionItem> comps = new HashMap();
         String lcase = token.toLowerCase();
 
         if (!token.trim().isEmpty()) {
             model.getShapeIds().forEach(shapeId -> {
                 if (shapeId.getName().toLowerCase().startsWith(lcase) && !comps.containsKey(shapeId.getName())) {
                     CompletionItem completionItem = createCompletion(shapeId.getName(), CompletionItemKind.Class);
-                    comps.put(shapeId.getName(), completionItem);
+
+                    comps.put(shapeId.getName(),
+                            new SmithyCompletionItem(completionItem, shapeId.getNamespace(), shapeId.getName()));
                 }
             });
 
-            keywordCompletions.forEach(kw -> {
-                if (kw.getLabel().toLowerCase().startsWith(lcase) && !comps.containsKey(kw.getLabel())) {
-                    comps.put(kw.getLabel(), kw);
+            KEYWORD_COMPLETIONS.forEach(kw -> {
+                if (kw.getCompletionItem().getLabel().toLowerCase().startsWith(lcase)
+                        && !comps.containsKey(kw.getCompletionItem().getLabel())) {
+                    comps.put(kw.getCompletionItem().getLabel(), kw);
                 }
             });
         }
         return ListUtils.copyOf(comps.values());
+    }
+
+    /**
+     * For a given list of completion items and a live document preamble, create a list
+     * of completion items with necessary text edits to support auto-imports.
+     *
+     * @param items    list of model-specific completion items
+     * @param preamble live document preamble
+     * @return list of completion items (optionally with text edits)
+     */
+    public static List<CompletionItem> resolveImports(List<SmithyCompletionItem> items, DocumentPreamble preamble) {
+        return items.stream().map(sci -> {
+            CompletionItem result = sci.getCompletionItem();
+            Optional<String> qualifiedImport = sci.getQualifiedImport();
+            Optional<String> importNamespace = sci.getImportNamespace();
+
+            boolean shouldImport = qualifiedImport.isPresent()
+                    && !preamble.hasImport(qualifiedImport.get())
+                    && !importNamespace.equals(Optional.of(Constants.SMITHY_PRELUDE_NAMESPACE));
+
+            if (shouldImport) {
+                TextEdit te = Document.insertPreambleLine("use " + qualifiedImport.get(), preamble);
+                result.setAdditionalTextEdits(ListUtils.of(te));
+            }
+
+            return result;
+        }).collect(Collectors.toList());
     }
 
     private static CompletionItem createCompletion(String s, CompletionItemKind kind) {
