@@ -4,25 +4,35 @@ import java.util.Optional;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.xtext.xbase.lib.Pure;
 
+import software.amazon.smithy.utils.Pair;
+
 public class SmithyCompletionItem {
   private CompletionItem ci;
-  private Optional<String> smithyImport = Optional.empty();
+  private Optional<Pair<String, String>> smithyImport = Optional.empty();
 
   public SmithyCompletionItem(CompletionItem ci) {
     this.ci = ci;
   }
 
-  public SmithyCompletionItem(CompletionItem ci, String smithyImport) {
+  public SmithyCompletionItem(CompletionItem ci, String namespace, String id) {
     this.ci = ci;
-    this.smithyImport = Optional.of(smithyImport);
+    this.smithyImport = Optional.of(Pair.of(namespace, id));
   }
 
-  public Optional<String> getImport() {
+  public Optional<Pair<String, String>> getImport() {
     return smithyImport;
   }
 
   public CompletionItem getCompletionItem() {
     return ci;
+  }
+
+  public Optional<String> getQualifiedImport() {
+    return smithyImport.map(pair -> pair.left + "#" + pair.right);
+  }
+
+  public Optional<String> getImportNamespace() {
+    return smithyImport.map(f -> f.left);
   }
 
   @Override

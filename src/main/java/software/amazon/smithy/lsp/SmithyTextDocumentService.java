@@ -27,9 +27,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -168,13 +170,15 @@ public class SmithyTextDocumentService implements TextDocumentService {
             String found = findToken(documentUri, position.getPosition());
             DocumentPreamble preamble = documentPreamble(textBufferContents(documentUri));
             LspLog.println("Import statements will be inserted at: " + preamble);
-            LspLog.println("Inserting a new line as text edit: " + insertLine("hello world", preamble));
             LspLog.println("Token for completion: " + found + " in class " + position.getTextDocument().getClass());
 
-            List<CompletionItem> items = project.getCompletions1(found).stream().map(sci -> {
+            List<CompletionItem> items = project.getCompletions(found).stream().map(sci -> {
                 CompletionItem result = sci.getCompletionItem();
-                if (!sci.getImport().isEmpty()) {
-                    TextEdit te = insertLine("use " + sci.getImport().get(), preamble);
+                Optional<String> qualifiedImport = sci.getQualifiedImport();
+                Optional<String> importNamespace = sci.getImportNamespace();
+                if (!qualifiedImport.isEmpty() && !preamble.hasImport(qualifiedImport.get())
+                        && !importNamespace.equals(Optional.of(Constants.SMITHY_PRELUDE_NAMESPACE))) {
+                    TextEdit te = insertLine("use " + qualifiedImport.get(), preamble);
                     result.setAdditionalTextEdits(ListUtils.of(te));
                 }
 
@@ -228,20 +232,26 @@ public class SmithyTextDocumentService implements TextDocumentService {
     private Position documentStart = new Position(0, 0);
 
     private TextEdit insertLine(String line, DocumentPreamble preamble) {
+        String trailingNewLine;
+        if (!preamble.isBlankSeparated())
+            trailingNewLine = "\n";
+        else
+            trailingNewLine = "";
         // case 1 - there's no use block at all, so we need to insert the line directly
         // under namespace
         if (preamble.getUseBlockRange().getStart() == blankPosition) {
             // case 1.a - there's no namespace - that means the document is invalid
             // so we'll just insert the line at the beginning of the document
             if (preamble.getNamespaceRange().getStart() == blankPosition) {
-                return new TextEdit(new Range(documentStart, documentStart), line + "\n");
+                return new TextEdit(new Range(documentStart, documentStart), line + trailingNewLine);
             } else {
                 Position namespaceEnd = preamble.getNamespaceRange().getEnd();
-                return new TextEdit(new Range(namespaceEnd, namespaceEnd), "\n" + line + "\n");
+                namespaceEnd.setCharacter(namespaceEnd.getCharacter() + 1);
+                return new TextEdit(new Range(namespaceEnd, namespaceEnd), "\n" + line + trailingNewLine);
             }
         } else {
             Position useBlockEnd = preamble.getUseBlockRange().getEnd();
-            return new TextEdit(new Range(useBlockEnd, useBlockEnd), "\n" + line + "\n");
+            return new TextEdit(new Range(useBlockEnd, useBlockEnd), "\n" + line + trailingNewLine);
         }
     }
 
@@ -249,9 +259,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
         Range namespace = new Range(blankPosition, blankPosition);
         Range useBlock = new Range(blankPosition, blankPosition);
+        Set<String> imports = new HashSet();
 
+        // First, we detect the namespace and use block in a very ugly way
         boolean collectUseBlock = true;
-
         int lineNumber = 0;
         for (String line : lines) {
             if (line.trim().startsWith("namespace ")) {
@@ -260,11 +271,15 @@ public class SmithyTextDocumentService implements TextDocumentService {
                     namespace.setEnd(new Position(lineNumber, line.length() - 1));
                 }
             } else if (line.trim().startsWith("use ")) {
+                String i = line.trim().split("use ", 2)[1].trim();
                 if (useBlock.getStart() == blankPosition) {
+                    imports.add(i);
                     useBlock.setStart(new Position(lineNumber, 0));
                     useBlock.setEnd(new Position(lineNumber, line.length()));
-                } else if (collectUseBlock)
+                } else if (collectUseBlock) {
+                    imports.add(i);
                     useBlock.setEnd(new Position(lineNumber, line.length()));
+                }
             } else if (line.isBlank()) {
                 if (collectUseBlock)
                     useBlock.setEnd(new Position(lineNumber, line.length()));
@@ -277,7 +292,25 @@ public class SmithyTextDocumentService implements TextDocumentService {
             lineNumber++;
         }
 
-        return new DocumentPreamble(namespace, useBlock);
+        boolean blankSeparated = false;
+        // Next, we reduce the use block to the last use statement, ignoring newlines
+        // It's important to do so to make sure we don't multiply newlines
+        // unnecessarily.
+        if (useBlock.getStart() != blankPosition) {
+            while (lines.get(useBlock.getEnd().getLine()).isBlank()) {
+                blankSeparated = true;
+                int curLine = useBlock.getEnd().getLine();
+                useBlock.getEnd().setLine(curLine - 1);
+                useBlock.getEnd().setCharacter(lines.get(curLine - 1).length());
+            }
+        } else if (namespace.getStart() != blankPosition) {
+            int namespaceLine = namespace.getStart().getLine();
+            if (namespaceLine < lines.size() - 1) {
+                blankSeparated = lines.get(namespaceLine + 1).isBlank();
+            }
+        }
+
+        return new DocumentPreamble(namespace, useBlock, imports, blankSeparated);
     }
 
     private String findToken(String path, Position p) throws IOException {

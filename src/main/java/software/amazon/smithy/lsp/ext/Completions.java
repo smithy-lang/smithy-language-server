@@ -44,28 +44,7 @@ public final class Completions {
      * @param token token
      * @return list of completion items
      */
-    public static List<CompletionItem> find(Model model, String token) {
-        Map<String, CompletionItem> comps = new HashMap();
-        String lcase = token.toLowerCase();
-
-        if (!token.trim().isEmpty()) {
-            model.getShapeIds().forEach(shapeId -> {
-                if (shapeId.getName().toLowerCase().startsWith(lcase) && !comps.containsKey(shapeId.getName())) {
-                    CompletionItem completionItem = createCompletion(shapeId.getName(), CompletionItemKind.Class);
-                    comps.put(shapeId.getName(), completionItem);
-                }
-            });
-
-            keywordCompletions.forEach(kw -> {
-                if (kw.getLabel().toLowerCase().startsWith(lcase) && !comps.containsKey(kw.getLabel())) {
-                    comps.put(kw.getLabel(), kw);
-                }
-            });
-        }
-        return ListUtils.copyOf(comps.values());
-    }
-
-    public static List<SmithyCompletionItem> find1(Model model, String token) {
+    public static List<SmithyCompletionItem> find(Model model, String token) {
         Map<String, SmithyCompletionItem> comps = new HashMap();
         String lcase = token.toLowerCase();
 
@@ -75,7 +54,7 @@ public final class Completions {
                     CompletionItem completionItem = createCompletion(shapeId.getName(), CompletionItemKind.Class);
 
                     comps.put(shapeId.getName(),
-                            new SmithyCompletionItem(completionItem, shapeId.getNamespace() + "#" + shapeId.getName()));
+                            new SmithyCompletionItem(completionItem, shapeId.getNamespace(), shapeId.getName()));
                 }
             });
 
