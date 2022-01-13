@@ -48,6 +48,11 @@ allprojects {
     version = "0.0.0-SNAPSHOT"
 }
 
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {
