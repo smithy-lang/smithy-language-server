@@ -17,11 +17,6 @@ package software.amazon.smithy.lsp.ext;
 
 import static org.junit.Assert.assertEquals;
 
-import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
