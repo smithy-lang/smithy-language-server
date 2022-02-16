@@ -44,7 +44,7 @@ public final class Completions {
      * @return list of completion items
      */
     public static List<SmithyCompletionItem> find(Model model, String token) {
-        Map<String, SmithyCompletionItem> comps = new HashMap();
+        Map<String, SmithyCompletionItem> comps = new HashMap<>();
         String lcase = token.toLowerCase();
 
         if (!token.trim().isEmpty()) {
