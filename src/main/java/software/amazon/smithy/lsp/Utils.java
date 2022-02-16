@@ -64,6 +64,22 @@ public final class Utils {
     }
 
     /**
+     * @param uri String
+     * @return Returns whether the uri points to a file in jar.
+     */
+    public static boolean isJarFile(String uri) {
+        return uri.startsWith("jar:");
+    }
+
+    /**
+     * @param uri String
+     * @return Remove the jar:file: part and replace it with "smithyjar"
+     */
+    public static String toSmithyJarFile(String uri) {
+        return "smithyjar:" + uri.substring(9);
+    }
+
+    /**
      * @param rawUri String
      * @return Returns whether the uri points to a file in the filesystem (as
      * opposed to a file in a jar).
@@ -111,7 +127,7 @@ public final class Utils {
     }
 
     /**
-     * Extracts just the .jar pat from a URI.
+     * Extracts just the .jar part from a URI.
      *
      * @param rawUri URI of a symbol/file in a jar
      * @return Jar path

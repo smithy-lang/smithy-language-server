@@ -33,6 +33,7 @@ import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.lsp.SmithyInterface;
+import software.amazon.smithy.lsp.Utils;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.shapes.ShapeType;
@@ -161,12 +162,12 @@ public final class SmithyProject {
         Map<String, List<Location>> locations = new HashMap<>();
         model.shapes().forEach(shape -> {
             SourceLocation sourceLocation = shape.getSourceLocation();
-            String uri = sourceLocation.getFilename();
-            if (uri.startsWith("jar:file:")) {
-                uri = "smithyjar:" + uri.substring(9);
-            } else if (!uri.startsWith("file:")) {
-                uri = "file:" + uri;
-            }
+            String fileName = sourceLocation.getFilename();
+            String uri = Utils.isJarFile(fileName) ?
+                Utils.toSmithyJarFile(fileName) :
+                !fileName.startsWith("file:") ? "file:" + fileName :
+                fileName;
+
             Position pos = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
             Location location = new Location(uri, new Range(pos, pos));
 
