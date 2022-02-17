@@ -163,10 +163,10 @@ public final class SmithyProject {
         model.shapes().forEach(shape -> {
             SourceLocation sourceLocation = shape.getSourceLocation();
             String fileName = sourceLocation.getFilename();
-            String uri = Utils.isJarFile(fileName) ?
-                Utils.toSmithyJarFile(fileName) :
-                !fileName.startsWith("file:") ? "file:" + fileName :
-                fileName;
+            String uri = Utils.isJarFile(fileName)
+                ? Utils.toSmithyJarFile(fileName)
+                : !fileName.startsWith("file:") ? "file:" + fileName
+                : fileName;
 
             Position pos = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
             Location location = new Location(uri, new Range(pos, pos));

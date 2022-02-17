@@ -20,6 +20,7 @@ import com.google.common.hash.Hashing;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -37,7 +38,6 @@ import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DefinitionParams;
-import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
@@ -358,29 +358,50 @@ public class SmithyTextDocumentService implements TextDocumentService {
      * @return a list of LSP diagnostics to publish
      */
     public List<PublishDiagnosticsParams> createPerFileDiagnostics(List<ValidationEvent> events, List<File> allFiles) {
-        Map<File, List<ValidationEvent>> byFile = new HashMap<File, List<ValidationEvent>>();
+        // URI is used because conversion toString deals with platform specific path separator
+        Map<URI, List<ValidationEvent>> byUri = new HashMap<URI, List<ValidationEvent>>();
 
         for (ValidationEvent ev : events) {
-            File file = new File(ev.getSourceLocation().getFilename());
-            if (byFile.containsKey(file)) {
-                byFile.get(file).add(ev);
+            URI finalUri;
+            try {
+                // can be a uri in the form of jar:file:/some-path
+                // if we have a jar we go to smithyjar
+                // else we make sure `file:` scheme is used
+                String fileName = ev.getSourceLocation().getFilename();
+                String uri = Utils.isJarFile(fileName)
+                    ? Utils.toSmithyJarFile(fileName)
+                    : !Utils.isFile(fileName) ? "file:" + fileName
+                    : fileName;
+                finalUri = new URI(uri);
+            } catch (URISyntaxException ex) {
+                // can also be something like C:\Some\path in which case creating a URI will fail
+                // so after a file conversion, we call .toURI to produce a standard `file:/C:/Some/path`
+                finalUri = new File(ev.getSourceLocation().getFilename()).toURI();
+            }
+
+            if (byUri.containsKey(finalUri)) {
+                byUri.get(finalUri).add(ev);
             } else {
                 List<ValidationEvent> l = new ArrayList<ValidationEvent>();
                 l.add(ev);
-                byFile.put(file, l);
+                byUri.put(finalUri, l);
             }
         }
 
         allFiles.forEach(f -> {
-            if (!byFile.containsKey(f)) {
-                byFile.put(f, Collections.emptyList());
+            if (!byUri.containsKey(f.toURI())) {
+                byUri.put(f.toURI(), Collections.emptyList());
             }
         });
 
         List<PublishDiagnosticsParams> diagnostics = new ArrayList<PublishDiagnosticsParams>();
 
-        byFile.forEach((key, value) -> diagnostics.add(createDiagnostics(key.toURI().toString(),
-                value.stream().map(ProtocolAdapter::toDiagnostic).collect(Collectors.toList()))));
+        byUri.forEach((key, value) -> diagnostics.add(
+            new PublishDiagnosticsParams(
+                key.toString(),
+                value.stream().map(ProtocolAdapter::toDiagnostic).collect(Collectors.toList())
+            )
+        ));
 
         return diagnostics;
 
@@ -468,13 +489,6 @@ public class SmithyTextDocumentService implements TextDocumentService {
         this.client.ifPresent(client -> {
             client.showMessage(new MessageParams(MessageType.Error, msg));
         });
-    }
-
-    private PublishDiagnosticsParams createDiagnostics(String uri, final List<Diagnostic> diagnostics) {
-        if (!uri.startsWith("file:")) {
-            uri = "file:" + uri;
-        }
-        return new PublishDiagnosticsParams(uri, diagnostics);
     }
 
 }
