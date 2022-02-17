@@ -17,6 +17,7 @@ package software.amazon.smithy.lsp.ext;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
@@ -45,9 +46,12 @@ public final class Document {
         // First, we detect the namespace and use block in a very ugly way
         boolean collectUseBlock = true;
         int lineNumber = 0;
+        Optional<String> currentNamespace = Optional.empty();
         for (String line : lines) {
-            if (line.trim().startsWith("namespace ")) {
+            final String namespaceAnchor = "namespace ";
+            if (line.trim().startsWith(namespaceAnchor)) {
                 if (namespace.getStart() == blankPosition) {
+                    currentNamespace = Optional.of(line.trim().substring(namespaceAnchor.length()));
                     namespace.setStart(new Position(lineNumber, 0));
                     namespace.setEnd(new Position(lineNumber, line.length() - 1));
                 }
@@ -92,7 +96,7 @@ public final class Document {
             }
         }
 
-        return new DocumentPreamble(namespace, useBlock, imports, blankSeparated);
+        return new DocumentPreamble(currentNamespace, namespace, useBlock, imports, blankSeparated);
     }
 
     /**
