@@ -18,7 +18,6 @@ package software.amazon.smithy.lsp.ext;
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -161,9 +160,9 @@ public class SmithyTextDocumentServiceTest {
     }
 
     private class StubClient implements LanguageClient {
-        public List<PublishDiagnosticsParams> diagnostics = new ArrayList();
-        public List<MessageParams> shown = new ArrayList();
-        public List<MessageParams> logged = new ArrayList();
+        public List<PublishDiagnosticsParams> diagnostics = new ArrayList<>();
+        public List<MessageParams> shown = new ArrayList<>();
+        public List<MessageParams> logged = new ArrayList<>();
 
         public StubClient() {
         }

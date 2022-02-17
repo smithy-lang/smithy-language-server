@@ -40,7 +40,7 @@ public final class Document {
 
         Range namespace = new Range(blankPosition, blankPosition);
         Range useBlock = new Range(blankPosition, blankPosition);
-        Set<String> imports = new HashSet();
+        Set<String> imports = new HashSet<>();
 
         // First, we detect the namespace and use block in a very ugly way
         boolean collectUseBlock = true;
