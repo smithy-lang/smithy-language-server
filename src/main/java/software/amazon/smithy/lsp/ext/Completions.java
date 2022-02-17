@@ -80,15 +80,19 @@ public final class Completions {
             CompletionItem result = sci.getCompletionItem();
             Optional<String> qualifiedImport = sci.getQualifiedImport();
             Optional<String> importNamespace = sci.getImportNamespace();
+            Optional<String> currentNamespace = preamble.getCurrentNamespace();
 
-            boolean shouldImport = qualifiedImport.isPresent()
-                    && !preamble.hasImport(qualifiedImport.get())
-                    && !importNamespace.equals(Optional.of(Constants.SMITHY_PRELUDE_NAMESPACE));
 
-            if (shouldImport) {
-                TextEdit te = Document.insertPreambleLine("use " + qualifiedImport.get(), preamble);
-                result.setAdditionalTextEdits(ListUtils.of(te));
-            }
+            qualifiedImport.ifPresent(qi -> {
+                boolean matchesCurrent = importNamespace.equals(currentNamespace);
+                boolean matchesPrelude = importNamespace.equals(Optional.of(Constants.SMITHY_PRELUDE_NAMESPACE));
+                boolean shouldImport = !preamble.hasImport(qi) && !matchesPrelude && !matchesCurrent;
+
+                if (shouldImport) {
+                    TextEdit te = Document.insertPreambleLine("use " + qualifiedImport.get(), preamble);
+                    result.setAdditionalTextEdits(ListUtils.of(te));
+                }
+            });
 
             return result;
         }).collect(Collectors.toList());
