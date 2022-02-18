@@ -2,7 +2,9 @@ package software.amazon.smithy.lsp.ext;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.nio.charset.Charset;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -63,6 +65,10 @@ public class Harness implements AutoCloseable {
 
   public File file(String path) throws Exception {
     return Paths.get(root.getAbsolutePath(), path).toFile();
+  }
+
+  public List<String> readFile(File file) throws Exception {
+    return Files.readLines(file, Charset.forName("UTF-8"));
   }
 
   @Override

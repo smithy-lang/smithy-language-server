@@ -16,17 +16,45 @@
 package software.amazon.smithy.lsp.ext;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.eclipse.lsp4j.CompletionItem;
 import org.junit.Test;
 
 import software.amazon.smithy.utils.MapUtils;
 import software.amazon.smithy.utils.SetUtils;
 
 public class CompletionTests {
+
+    @Test
+    public void resolveCurrentNamespace() throws Exception {
+        String barNamespace = "namespace bar";
+
+        String barContent = barNamespace + "\nstructure Hello{}\ninteger MyId2";
+        String testContent = "namespace test\n@trait\nstructure Foo {}";
+        Map<String, String> files = MapUtils.ofEntries(
+            MapUtils.entry("bar/def1.smithy", barContent),
+            MapUtils.entry("test/def2.smithy", testContent)
+        );
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+            SmithyProject proj = hs.getProject();
+
+            DocumentPreamble testPreamble = Document.detectPreamble(hs.readFile(hs.file("test/def2.smithy")));
+            List<CompletionItem> itemsWithEdit = Completions.resolveImports(proj.getCompletions("Hello"), testPreamble);
+            assertEquals("\nuse bar#Hello\n", itemsWithEdit.get(0).getAdditionalTextEdits().get(0).getNewText());
+
+            DocumentPreamble barPreamble = Document.detectPreamble(hs.readFile(hs.file("bar/def1.smithy")));
+            List<CompletionItem> itemsWithEdit2 = Completions.resolveImports(proj.getCompletions("Hello"), barPreamble);
+            assertEquals(null, itemsWithEdit2.get(0).getAdditionalTextEdits());
+        }
+    }
 
     @Test
     public void multiFile() throws Exception {
