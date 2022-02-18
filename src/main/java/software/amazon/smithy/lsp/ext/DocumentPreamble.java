@@ -15,10 +15,12 @@
 
 package software.amazon.smithy.lsp.ext;
 
+import java.util.Optional;
 import java.util.Set;
 import org.eclipse.lsp4j.Range;
 
 public final class DocumentPreamble {
+    private final Optional<String> currentNamespace;
     private final Range namespace;
     private final Range useBlock;
     private final Set<String> imports;
@@ -29,12 +31,18 @@ public final class DocumentPreamble {
      * This information is required to correctly implement features such as auto-import of definitions
      * on completions.
      *
+     * @param currentNamespace namespace value in the document
      * @param namespace      position of namespace declaration
      * @param useBlock       start and end of the use statements block
      * @param imports        set of imported (fully qualified) identifiers
      * @param blankSeparated whether document preamble is separated from other definitions by newline(s)
      */
-    public DocumentPreamble(Range namespace, Range useBlock, Set<String> imports, boolean blankSeparated) {
+    public DocumentPreamble(
+        Optional<String> currentNamespace,
+        Range namespace, Range useBlock, Set<String> imports,
+        boolean blankSeparated
+    ) {
+        this.currentNamespace = currentNamespace;
         this.namespace = namespace;
         this.useBlock = useBlock;
         this.imports = imports;
@@ -55,6 +63,10 @@ public final class DocumentPreamble {
 
     public boolean isBlankSeparated() {
         return this.blankSeparated;
+    }
+
+    public Optional<String> getCurrentNamespace() {
+        return this.currentNamespace;
     }
 
     @Override
