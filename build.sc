@@ -15,6 +15,15 @@ object lsp extends MavenModule with PublishModule {
 
   def publishVersion = T { gitVersion() }
 
+  def javacOptions = T {
+    super.javacOptions() ++ Seq(
+      "-source",
+      "1.8",
+      "-target",
+      "1.8"
+    )
+  }
+
   override def artifactName = s"smithy-language-server"
 
   def pomSettings = PomSettings(
