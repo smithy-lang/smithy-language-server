@@ -89,7 +89,10 @@ java {
 }
 
 jar {
-    from (configurations.compile.collect { entry -> zipTree(entry) }) {
+    from (configurations.compileClasspath.collect { entry -> zipTree(entry) }) {
+        exclude "about.html"
+        exclude "META-INF/LICENSE"
+        exclude "META-INF/NOTICE"
         exclude "META-INF/MANIFEST.MF"
         exclude "META-INF/*.SF"
         exclude "META-INF/*.DSA"
