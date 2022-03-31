@@ -39,7 +39,9 @@ public final class ProtocolAdapter {
 
     Range range = new Range(new Position(line, 0), new Position(line, col));
 
-    return new Diagnostic(range, event.getMessage(), severity, "Smithy LSP");
+    final String message = event.getId() + ": " + event.getMessage();
+
+    return new Diagnostic(range, message, severity, "Smithy LSP");
   }
 
   /**
