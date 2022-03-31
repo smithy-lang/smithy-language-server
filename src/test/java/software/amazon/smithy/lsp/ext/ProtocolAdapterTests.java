@@ -31,6 +31,6 @@ public class ProtocolAdapterTests {
 			.severity(WARNING)
 			.build();
 		final Diagnostic actual = ProtocolAdapter.toDiagnostic(vEvent);
-		assertEquals("Ooops - should-show-up", actual.getMessage());
+		assertEquals("should-show-up: Ooops", actual.getMessage());
 	}
 }
