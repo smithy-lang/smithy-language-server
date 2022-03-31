@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
 package software.amazon.smithy.lsp;
 
 import org.eclipse.lsp4j.Diagnostic;
-import static software.amazon.smithy.model.validation.Severity.WARNING;
+import org.junit.Test;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
 import static org.junit.Assert.assertEquals;
-import org.junit.Test;
+import static software.amazon.smithy.model.validation.Severity.WARNING;
 
 public class ProtocolAdapterTests {
 	@Test

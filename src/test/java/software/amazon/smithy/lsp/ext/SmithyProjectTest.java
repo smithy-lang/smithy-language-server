@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -15,7 +15,9 @@
 
 package software.amazon.smithy.lsp.ext;
 
-import static org.junit.Assert.assertEquals;
+import org.junit.Test;
+import software.amazon.smithy.utils.ListUtils;
+import software.amazon.smithy.utils.MapUtils;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -25,10 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.junit.Test;
-
-import software.amazon.smithy.utils.ListUtils;
-import software.amazon.smithy.utils.MapUtils;
+import static org.junit.Assert.assertEquals;
 
 public class SmithyProjectTest {
 
