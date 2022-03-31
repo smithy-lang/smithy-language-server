@@ -52,13 +52,11 @@ public final class SmithyInterface {
 
       if (urlArray.length > 0) {
         // Loading the model just from upstream dependencies, in isolation, and adding
-        // all its
-        // shapes to the builder.
+        // all its shapes to the builder.
         //
         // Contrary to model assemblers, model builders do not complain about the
         // duplication of shapes. Shapes will simply overwrite each other in a "last
-        // write wins"
-        // kind of way.
+        // write wins" kind of way.
 
         URLClassLoader urlClassLoader = new URLClassLoader(urlArray);
         Model upstreamModel = Model.assembler().discoverModels(urlClassLoader).assemble().unwrap();
