@@ -25,6 +25,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 
 public class Harness implements AutoCloseable {
   private File root;

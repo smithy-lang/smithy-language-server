@@ -17,6 +17,7 @@ package software.amazon.smithy.lsp.ext;
 
 import org.eclipse.lsp4j.CompletionItem;
 import org.junit.Test;
+import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.utils.MapUtils;
 import software.amazon.smithy.utils.SetUtils;
 
