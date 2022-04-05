@@ -15,6 +15,17 @@
 
 package software.amazon.smithy.lsp.ext;
 
+import static org.junit.Assert.assertEquals;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
@@ -30,21 +41,10 @@ import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.junit.Test;
 import software.amazon.smithy.lsp.SmithyTextDocumentService;
+import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.MapUtils;
 import software.amazon.smithy.utils.SetUtils;
-
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
-import static org.junit.Assert.assertEquals;
 
 public class SmithyTextDocumentServiceTest {
 

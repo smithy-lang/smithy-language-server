@@ -16,6 +16,7 @@
 package software.amazon.smithy.lsp.ext;
 
 import org.junit.Test;
+import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.MapUtils;
 
