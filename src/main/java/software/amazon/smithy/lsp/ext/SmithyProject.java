@@ -17,12 +17,14 @@ package software.amazon.smithy.lsp.ext;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,9 +37,12 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.lsp.SmithyInterface;
 import software.amazon.smithy.lsp.Utils;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
+import software.amazon.smithy.model.FromSourceLocation;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
+import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeType;
+import software.amazon.smithy.model.traits.Trait;
 import software.amazon.smithy.model.validation.ValidatedResult;
 
 public final class SmithyProject {
@@ -45,7 +50,7 @@ public final class SmithyProject {
     private final List<File> smithyFiles;
     private final List<File> externalJars;
     private Map<String, List<Location>> locations = Collections.emptyMap();
-    private ValidatedResult<Model> model;
+    private final ValidatedResult<Model> model;
     private final File root;
 
     private SmithyProject(List<Path> imports, List<File> smithyFiles, List<File> externalJars, File root,
@@ -55,9 +60,7 @@ public final class SmithyProject {
         this.model = model;
         this.smithyFiles = smithyFiles;
         this.externalJars = externalJars;
-        model.getResult().ifPresent(m -> {
-            this.locations = collectLocations(m);
-        });
+        model.getResult().ifPresent(m -> this.locations = collectLocations(m));
     }
 
     /**
@@ -71,7 +74,7 @@ public final class SmithyProject {
      * @return either an error, or a loaded project
      */
     public Either<Exception, SmithyProject> recompile(File changed, File exclude) {
-        List<File> newFiles = new ArrayList<File>();
+        List<File> newFiles = new ArrayList<>();
 
         for (File existing : onlyExistingFiles(this.smithyFiles)) {
             if (exclude != null && !existing.equals(exclude)) {
@@ -104,10 +107,6 @@ public final class SmithyProject {
 
     public Map<String, List<Location>> getLocations() {
         return this.locations;
-    }
-
-    public Either<Exception, SmithyProject> reload(SmithyBuildExtensions config) {
-        return load(config, this.root);
     }
 
     /**
@@ -145,7 +144,7 @@ public final class SmithyProject {
         if (model.isLeft()) {
             return Either.forLeft(model.getLeft());
         } else {
-            model.getRight().getValidationEvents().forEach(event -> LspLog.println(event));
+            model.getRight().getValidationEvents().forEach(LspLog::println);
             return Either.forRight(new SmithyProject(imports, smithyFiles, externalJars, root, model.getRight()));
         }
     }
@@ -161,33 +160,95 @@ public final class SmithyProject {
 
     private static Map<String, List<Location>> collectLocations(Model model) {
         Map<String, List<Location>> locations = new HashMap<>();
-        model.shapes().forEach(shape -> {
-            SourceLocation sourceLocation = shape.getSourceLocation();
-            String fileName = sourceLocation.getFilename();
-            String uri = Utils.isJarFile(fileName)
+        List<String> modelFiles = model.shapes()
+                .map(shape -> shape.getSourceLocation().getFilename())
+                .distinct()
+                .collect(Collectors.toList());
+        for (String modelFile : modelFiles) {
+            Path modelPath = Paths.get(modelFile);
+            List<String> lines = getFileLines(modelPath);
+            LspLog.println(lines);
+            int endMarker = 0;
+            try {
+                endMarker = (int) Files.lines(modelPath).count();
+            } catch (IOException e) {
+                LspLog.println("Could not read model file length");
+            }
+
+            // Get shapes reverse-sorted by source location to work from bottom of file to top.
+            List<Shape> shapes = model.shapes()
+                    .filter(shape -> shape.getSourceLocation().getFilename().equals(modelFile))
+                    .sorted(new SourceLocationSorter().reversed())
+                    .collect(Collectors.toList());
+
+
+            for (Shape shape : shapes) {
+                SourceLocation sourceLocation = shape.getSourceLocation();
+                Position startPosition = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
+                Position endPosition;
+                if (endMarker < sourceLocation.getLine()) {
+                    endPosition = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
+                } else {
+                    endPosition = new Position(endMarker, 0);
+                }
+
+                // If a shape is not a member, move the end marker for setting the next shape location.
+                if (shape.getType() != ShapeType.MEMBER) {
+                    endMarker = startPosition.getLine();
+                    List<Trait> traits = new ArrayList<>(shape.getAllTraits().values());
+                    // If the shape has traits, advance the end marker again.
+                    if (!traits.isEmpty()) {
+                        traits.sort(new TraitSorter());
+                        endMarker = traits.get(0).getSourceLocation().getLine() - 1;
+                    }
+                    // Move the end marker when encountering line comments or empty lines.
+                    if (lines.size() > endMarker) {
+                        while (lines.get(endMarker - 1).trim().startsWith("//")
+                                || lines.get(endMarker - 1).trim().equals("")) {
+                            endMarker = endMarker - 1;
+                        }
+                    }
+                }
+                Location location =  new Location(getUri(modelFile), new Range(startPosition, endPosition));
+                addLocationToMap(shape, locations, location);
+            }
+        }
+        return locations;
+    }
+
+    private static List<String> getFileLines(Path path) {
+        try {
+            if (Utils.isSmithyJarFile(path.toString())) {
+                return Utils.jarFileContents(path.toString());
+            }
+            return Files.readAllLines(path);
+        } catch (IOException e) {
+            LspLog.println("Path " + path + " was found in temporary buffer");
+        }
+        return Collections.emptyList();
+    }
+
+    private static void addLocationToMap(Shape shape, Map<String, List<Location>> locations, Location location) {
+        String shapeName = shape.getId().getName();
+        // Members get the same shapeName as their parent structure
+        // so we ignore them, to avoid producing a location per-member
+        // TODO: index members somehow as well?
+        if (shape.getType() != ShapeType.MEMBER) {
+            if (locations.containsKey(shapeName)) {
+                locations.get(shapeName).add(location);
+            } else {
+                List<Location> locList = new ArrayList<>();
+                locList.add(location);
+                locations.put(shapeName, locList);
+            }
+        }
+    }
+
+    private static String getUri(String fileName) {
+        return Utils.isJarFile(fileName)
                 ? Utils.toSmithyJarFile(fileName)
                 : !fileName.startsWith("file:") ? "file:" + fileName
                 : fileName;
-
-            Position pos = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
-            Location location = new Location(uri, new Range(pos, pos));
-
-            String shapeName = shape.getId().getName();
-            // Members get the same shapeName as their parent structure
-            // so we ignore them, to avoil producing a location per-member
-            // TODO: index members somehow as well?
-            if (shape.getType() != ShapeType.MEMBER) {
-                if (locations.containsKey(shapeName)) {
-                    locations.get(shapeName).add(location);
-                } else {
-                    List<Location> locList = new ArrayList<Location>();
-                    locList.add(location);
-                    locations.put(shapeName, locList);
-                }
-            }
-        });
-
-        return locations;
     }
 
     private static Boolean isValidSmithyFile(Path file) {
@@ -231,5 +292,31 @@ public final class SmithyProject {
 
     private static List<File> onlyExistingFiles(Collection<File> files) {
         return files.stream().filter(File::isFile).collect(Collectors.toList());
+    }
+
+    private static class SourceLocationSorter implements Comparator<FromSourceLocation>, Serializable {
+        @Override
+        public int compare(FromSourceLocation s1, FromSourceLocation s2) {
+            SourceLocation sourceLocation = s1.getSourceLocation();
+            SourceLocation otherSourceLocation = s2.getSourceLocation();
+
+            if (!sourceLocation.getFilename().equals(otherSourceLocation.getFilename())) {
+                return sourceLocation.getFilename().compareTo(otherSourceLocation.getFilename());
+            }
+
+            int lineComparison = Integer.compare(sourceLocation.getLine(), otherSourceLocation.getLine());
+            if (lineComparison != 0) {
+                return lineComparison;
+            }
+
+            return Integer.compare(sourceLocation.getColumn(), otherSourceLocation.getColumn());
+        }
+    }
+
+    private static class TraitSorter implements Comparator<Trait>, Serializable {
+        @Override
+        public int compare(Trait o1, Trait o2) {
+            return new SourceLocationSorter().compare(o1.getSourceLocation(), o2.getSourceLocation());
+        }
     }
 }

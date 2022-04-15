@@ -16,16 +16,17 @@
 package software.amazon.smithy.lsp.ext;
 
 import com.google.common.io.Files;
-import org.eclipse.lsp4j.jsonrpc.messages.Either;
-
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.charset.Charset;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
+import software.amazon.smithy.utils.IoUtils;
 
 public class Harness implements AutoCloseable {
   private File root;
@@ -95,12 +96,7 @@ public class Harness implements AutoCloseable {
     // TODO: How to make this safe?
     File hs = Files.createTempDir();
     File tmp = Files.createTempDir();
-
-    Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, hs);
-    if (loaded.isRight())
-      return new Harness(hs, tmp, loaded.getRight(), ext);
-    else
-      throw loaded.getLeft();
+    return loadHarness(ext, hs, tmp);
   }
 
   public static Harness create(SmithyBuildExtensions ext, Map<String, String> files) throws Exception {
@@ -110,11 +106,23 @@ public class Harness implements AutoCloseable {
     for (Entry<String, String> entry : files.entrySet()) {
       safeCreateFile(entry.getKey(), entry.getValue(), hs);
     }
+    return loadHarness(ext, hs, tmp);
+  }
+
+  public static Harness create(SmithyBuildExtensions ext, List<Path> files) throws Exception {
+    File hs = Files.createTempDir();
+    File tmp = Files.createTempDir();
+    for (Path path : files) {
+      safeCreateFile(path.getFileName().toString(), IoUtils.readUtf8File(path), hs);
+    }
+    return loadHarness(ext, hs, tmp);
+  }
+
+  private static Harness loadHarness(SmithyBuildExtensions ext, File hs, File tmp) throws Exception {
     Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, hs);
     if (loaded.isRight())
       return new Harness(hs, tmp, loaded.getRight(), ext);
     else
       throw loaded.getLeft();
   }
-
 }

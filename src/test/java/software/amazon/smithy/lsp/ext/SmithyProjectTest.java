@@ -15,20 +15,24 @@
 
 package software.amazon.smithy.lsp.ext;
 
-import org.junit.Test;
-import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
-import software.amazon.smithy.utils.ListUtils;
-import software.amazon.smithy.utils.MapUtils;
+import static org.junit.Assert.assertEquals;
 
+import com.google.common.collect.ImmutableList;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-import static org.junit.Assert.assertEquals;
+import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.Range;
+import org.junit.Test;
+import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
+import software.amazon.smithy.utils.ListUtils;
+import software.amazon.smithy.utils.MapUtils;
 
 public class SmithyProjectTest {
 
@@ -71,4 +75,29 @@ public class SmithyProjectTest {
 
     }
 
+    @Test
+    public void definitionLocations() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+        Path modelMain = baseDir.resolve("main.smithy");
+        Path modelTest = baseDir.resolve("test.smithy");
+        List<Path> modelFiles = ImmutableList.of(modelMain, modelTest);
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            Map<String, List<Location>> locations = hs.getProject().getLocations();
+
+            correctLocation(locations, "SingleLine", 4, 5);
+            correctLocation(locations, "MultiLine", 6, 11);
+            correctLocation(locations, "SingleTrait", 13, 14);
+            correctLocation(locations, "MultiTrait", 17, 20);
+            correctLocation(locations, "MultiTraitAndLineComments", 33, 36);
+            correctLocation(locations,"MultiTraitAndDocComments", 41, 44);
+            correctLocation(locations, "OtherStructure", 4, 9);
+        }
+    }
+
+    private void correctLocation(Map<String, List<Location>> locations, String shapeName, int start, int end) {
+        Location location = locations.get(shapeName).get(0);
+        Range range = new Range(new Position(start, 0), new Position(end, 0));
+        assertEquals(range, location.getRange());
+    }
 }
