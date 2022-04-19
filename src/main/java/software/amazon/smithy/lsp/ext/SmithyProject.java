@@ -165,8 +165,7 @@ public final class SmithyProject {
                 .distinct()
                 .collect(Collectors.toList());
         for (String modelFile : modelFiles) {
-            Path modelPath = Paths.get(modelFile);
-            List<String> lines = getFileLines(modelPath);
+            List<String> lines = getFileLines(modelFile);
             int endMarker = lines.size();
 
             // Get shapes reverse-sorted by source location to work from bottom of file to top.
@@ -213,14 +212,15 @@ public final class SmithyProject {
         return locations;
     }
 
-    private static List<String> getFileLines(Path path) {
+    private static List<String> getFileLines(String file) {
         try {
-            if (Utils.isSmithyJarFile(path.toString())) {
-                return Utils.jarFileContents(path.toString());
+            if (Utils.isSmithyJarFile(file) || Utils.isJarFile(file)) {
+                return Utils.jarFileContents(file);
+            } else {
+                return Files.readAllLines(Paths.get(file));
             }
-            return Files.readAllLines(path);
         } catch (IOException e) {
-            LspLog.println("Path " + path + " was found in temporary buffer");
+            LspLog.println("File " + file + " could not be loaded.");
         }
         return Collections.emptyList();
     }
