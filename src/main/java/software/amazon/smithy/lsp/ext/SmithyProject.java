@@ -166,13 +166,13 @@ public final class SmithyProject {
                 .collect(Collectors.toList());
         for (String modelFile : modelFiles) {
             List<String> lines = getFileLines(modelFile);
-            int endMarker = lines.size();
+            int endMarker = getInitialEndMarker(lines);
 
-            // Get shapes reverse-sorted by source location to work from bottom of file to top.
+             // Get shapes reverse-sorted by source location to work from bottom of file to top.
             List<Shape> shapes = model.shapes()
                     .filter(shape -> shape.getSourceLocation().getFilename().equals(modelFile))
                     // TODO: Once the change in https://github.com/awslabs/smithy/pull/1192 lands, replace with with
-                    // `.sorted(Comparator.comparing(Shape::getSourceLocation).reversed())`
+                    // `.sorted(Comparator.comparing(Shape::getSourceLocation).reversed())`.
                     .sorted(new SourceLocationSorter().reversed())
                     .collect(Collectors.toList());
 
@@ -184,7 +184,7 @@ public final class SmithyProject {
                 if (endMarker < sourceLocation.getLine()) {
                     endPosition = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
                 } else {
-                    endPosition = new Position(endMarker, 0);
+                    endPosition = getEndPosition(endMarker, lines);
                 }
 
                 // If a shape is not a member, move the end marker for setting the next shape location.
@@ -210,6 +210,26 @@ public final class SmithyProject {
             }
         }
         return locations;
+    }
+
+    private static int getInitialEndMarker(List<String> lines) {
+        int endMarker = lines.size();
+        // Remove empty lines from the end of the file.
+        if (lines.size() > 0) {
+            while (lines.get(endMarker - 1).trim().equals("")) {
+                endMarker = endMarker - 1;
+            }
+        }
+        return endMarker;
+    }
+
+    // If the lines of the model were successfully loaded, return the end position of the actual shape line,
+    // otherwise set it to the start of the next line.
+    private static Position getEndPosition(int endMarker, List<String> lines) {
+        if (lines.size() >= endMarker) {
+            return new Position(endMarker - 1, lines.get(endMarker - 1).length());
+        }
+        return new Position(endMarker, 0);
     }
 
     private static List<String> getFileLines(String file) {

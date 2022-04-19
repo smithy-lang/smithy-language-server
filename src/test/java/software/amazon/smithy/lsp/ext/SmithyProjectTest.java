@@ -85,19 +85,20 @@ public class SmithyProjectTest {
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             Map<String, List<Location>> locations = hs.getProject().getLocations();
 
-            correctLocation(locations, "SingleLine", 4, 5);
-            correctLocation(locations, "MultiLine", 6, 11);
-            correctLocation(locations, "SingleTrait", 13, 14);
-            correctLocation(locations, "MultiTrait", 17, 20);
-            correctLocation(locations, "MultiTraitAndLineComments", 33, 36);
-            correctLocation(locations,"MultiTraitAndDocComments", 41, 44);
-            correctLocation(locations, "OtherStructure", 4, 9);
+            correctLocation(locations, "SingleLine", 4, 0, 4, 23);
+            correctLocation(locations, "MultiLine", 6, 8,10, 9);
+            correctLocation(locations, "SingleTrait", 13, 0, 13, 18);
+            correctLocation(locations, "MultiTrait", 17, 0,18, 14);
+            correctLocation(locations, "MultiTraitAndLineComments", 32, 0,34, 1);
+            correctLocation(locations,"MultiTraitAndDocComments", 43, 0,45, 1);
+            correctLocation(locations, "OtherStructure", 4, 0, 8, 1);
         }
     }
 
-    private void correctLocation(Map<String, List<Location>> locations, String shapeName, int start, int end) {
+    private void correctLocation(Map<String, List<Location>> locations, String shapeName, int startLine,
+                                 int startColumn, int endLine, int endColumn) {
         Location location = locations.get(shapeName).get(0);
-        Range range = new Range(new Position(start, 0), new Position(end, 0));
+        Range range = new Range(new Position(startLine, startColumn), new Position(endLine, endColumn));
         assertEquals(range, location.getRange());
     }
 }
