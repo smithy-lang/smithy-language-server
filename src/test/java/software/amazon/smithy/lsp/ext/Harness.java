@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import software.amazon.smithy.lsp.Utils;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.utils.IoUtils;
 
@@ -113,7 +114,12 @@ public class Harness implements AutoCloseable {
     File hs = Files.createTempDir();
     File tmp = Files.createTempDir();
     for (Path path : files) {
-      safeCreateFile(path.getFileName().toString(), IoUtils.readUtf8File(path), hs);
+      if (Utils.isJarFile(path.toString())) {
+        String contents = String.join(System.lineSeparator(), Utils.jarFileContents(path.toString()));
+        safeCreateFile(path.getFileName().toString(), contents, hs);
+      } else {
+        safeCreateFile(path.getFileName().toString(), IoUtils.readUtf8File(path), hs);
+      }
     }
     return loadHarness(ext, hs, tmp);
   }

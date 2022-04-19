@@ -167,17 +167,13 @@ public final class SmithyProject {
         for (String modelFile : modelFiles) {
             Path modelPath = Paths.get(modelFile);
             List<String> lines = getFileLines(modelPath);
-            LspLog.println(lines);
-            int endMarker = 0;
-            try {
-                endMarker = (int) Files.lines(modelPath).count();
-            } catch (IOException e) {
-                LspLog.println("Could not read model file length");
-            }
+            int endMarker = lines.size();
 
             // Get shapes reverse-sorted by source location to work from bottom of file to top.
             List<Shape> shapes = model.shapes()
                     .filter(shape -> shape.getSourceLocation().getFilename().equals(modelFile))
+                    // TODO: Once the change in https://github.com/awslabs/smithy/pull/1192 lands, replace with with
+                    // `.sorted(Comparator.comparing(Shape::getSourceLocation).reversed())`
                     .sorted(new SourceLocationSorter().reversed())
                     .collect(Collectors.toList());
 
@@ -198,7 +194,8 @@ public final class SmithyProject {
                     List<Trait> traits = new ArrayList<>(shape.getAllTraits().values());
                     // If the shape has traits, advance the end marker again.
                     if (!traits.isEmpty()) {
-                        traits.sort(new TraitSorter());
+                        // TODO: Replace with Comparator when this class is removed.
+                        traits.sort(new SourceLocationSorter());
                         endMarker = traits.get(0).getSourceLocation().getLine() - 1;
                     }
                     // Move the end marker when encountering line comments or empty lines.
@@ -294,6 +291,7 @@ public final class SmithyProject {
         return files.stream().filter(File::isFile).collect(Collectors.toList());
     }
 
+    // TODO: Remove this Class once the change in https://github.com/awslabs/smithy/pull/1192 is available.
     private static class SourceLocationSorter implements Comparator<FromSourceLocation>, Serializable {
         @Override
         public int compare(FromSourceLocation s1, FromSourceLocation s2) {
@@ -310,13 +308,6 @@ public final class SmithyProject {
             }
 
             return Integer.compare(sourceLocation.getColumn(), otherSourceLocation.getColumn());
-        }
-    }
-
-    private static class TraitSorter implements Comparator<Trait>, Serializable {
-        @Override
-        public int compare(Trait o1, Trait o2) {
-            return new SourceLocationSorter().compare(o1.getSourceLocation(), o2.getSourceLocation());
         }
     }
 }
