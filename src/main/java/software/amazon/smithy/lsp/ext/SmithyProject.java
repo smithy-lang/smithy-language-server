@@ -235,7 +235,7 @@ public final class SmithyProject {
     private static List<String> getFileLines(String file) {
         try {
             if (Utils.isSmithyJarFile(file) || Utils.isJarFile(file)) {
-                return Utils.jarFileContents(file);
+                return Utils.jarFileContents(Utils.toSmithyJarFile(file));
             } else {
                 return Files.readAllLines(Paths.get(file));
             }
