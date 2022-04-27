@@ -28,6 +28,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.Location;
@@ -41,6 +43,7 @@ import software.amazon.smithy.model.FromSourceLocation;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.shapes.Shape;
+import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.ShapeType;
 import software.amazon.smithy.model.traits.Trait;
 import software.amazon.smithy.model.validation.ValidatedResult;
@@ -49,7 +52,7 @@ public final class SmithyProject {
     private final List<Path> imports;
     private final List<File> smithyFiles;
     private final List<File> externalJars;
-    private Map<String, List<Location>> locations = Collections.emptyMap();
+    private Map<ShapeId, Location> locations = Collections.emptyMap();
     private final ValidatedResult<Model> model;
     private final File root;
 
@@ -105,7 +108,7 @@ public final class SmithyProject {
         return this.model.getResult().map(model -> Completions.find(model, token)).orElse(Collections.emptyList());
     }
 
-    public Map<String, List<Location>> getLocations() {
+    public Map<ShapeId, Location> getLocations() {
         return this.locations;
     }
 
@@ -158,8 +161,8 @@ public final class SmithyProject {
         return this.root;
     }
 
-    private static Map<String, List<Location>> collectLocations(Model model) {
-        Map<String, List<Location>> locations = new HashMap<>();
+    private static Map<ShapeId, Location> collectLocations(Model model) {
+        Map<ShapeId, Location> locations = new HashMap<>();
         List<String> modelFiles = model.shapes()
                 .map(shape -> shape.getSourceLocation().getFilename())
                 .distinct()
@@ -167,6 +170,7 @@ public final class SmithyProject {
         for (String modelFile : modelFiles) {
             List<String> lines = getFileLines(modelFile);
             int endMarker = getInitialEndMarker(lines);
+            int memberEndMarker = getInitialEndMarker(lines);
 
              // Get shapes reverse-sorted by source location to work from bottom of file to top.
             List<Shape> shapes = model.shapes()
@@ -187,8 +191,28 @@ public final class SmithyProject {
                     endPosition = getEndPosition(endMarker, lines);
                 }
 
-                // If a shape is not a member, move the end marker for setting the next shape location.
-                if (shape.getType() != ShapeType.MEMBER) {
+                // Find the end of a member's location by first trimming trailing commas, empty lines and closing
+                // structure braces.
+                if (shape.getType() == ShapeType.MEMBER) {
+                    int currentMemberEndMarker = memberEndMarker < endMarker ? memberEndMarker : endMarker;
+                    String currentLine = lines.get(currentMemberEndMarker - 1).trim();
+                    while (currentLine.startsWith("//") || currentLine.equals("") || currentLine.equals("}")) {
+                        currentMemberEndMarker = currentMemberEndMarker - 1;
+                        currentLine = lines.get(currentMemberEndMarker - 1).trim();
+                    }
+                    // Set the member's end position.
+                    endPosition = getEndPosition(currentMemberEndMarker, lines);
+                    // Advance the member end marker on any traits on the current member, so that the next member
+                    // location starts in the right place.
+                    List<Trait> traits = new ArrayList<>(shape.getAllTraits().values());
+                    if (!traits.isEmpty()) {
+                        traits.sort(new SourceLocationSorter());
+                        currentMemberEndMarker = traits.get(0).getSourceLocation().getLine();
+                    }
+                    memberEndMarker = currentMemberEndMarker - 1;
+                } else {
+                    // When handling non-member shapes, advance the end marker for traits and comments above the current
+                    // shape.
                     endMarker = startPosition.getLine();
                     List<Trait> traits = new ArrayList<>(shape.getAllTraits().values());
                     // If the shape has traits, advance the end marker again.
@@ -206,10 +230,51 @@ public final class SmithyProject {
                     }
                 }
                 Location location =  new Location(getUri(modelFile), new Range(startPosition, endPosition));
-                addLocationToMap(shape, locations, location);
+                locations.put(shape.getId(), location);
             }
         }
         return locations;
+    }
+
+    /**
+     * Returns the shapeId of the shape that corresponds to the file uri and position within the model.
+     *
+     * @param uri String uri of model file
+     * @param position Cursor position within model file
+     * @return ShapeId of corresponding shape defined at location.
+     */
+    public Optional<ShapeId> getShapeIdFromLocation(String uri, Position position) {
+        Comparator<Map.Entry<ShapeId, Location>> rangeSize = Comparator.comparing(entry ->
+                entry.getValue().getRange().getEnd().getLine() - entry.getValue().getRange().getStart().getLine());
+
+        List<Map.Entry<ShapeId, Location>> matchingShapes = locations.entrySet().stream()
+                .filter(entry -> Paths.get(entry.getValue().getUri()).equals(Paths.get(uri)))
+                .filter(filterByLocation(position))
+                // Since the position is in each of the overlapping shapes, return the smallest range.
+                .sorted(rangeSize)
+                .collect(Collectors.toList());
+        if (matchingShapes.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(matchingShapes.get(0).getKey());
+    }
+
+    private Predicate<Map.Entry<ShapeId, Location>> filterByLocation(Position position) {
+        return entry -> {
+            Range range = entry.getValue().getRange();
+            if (range.getStart().getLine() > position.getLine()) {
+                return false;
+            }
+            if (range.getEnd().getLine() < position.getLine()) {
+                return false;
+            }
+            if (range.getStart().getLine() == position.getLine()) {
+                return range.getStart().getCharacter() <= position.getCharacter();
+            } else if (range.getEnd().getLine() == position.getLine()) {
+                return range.getEnd().getCharacter() >= position.getCharacter();
+            }
+            return true;
+        };
     }
 
     private static int getInitialEndMarker(List<String> lines) {
@@ -243,22 +308,6 @@ public final class SmithyProject {
             LspLog.println("File " + file + " could not be loaded.");
         }
         return Collections.emptyList();
-    }
-
-    private static void addLocationToMap(Shape shape, Map<String, List<Location>> locations, Location location) {
-        String shapeName = shape.getId().getName();
-        // Members get the same shapeName as their parent structure
-        // so we ignore them, to avoid producing a location per-member
-        // TODO: index members somehow as well?
-        if (shape.getType() != ShapeType.MEMBER) {
-            if (locations.containsKey(shapeName)) {
-                locations.get(shapeName).add(location);
-            } else {
-                List<Location> locList = new ArrayList<>();
-                locList.add(location);
-                locations.put(shapeName, locList);
-            }
-        }
     }
 
     private static String getUri(String fileName) {

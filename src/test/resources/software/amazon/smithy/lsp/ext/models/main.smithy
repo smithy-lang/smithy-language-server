@@ -1,20 +1,23 @@
 $version: "1.0"
 
-namespace example.foo
+namespace com.foo
 
 structure SingleLine {}
 
         structure MultiLine {
             a: String,
+
+
             b: String,
-            c: String
+            @required
+            c: SingleLine
         }
 
     @pattern("^[A-Za-z0-9 ]+$")
-string SingleTrait
+    string SingleTrait
 
 @input
-@error("client")
+@tags(["foo"])
 structure MultiTrait {
     a: String}
 
@@ -22,12 +25,12 @@ structure MultiTrait {
 // comments
 @input
     // comments
-    @error("client")
-@references(
-    [
-        {
-            resource: City
-        }
+    @tags(["a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
     ]
 )
 structure MultiTraitAndLineComments {
@@ -38,9 +41,40 @@ structure MultiTraitAndLineComments {
 
 
 /// Doc comments
-/// comments
+/// Comment about corresponding MultiTrait shape
 @input
-@error("client")
+@tags(["foo"])
 structure MultiTraitAndDocComments {
     a: String
 }
+
+@readonly
+operation MyOperation {
+    input: MyInput,
+    output: MyOutput,
+    errors: [MyError]
+}
+
+structure MyInput {
+    foo: String,
+    @required
+    myId: MyId
+}
+
+structure MyOutput {
+    corge: String,
+    qux: String
+}
+
+@error("client")
+structure MyError {
+    blah: String,
+    blahhhh: Integer
+}
+
+resource MyResource {
+    identifiers: { myId: MyId },
+    read: MyOperation
+}
+
+string MyId

@@ -63,6 +63,10 @@ import software.amazon.smithy.lsp.ext.SmithyProject;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
+import software.amazon.smithy.model.knowledge.NeighborProviderIndex;
+import software.amazon.smithy.model.neighbor.Walker;
+import software.amazon.smithy.model.shapes.Shape;
+import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
@@ -254,8 +258,30 @@ public class SmithyTextDocumentService implements TextDocumentService {
     public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(
             DefinitionParams params) {
         try {
+            List<Location> locations;
+            Optional<ShapeId> initialShapeId = project.getShapeIdFromLocation(params.getTextDocument().getUri(),
+                    params.getPosition());
             String found = findToken(params.getTextDocument().getUri(), params.getPosition());
-            return Utils.completableFuture(Either.forLeft(project.getLocations().getOrDefault(found, noLocations)));
+            if (initialShapeId.isPresent()) {
+                Model model = project.getModel().unwrap();
+                Shape initialShape = model.getShape(initialShapeId.get()).get();
+                // Find first neighbor (non-member) with name that matches token.
+                Walker shapeWalker = new Walker(NeighborProviderIndex.of(model).getProvider());
+                Optional<ShapeId> target = shapeWalker.walkShapes(initialShape).stream()
+                        .filter(shape -> !shape.isMemberShape())
+                        .map(shape -> shape.getId())
+                        .filter(shape -> shape.getName().equals(found))
+                        .findFirst();
+                // Use location on target, or else default to initial shape.
+                locations = Collections.singletonList(project.getLocations().get(target.orElse(initialShapeId.get())));
+            } else {
+                // If cursor location doesn't correspond to definition, return locations of all shapes that match token.
+                locations = project.getLocations().entrySet().stream()
+                        .filter(entry -> entry.getKey().getName().equals(found))
+                        .map(entry -> entry.getValue())
+                        .collect(Collectors.toList());
+            }
+            return Utils.completableFuture(Either.forLeft(locations));
         } catch (Exception e) {
             // TODO: handle exception
 
