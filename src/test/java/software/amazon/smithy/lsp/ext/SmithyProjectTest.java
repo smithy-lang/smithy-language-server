@@ -106,8 +106,8 @@ public class SmithyProjectTest {
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             SmithyProject project = hs.getProject();
-            String uri = "file:" + hs.file("main.smithy");
-            String testUri = "file:" + hs.file("test.smithy");
+            String uri = hs.file("main.smithy").toString();
+            String testUri = hs.file("test.smithy").toString();
 
             assertFalse(project.getShapeIdFromLocation("empty.smithy", new Position(0, 0)).isPresent());
             assertFalse(project.getShapeIdFromLocation(uri, new Position(0, 0)).isPresent());

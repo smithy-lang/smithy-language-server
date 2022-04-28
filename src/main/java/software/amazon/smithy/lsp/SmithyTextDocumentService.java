@@ -206,7 +206,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 LspLog.println("Path " + path + " was found in temporary buffer");
                 contents = Arrays.stream(tempContents.split("\n")).collect(Collectors.toList());
             } else {
-                contents = readAll(new File(URI.create(path)));
+                try {
+                    contents = readAll(new File(URI.create(path)));
+                } catch (IllegalArgumentException e) {
+                    contents = readAll(new File(path));
+                }
             }
 
         }
@@ -356,7 +360,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     private File fileFromUri(String uri) {
-        return new File(URI.create(uri));
+        try {
+            return new File(URI.create(uri));
+        } catch (IllegalArgumentException e) {
+            return new File(uri);
+        }
     }
 
     /**

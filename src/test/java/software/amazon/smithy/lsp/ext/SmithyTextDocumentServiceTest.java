@@ -177,7 +177,7 @@ public class SmithyTextDocumentServiceTest {
             StubClient client = new StubClient();
             tds.createProject(hs.getConfig(), hs.getRoot());
             tds.setClient(client);
-            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier("file:" + hs.file(modelFilename));
+            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
 
             // Resolves via token => shape name.
             DefinitionParams commentParams = definitionParams(mainTdi, 43, 37);

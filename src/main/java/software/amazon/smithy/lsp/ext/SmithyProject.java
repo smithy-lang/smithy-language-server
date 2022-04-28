@@ -248,7 +248,7 @@ public final class SmithyProject {
                 entry.getValue().getRange().getEnd().getLine() - entry.getValue().getRange().getStart().getLine());
 
         List<Map.Entry<ShapeId, Location>> matchingShapes = locations.entrySet().stream()
-                .filter(entry -> Paths.get(entry.getValue().getUri()).equals(Paths.get(uri)))
+                .filter(entry -> entry.getValue().getUri().endsWith(Paths.get(uri).toString()))
                 .filter(filterByLocation(position))
                 // Since the position is in each of the overlapping shapes, return the smallest range.
                 .sorted(rangeSize)
