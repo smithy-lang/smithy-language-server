@@ -16,6 +16,7 @@
 package software.amazon.smithy.lsp.ext;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableList;
@@ -45,6 +46,7 @@ import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.junit.Test;
 import software.amazon.smithy.lsp.SmithyTextDocumentService;
@@ -229,6 +231,51 @@ public class SmithyTextDocumentServiceTest {
             correctLocation(readLocation, modelFilename, 51, 0, 55, 1);
             assertTrue(preludeTargetLocation.getUri().endsWith("prelude.smithy"));
             assertTrue(noMatchLocationList.isEmpty());
+        }
+    }
+
+    @Test
+    public void runSelector() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+        String modelFilename = "main.smithy";
+        Path modelMain = baseDir.resolve(modelFilename);
+        List<Path> modelFiles = ImmutableList.of(modelMain);
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+
+            Either<Exception, List<Location>> result = tds.runSelector("[id|namespace=com.foo]");
+
+            assertTrue(result.isRight());
+            assertFalse(result.getRight().isEmpty());
+
+            Optional<Location> location = result.getRight().stream()
+                    .filter(location1 -> location1.getRange().getStart().getLine() == 20)
+                    .findFirst();
+
+            assertTrue(location.isPresent());
+            correctLocation(location.get(), modelFilename, 20, 0, 21, 14);
+        }
+    }
+
+    @Test
+    public void runSelectorAgainstModelWithErrors() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+        Path broken = baseDir.resolve("broken.smithy");
+        List<Path> modelFiles = ImmutableList.of(broken);
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+
+            Either<Exception, List<Location>> result = tds.runSelector("[id|namespace=com.foo]");
+
+            assertTrue(result.isLeft());
+            assertTrue(result.getLeft().getMessage().contains("Result contained ERROR severity validation events:"));
         }
     }
 

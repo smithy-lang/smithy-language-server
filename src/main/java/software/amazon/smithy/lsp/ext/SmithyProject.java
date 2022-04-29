@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.Location;
@@ -41,11 +42,13 @@ import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.model.FromSourceLocation;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
+import software.amazon.smithy.model.selector.Selector;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.ShapeType;
 import software.amazon.smithy.model.traits.Trait;
 import software.amazon.smithy.model.validation.ValidatedResult;
+import software.amazon.smithy.model.validation.ValidatedResultException;
 
 public final class SmithyProject {
     private final List<Path> imports;
@@ -139,6 +142,23 @@ public final class SmithyProject {
 
     }
 
+    /**
+     * Run a selector expression against the loaded model in the workspace.
+     * @param expression the selector expression
+     * @return list of locations of shapes that match expression
+     */
+    public Either<Exception, List<Location>> runSelector(String expression) {
+        try {
+            Selector selector = Selector.parse(expression);
+            Set<Shape> shapes = selector.select(this.model.unwrap());
+            return Either.forRight(shapes.stream()
+                    .map(shape -> this.locations.get(shape.getId()))
+                    .collect(Collectors.toList()));
+        } catch (ValidatedResultException e) {
+            return Either.forLeft(e);
+        }
+    }
+
     private static Either<Exception, SmithyProject> load(List<Path> imports, List<File> smithyFiles,
             List<File> externalJars, File root) {
         Either<Exception, ValidatedResult<Model>> model = createModel(smithyFiles, externalJars);
@@ -193,7 +213,7 @@ public final class SmithyProject {
                 // Find the end of a member's location by first trimming trailing commas, empty lines and closing
                 // structure braces.
                 if (shape.getType() == ShapeType.MEMBER) {
-                    int currentMemberEndMarker = memberEndMarker < endMarker ? memberEndMarker : endMarker;
+                    int currentMemberEndMarker = Math.min(endMarker, memberEndMarker);
                     String currentLine = lines.get(currentMemberEndMarker - 1).trim();
                     while (currentLine.startsWith("//") || currentLine.equals("") || currentLine.equals("}")) {
                         currentMemberEndMarker = currentMemberEndMarker - 1;
@@ -256,7 +276,7 @@ public final class SmithyProject {
                 .filter(entry -> isPositionInRange(entry.getValue().getRange(), position))
                 // Since the position is in each of the overlapping shapes, return the location with the smallest range.
                 .sorted(rangeSize)
-                .map(entry -> entry.getKey())
+                .map(Map.Entry::getKey)
                 .findFirst();
     }
 
