@@ -211,29 +211,34 @@ public final class SmithyProject {
                     }
                     memberEndMarker = currentMemberEndMarker - 1;
                 } else {
-                    // When handling non-member shapes, advance the end marker for traits and comments above the current
-                    // shape.
-                    endMarker = startPosition.getLine();
-                    List<Trait> traits = new ArrayList<>(shape.getAllTraits().values());
-                    // If the shape has traits, advance the end marker again.
-                    if (!traits.isEmpty()) {
-                        // TODO: Replace with Comparator when this class is removed.
-                        traits.sort(new SourceLocationSorter());
-                        endMarker = traits.get(0).getSourceLocation().getLine() - 1;
-                    }
-                    // Move the end marker when encountering line comments or empty lines.
-                    if (lines.size() > endMarker) {
-                        while (lines.get(endMarker - 1).trim().startsWith("//")
-                                || lines.get(endMarker - 1).trim().equals("")) {
-                            endMarker = endMarker - 1;
-                        }
-                    }
+                    endMarker = advanceMarkerOnNonMemberShapes(startPosition, shape, lines);
                 }
                 Location location =  new Location(getUri(modelFile), new Range(startPosition, endPosition));
                 locations.put(shape.getId(), location);
             }
         }
         return locations;
+    }
+
+    private static int advanceMarkerOnNonMemberShapes(Position startPosition, Shape shape, List<String> fileLines) {
+        // When handling non-member shapes, advance the end marker for traits and comments above the current
+        // shape.
+        int marker = startPosition.getLine();
+        List<Trait> traits = new ArrayList<>(shape.getAllTraits().values());
+        // If the shape has traits, advance the end marker again.
+        if (!traits.isEmpty()) {
+            // TODO: Replace with Comparator when this class is removed.
+            traits.sort(new SourceLocationSorter());
+            marker = traits.get(0).getSourceLocation().getLine() - 1;
+        }
+        // Move the end marker when encountering line comments or empty lines.
+        if (fileLines.size() > marker) {
+            while (fileLines.get(marker - 1).trim().startsWith("//")
+                    || fileLines.get(marker - 1).trim().equals("")) {
+                marker = marker - 1;
+            }
+        }
+        return marker;
     }
 
     /**
@@ -247,16 +252,13 @@ public final class SmithyProject {
         Comparator<Map.Entry<ShapeId, Location>> rangeSize = Comparator.comparing(entry ->
                 entry.getValue().getRange().getEnd().getLine() - entry.getValue().getRange().getStart().getLine());
 
-        List<Map.Entry<ShapeId, Location>> matchingShapes = locations.entrySet().stream()
+        return locations.entrySet().stream()
                 .filter(entry -> entry.getValue().getUri().endsWith(Paths.get(uri).toString()))
                 .filter(filterByLocation(position))
-                // Since the position is in each of the overlapping shapes, return the smallest range.
+                // Since the position is in each of the overlapping shapes, return the location with the smallest range.
                 .sorted(rangeSize)
-                .collect(Collectors.toList());
-        if (matchingShapes.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(matchingShapes.get(0).getKey());
+                .map(entry -> entry.getKey())
+                .findFirst();
     }
 
     private Predicate<Map.Entry<ShapeId, Location>> filterByLocation(Position position) {
@@ -313,8 +315,11 @@ public final class SmithyProject {
     private static String getUri(String fileName) {
         return Utils.isJarFile(fileName)
                 ? Utils.toSmithyJarFile(fileName)
-                : !fileName.startsWith("file:") ? "file:" + fileName
-                : fileName;
+                : addFilePrefix(fileName);
+    }
+
+    private static String addFilePrefix(String fileName) {
+        return !fileName.startsWith("file:") ? "file:" + fileName : fileName;
     }
 
     private static Boolean isValidSmithyFile(Path file) {

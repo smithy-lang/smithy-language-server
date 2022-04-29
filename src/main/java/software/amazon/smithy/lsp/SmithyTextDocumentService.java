@@ -262,6 +262,13 @@ public class SmithyTextDocumentService implements TextDocumentService {
     public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(
             DefinitionParams params) {
         try {
+            // This attempts to return the definition location that corresponds to a position within a text document.
+            // First, the position is used to find any shapes in the model that are defined at that location. Next,
+            // a token is extracted from the raw text document. The model is walked from the starting shapeId and any
+            // the locations of neighboring shapes that match the token are returned. For example, if the position
+            // is the input of an operation, the token will be the name of the input structure, and the operation will
+            // be walked to return the location of where the input structure is defined. This allows go-to-definition
+            // to jump from the input of the operation, to where the input structure is actually defined.
             List<Location> locations;
             Optional<ShapeId> initialShapeId = project.getShapeIdFromLocation(params.getTextDocument().getUri(),
                     params.getPosition());
@@ -279,7 +286,9 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 // Use location on target, or else default to initial shape.
                 locations = Collections.singletonList(project.getLocations().get(target.orElse(initialShapeId.get())));
             } else {
-                // If cursor location doesn't correspond to definition, return locations of all shapes that match token.
+                // If the definition params do not have a matching shape at that location, return locations of all
+                // shapes that match token by shape name. This makes it possible link the shape name in a line
+                // comment to its definition.
                 locations = project.getLocations().entrySet().stream()
                         .filter(entry -> entry.getKey().getName().equals(found))
                         .map(entry -> entry.getValue())
