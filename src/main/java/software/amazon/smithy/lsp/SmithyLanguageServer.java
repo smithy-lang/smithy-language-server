@@ -20,6 +20,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -27,12 +28,14 @@ import java.util.stream.Collectors;
 import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
+import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
 import org.eclipse.lsp4j.WorkspaceFolder;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageClientAware;
 import org.eclipse.lsp4j.services.LanguageServer;
@@ -142,6 +145,20 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
       future.completeExceptionally(e);
       return future;
     }
+  }
+
+  @Override
+  public CompletableFuture<List<? extends Location>> selectorCommand(SelectorParams selectorParams) {
+    LspLog.println("Received selector Command: " + selectorParams.getExpression());
+    if (this.tds.isPresent()) {
+      Either<Exception, List<Location>> result = this.tds.get().runSelector(selectorParams.getExpression());
+      if (result.isRight()) {
+        return CompletableFuture.completedFuture(result.getRight());
+      } else {
+        LspLog.println("Resolve model validation errors and re-run selector command: " + result.getLeft());
+      }
+    }
+    return CompletableFuture.completedFuture(Collections.emptyList());
   }
 
 }

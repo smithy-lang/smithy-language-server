@@ -522,6 +522,15 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     }
 
+    /**
+     * Run a selector expression against the loaded model in the workspace.
+     * @param expression the selector expression
+     * @return list of locations of shapes that match expression
+     */
+    public Either<Exception, List<Location>> runSelector(String expression) {
+        return this.project.runSelector(expression);
+    }
+
     private void sendInfo(String msg) {
         this.client.ifPresent(client -> {
             client.showMessage(new MessageParams(MessageType.Info, msg));

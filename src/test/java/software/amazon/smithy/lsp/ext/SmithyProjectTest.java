@@ -54,7 +54,6 @@ public class SmithyProjectTest {
 
             assertEquals(ListUtils.of(inBla, inFoo), smithyFiles);
         }
-
     }
 
     @Test
@@ -74,7 +73,6 @@ public class SmithyProjectTest {
 
             assertEquals(expectedFiles, smithyFiles);
         }
-
     }
 
     @Test
