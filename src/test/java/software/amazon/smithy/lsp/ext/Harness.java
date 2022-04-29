@@ -69,17 +69,6 @@ public class Harness implements AutoCloseable {
     return f;
   }
 
-  public File addFile(String path, String contents) throws Exception {
-    File f = safeCreateFile(path, contents, this.root);
-    Either<Exception, SmithyProject> loaded = this.project.recompile(f, null);
-    if (loaded.isRight())
-      this.project = loaded.getRight();
-    else
-      throw loaded.getLeft();
-
-    return f;
-  }
-
   public File file(String path) throws Exception {
     return Paths.get(root.getAbsolutePath(), path).toFile();
   }
