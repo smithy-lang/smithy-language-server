@@ -16,8 +16,12 @@
 package software.amazon.smithy.lsp.ext;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
+import com.google.common.collect.ImmutableList;
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -26,12 +30,15 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.MessageActionItem;
 import org.eclipse.lsp4j.MessageParams;
+import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.ShowMessageRequestParams;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
@@ -158,6 +165,73 @@ public class SmithyTextDocumentServiceTest {
 
     }
 
+    @Test
+    public void definitions() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+        String modelFilename = "main.smithy";
+        Path modelMain = baseDir.resolve(modelFilename);
+        List<Path> modelFiles = ImmutableList.of(modelMain);
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
+
+            // Resolves via token => shape name.
+            DefinitionParams commentParams = definitionParams(mainTdi, 43, 37);
+            Location commentLocation = tds.definition(commentParams).get().getLeft().get(0);
+
+            // Resolves via shape target location in model.
+            DefinitionParams memberParams = definitionParams(mainTdi, 12, 18);
+            Location memberTargetLocation = tds.definition(memberParams).get().getLeft().get(0);
+
+            // Resolves via member shape target location in prelude.
+            DefinitionParams preludeTargetParams = definitionParams(mainTdi, 36, 12);
+            Location preludeTargetLocation = tds.definition(preludeTargetParams).get().getLeft().get(0);
+
+            // Resolves to current location.
+            DefinitionParams selfParams = definitionParams(mainTdi, 36, 0);
+            Location selfLocation = tds.definition(selfParams).get().getLeft().get(0);
+
+            // Resolves via operation input.
+            DefinitionParams inputParams = definitionParams(mainTdi, 52, 16);
+            Location inputLocation = tds.definition(inputParams).get().getLeft().get(0);
+
+            // Resolves via operation output.
+            DefinitionParams outputParams = definitionParams(mainTdi, 53, 17);
+            Location outputLocation = tds.definition(outputParams).get().getLeft().get(0);
+
+            // Resolves via operation error.
+            DefinitionParams errorParams = definitionParams(mainTdi, 54, 14);
+            Location errorLocation = tds.definition(errorParams).get().getLeft().get(0);
+
+            // Resolves via resource ids.
+            DefinitionParams idParams = definitionParams(mainTdi, 75, 29);
+            Location idLocation = tds.definition(idParams).get().getLeft().get(0);
+
+            // Resolves via resource read.
+            DefinitionParams readParams = definitionParams(mainTdi, 76, 12);
+            Location readLocation = tds.definition(readParams).get().getLeft().get(0);
+
+            // Does not correspond to shape.
+            DefinitionParams noMatchParams = definitionParams(mainTdi, 0, 0);
+            List<Location> noMatchLocationList = (List<Location>) tds.definition(noMatchParams).get().getLeft();
+
+            correctLocation(commentLocation, modelFilename, 20, 0, 21, 14);
+            correctLocation(memberTargetLocation, modelFilename, 4, 0, 4, 23);
+            correctLocation(selfLocation, modelFilename, 35, 0, 37, 1);
+            correctLocation(inputLocation, modelFilename, 57, 0, 61, 1);
+            correctLocation(outputLocation, modelFilename, 63, 0, 66, 1);
+            correctLocation(errorLocation, modelFilename, 69, 0, 72, 1);
+            correctLocation(idLocation, modelFilename, 79, 0, 79, 11);
+            correctLocation(readLocation, modelFilename, 51, 0, 55, 1);
+            assertTrue(preludeTargetLocation.getUri().endsWith("prelude.smithy"));
+            assertTrue(noMatchLocationList.isEmpty());
+        }
+    }
+
     private class StubClient implements LanguageClient {
         public List<PublishDiagnosticsParams> diagnostics = new ArrayList<>();
         public List<MessageParams> shown = new ArrayList<>();
@@ -219,5 +293,17 @@ public class SmithyTextDocumentServiceTest {
 
     private String uri(File f) {
         return f.toURI().toString();
+    }
+
+    private DefinitionParams definitionParams(TextDocumentIdentifier tdi, int line, int character) {
+        return new DefinitionParams(tdi, new Position(line, character));
+    }
+
+    private void correctLocation(Location location, String uri, int startLine, int startCol, int endLine, int endCol) {
+        assertEquals(startLine, location.getRange().getStart().getLine());
+        assertEquals(startCol, location.getRange().getStart().getCharacter());
+        assertEquals(endLine, location.getRange().getEnd().getLine());
+        assertEquals(endCol, location.getRange().getEnd().getCharacter());
+        assertTrue(location.getUri().endsWith(uri));
     }
 }
