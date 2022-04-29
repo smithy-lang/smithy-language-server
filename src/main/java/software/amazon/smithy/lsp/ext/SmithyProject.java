@@ -29,7 +29,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.Location;
@@ -254,29 +253,26 @@ public final class SmithyProject {
 
         return locations.entrySet().stream()
                 .filter(entry -> entry.getValue().getUri().endsWith(Paths.get(uri).toString()))
-                .filter(filterByLocation(position))
+                .filter(entry -> isPositionInRange(entry.getValue().getRange(), position))
                 // Since the position is in each of the overlapping shapes, return the location with the smallest range.
                 .sorted(rangeSize)
                 .map(entry -> entry.getKey())
                 .findFirst();
     }
 
-    private Predicate<Map.Entry<ShapeId, Location>> filterByLocation(Position position) {
-        return entry -> {
-            Range range = entry.getValue().getRange();
-            if (range.getStart().getLine() > position.getLine()) {
-                return false;
-            }
-            if (range.getEnd().getLine() < position.getLine()) {
-                return false;
-            }
-            if (range.getStart().getLine() == position.getLine()) {
-                return range.getStart().getCharacter() <= position.getCharacter();
-            } else if (range.getEnd().getLine() == position.getLine()) {
-                return range.getEnd().getCharacter() >= position.getCharacter();
-            }
-            return true;
-        };
+    private boolean isPositionInRange(Range range, Position position) {
+        if (range.getStart().getLine() > position.getLine()) {
+            return false;
+        }
+        if (range.getEnd().getLine() < position.getLine()) {
+            return false;
+        }
+        if (range.getStart().getLine() == position.getLine()) {
+            return range.getStart().getCharacter() <= position.getCharacter();
+        } else if (range.getEnd().getLine() == position.getLine()) {
+            return range.getEnd().getCharacter() >= position.getCharacter();
+        }
+        return true;
     }
 
     private static int getInitialEndMarker(List<String> lines) {
