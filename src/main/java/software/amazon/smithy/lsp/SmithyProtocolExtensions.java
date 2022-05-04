@@ -15,7 +15,9 @@
 
 package software.amazon.smithy.lsp;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest;
 import org.eclipse.lsp4j.jsonrpc.services.JsonSegment;
@@ -29,4 +31,6 @@ public interface SmithyProtocolExtensions {
   @JsonRequest
   CompletableFuture<String> jarFileContents(TextDocumentIdentifier documentUri);
 
+  @JsonRequest
+  CompletableFuture<List<? extends Location>> selectorCommand(SelectorParams selectorParams);
 }

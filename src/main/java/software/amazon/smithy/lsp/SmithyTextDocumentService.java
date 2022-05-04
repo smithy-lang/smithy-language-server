@@ -58,11 +58,15 @@ import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.Document;
 import software.amazon.smithy.lsp.ext.DocumentPreamble;
 import software.amazon.smithy.lsp.ext.LspLog;
-import software.amazon.smithy.lsp.ext.SmithyBuildExtensions;
 import software.amazon.smithy.lsp.ext.SmithyBuildLoader;
 import software.amazon.smithy.lsp.ext.SmithyProject;
+import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
+import software.amazon.smithy.model.knowledge.NeighborProviderIndex;
+import software.amazon.smithy.model.neighbor.Walker;
+import software.amazon.smithy.model.shapes.Shape;
+import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
@@ -202,7 +206,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 LspLog.println("Path " + path + " was found in temporary buffer");
                 contents = Arrays.stream(tempContents.split("\n")).collect(Collectors.toList());
             } else {
-                contents = readAll(new File(URI.create(path)));
+                try {
+                    contents = readAll(new File(URI.create(path)));
+                } catch (IllegalArgumentException e) {
+                    contents = readAll(new File(path));
+                }
             }
 
         }
@@ -254,8 +262,39 @@ public class SmithyTextDocumentService implements TextDocumentService {
     public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(
             DefinitionParams params) {
         try {
+            // This attempts to return the definition location that corresponds to a position within a text document.
+            // First, the position is used to find any shapes in the model that are defined at that location. Next,
+            // a token is extracted from the raw text document. The model is walked from the starting shapeId and any
+            // the locations of neighboring shapes that match the token are returned. For example, if the position
+            // is the input of an operation, the token will be the name of the input structure, and the operation will
+            // be walked to return the location of where the input structure is defined. This allows go-to-definition
+            // to jump from the input of the operation, to where the input structure is actually defined.
+            List<Location> locations;
+            Optional<ShapeId> initialShapeId = project.getShapeIdFromLocation(params.getTextDocument().getUri(),
+                    params.getPosition());
             String found = findToken(params.getTextDocument().getUri(), params.getPosition());
-            return Utils.completableFuture(Either.forLeft(project.getLocations().getOrDefault(found, noLocations)));
+            if (initialShapeId.isPresent()) {
+                Model model = project.getModel().unwrap();
+                Shape initialShape = model.getShape(initialShapeId.get()).get();
+                // Find first neighbor (non-member) with name that matches token.
+                Walker shapeWalker = new Walker(NeighborProviderIndex.of(model).getProvider());
+                Optional<ShapeId> target = shapeWalker.walkShapes(initialShape).stream()
+                        .filter(shape -> !shape.isMemberShape())
+                        .map(shape -> shape.getId())
+                        .filter(shape -> shape.getName().equals(found))
+                        .findFirst();
+                // Use location on target, or else default to initial shape.
+                locations = Collections.singletonList(project.getLocations().get(target.orElse(initialShapeId.get())));
+            } else {
+                // If the definition params do not have a matching shape at that location, return locations of all
+                // shapes that match token by shape name. This makes it possible link the shape name in a line
+                // comment to its definition.
+                locations = project.getLocations().entrySet().stream()
+                        .filter(entry -> entry.getKey().getName().equals(found))
+                        .map(entry -> entry.getValue())
+                        .collect(Collectors.toList());
+            }
+            return Utils.completableFuture(Either.forLeft(locations));
         } catch (Exception e) {
             // TODO: handle exception
 
@@ -330,7 +369,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     private File fileFromUri(String uri) {
-        return new File(URI.create(uri));
+        try {
+            return new File(URI.create(uri));
+        } catch (IllegalArgumentException e) {
+            return new File(uri);
+        }
     }
 
     /**
@@ -477,6 +520,15 @@ public class SmithyTextDocumentService implements TextDocumentService {
             return Either.forRight(createPerFileDiagnostics(events, allFiles));
         }
 
+    }
+
+    /**
+     * Run a selector expression against the loaded model in the workspace.
+     * @param expression the selector expression
+     * @return list of locations of shapes that match expression
+     */
+    public Either<Exception, List<Location>> runSelector(String expression) {
+        return this.project.runSelector(expression);
     }
 
     private void sendInfo(String msg) {

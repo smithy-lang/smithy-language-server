@@ -25,4 +25,5 @@ bin
 
 .java-version
 *.smithy
+!/src/test/resources/**/*.smithy
 .ammonite

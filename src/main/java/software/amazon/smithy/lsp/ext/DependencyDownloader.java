@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -25,25 +25,31 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
+import software.amazon.smithy.lsp.ext.model.MavenConfig;
+import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 
 public final class DependencyDownloader {
   private Fetch fetch;
 
   private DependencyDownloader(SmithyBuildExtensions extensions) throws ValidationException {
     fetch = Fetch.create();
-    toRepositories(extensions.getMavenRepositories()).forEach(repo -> fetch.addRepositories(repo));
-    toDependencies(extensions.getMavenDependencies()).forEach(dep -> fetch.addDependencies(dep));
+    MavenConfig config = extensions.getMavenConfig();
+    toRepositories(config).forEach(repo -> fetch.addRepositories(repo));
+    toDependencies(config).forEach(dep -> fetch.addDependencies(dep));
   }
 
-  private static List<Repository> toRepositories(List<String> repos) {
+  private static List<Repository> toRepositories(MavenConfig mavenConfig) {
     // TODO: We assume maven repos by default.
-    return repos.stream().map(MavenRepository::of).collect(Collectors.toList());
+    return mavenConfig.getRepositories().stream()
+            .map(repo -> repo.getUrl())
+            .map(MavenRepository::of)
+            .collect(Collectors.toList());
   }
 
-  private static List<Dependency> toDependencies(List<String> deps) throws ValidationException {
+  private static List<Dependency> toDependencies(MavenConfig mavenConfig) throws ValidationException {
     List<Dependency> lst = new LinkedList<Dependency>();
 
-    for (String dep : deps) {
+    for (String dep : mavenConfig.getDependencies()) {
       // TODO: we assume Maven by default
       String[] parts = dep.split(":");
       if (parts.length != 3) {

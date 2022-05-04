@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -15,20 +15,18 @@
 
 package software.amazon.smithy.lsp.ext;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import org.eclipse.lsp4j.CompletionItem;
+import org.junit.Test;
+import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
+import software.amazon.smithy.utils.MapUtils;
+import software.amazon.smithy.utils.SetUtils;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.eclipse.lsp4j.CompletionItem;
-import org.junit.Test;
-
-import software.amazon.smithy.utils.MapUtils;
-import software.amazon.smithy.utils.SetUtils;
+import static org.junit.Assert.assertEquals;
 
 public class CompletionTests {
 

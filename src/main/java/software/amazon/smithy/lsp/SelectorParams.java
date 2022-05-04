@@ -15,22 +15,18 @@
 
 package software.amazon.smithy.lsp;
 
-import org.eclipse.lsp4j.Diagnostic;
-import org.junit.Test;
-import software.amazon.smithy.model.validation.ValidationEvent;
+import org.eclipse.lsp4j.jsonrpc.validation.NonNull;
+import org.eclipse.lsp4j.util.Preconditions;
 
-import static org.junit.Assert.assertEquals;
-import static software.amazon.smithy.model.validation.Severity.WARNING;
+public class SelectorParams {
+    @NonNull
+    private String expression;
 
-public class ProtocolAdapterTests {
-	@Test
-	public void addIdToDiagnostic() throws Exception {
-		final ValidationEvent vEvent = ValidationEvent.builder()
-			.message("Ooops")
-			.id("should-show-up")
-			.severity(WARNING)
-			.build();
-		final Diagnostic actual = ProtocolAdapter.toDiagnostic(vEvent);
-		assertEquals("should-show-up: Ooops", actual.getMessage());
-	}
+    public SelectorParams(@NonNull final String selector) {
+        this.expression = Preconditions.checkNotNull(selector, "selector");
+    }
+
+    public String getExpression() {
+        return this.expression;
+    }
 }
