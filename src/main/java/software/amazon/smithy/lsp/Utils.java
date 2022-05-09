@@ -40,11 +40,7 @@ public final class Utils {
      * @return Returns the value of a specific type as a CompletableFuture.
      */
     public static <U> CompletableFuture<U> completableFuture(U value) {
-        Supplier<U> supplier = new Supplier<U>() {
-            public U get() {
-                return value;
-            }
-        };
+        Supplier<U> supplier = () -> value;
 
         return CompletableFuture.supplyAsync(supplier);
     }

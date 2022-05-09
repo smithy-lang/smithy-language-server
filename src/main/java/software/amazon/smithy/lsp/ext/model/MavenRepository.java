@@ -22,7 +22,7 @@ import software.amazon.smithy.utils.ToSmithyBuilder;
  * MavenRepository stored in a {@link MavenConfig}.
  */
 public final class MavenRepository implements ToSmithyBuilder<MavenRepository> {
-    private String url;
+    private final String url;
 
     private MavenRepository(Builder builder) {
         this.url = builder.url;

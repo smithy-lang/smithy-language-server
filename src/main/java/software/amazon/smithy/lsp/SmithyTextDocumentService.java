@@ -72,19 +72,19 @@ import software.amazon.smithy.model.validation.ValidationEvent;
 
 public class SmithyTextDocumentService implements TextDocumentService {
 
-    private final List<CompletionItem> baseCompletions = new ArrayList<CompletionItem>();
-    private Optional<LanguageClient> client = Optional.empty();
+    private final List<CompletionItem> baseCompletions = new ArrayList<>();
+    private Optional<LanguageClient> client;
     private final List<Location> noLocations = Collections.emptyList();
     private SmithyProject project;
-    private File temporaryFolder;
+    private final File temporaryFolder;
 
     // when files are edited, their contents will be persisted in memory and removed
     // on didSave or didClose
-    private Map<File, String> temporaryContents = new ConcurrentHashMap<>();
+    private final Map<File, String> temporaryContents = new ConcurrentHashMap<>();
 
-    // We use this function to has filepaths to the same location in temporary
+    // We use this function to hash filepaths to the same location in temporary
     // folder
-    private HashFunction hash = Hashing.murmur3_128();
+    private final HashFunction hash = Hashing.murmur3_128();
 
     /**
      * @param client Language Client to be used by text document service.
@@ -99,7 +99,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     public Optional<File> getRoot() {
-        return Optional.ofNullable(project).map(proj -> proj.getRoot());
+        return Optional.ofNullable(project).map(SmithyProject::getRoot);
     }
 
     /**
@@ -131,7 +131,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
     public void createProject(File root) {
         LspLog.println("Recreating project from " + root);
         SmithyBuildExtensions.Builder result = SmithyBuildExtensions.builder();
-        List<String> brokenFiles = new ArrayList<String>();
+        List<String> brokenFiles = new ArrayList<>();
 
         for (String file : Constants.BUILD_FILES) {
             File smithyBuild = Paths.get(root.getAbsolutePath(), file).toFile();
@@ -141,7 +141,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
                     result.merge(local);
                     LspLog.println("Loaded build extensions " + local + " from " + smithyBuild.getAbsolutePath());
                 } catch (Exception e) {
-                    LspLog.println("Failed to load config from" + smithyBuild + ": " + e.toString());
+                    LspLog.println("Failed to load config from" + smithyBuild + ": " + e);
                     brokenFiles.add(smithyBuild.toString());
                 }
             }
@@ -280,7 +280,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 Walker shapeWalker = new Walker(NeighborProviderIndex.of(model).getProvider());
                 Optional<ShapeId> target = shapeWalker.walkShapes(initialShape).stream()
                         .filter(shape -> !shape.isMemberShape())
-                        .map(shape -> shape.getId())
+                        .map(Shape::getId)
                         .filter(shape -> shape.getName().equals(found))
                         .findFirst();
                 // Use location on target, or else default to initial shape.
@@ -291,7 +291,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 // comment to its definition.
                 locations = project.getLocations().entrySet().stream()
                         .filter(entry -> entry.getKey().getName().equals(found))
-                        .map(entry -> entry.getValue())
+                        .map(Map.Entry::getValue)
                         .collect(Collectors.toList());
             }
             return Utils.completableFuture(Either.forLeft(locations));
@@ -402,7 +402,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
      */
     public List<PublishDiagnosticsParams> createPerFileDiagnostics(List<ValidationEvent> events, List<File> allFiles) {
         // URI is used because conversion toString deals with platform specific path separator
-        Map<URI, List<ValidationEvent>> byUri = new HashMap<URI, List<ValidationEvent>>();
+        Map<URI, List<ValidationEvent>> byUri = new HashMap<>();
 
         for (ValidationEvent ev : events) {
             URI finalUri;
@@ -425,7 +425,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
             if (byUri.containsKey(finalUri)) {
                 byUri.get(finalUri).add(ev);
             } else {
-                List<ValidationEvent> l = new ArrayList<ValidationEvent>();
+                List<ValidationEvent> l = new ArrayList<>();
                 l.add(ev);
                 byUri.put(finalUri, l);
             }
@@ -437,7 +437,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
             }
         });
 
-        List<PublishDiagnosticsParams> diagnostics = new ArrayList<PublishDiagnosticsParams>();
+        List<PublishDiagnosticsParams> diagnostics = new ArrayList<>();
 
         byUri.forEach((key, value) -> diagnostics.add(
             new PublishDiagnosticsParams(
@@ -490,7 +490,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 this.project = loadedModel.getRight();
             }
 
-            List<ValidationEvent> events = new ArrayList<ValidationEvent>();
+            List<ValidationEvent> events = new ArrayList<>();
             List<File> allFiles;
 
             if (temporary.isPresent()) {
@@ -532,15 +532,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     private void sendInfo(String msg) {
-        this.client.ifPresent(client -> {
-            client.showMessage(new MessageParams(MessageType.Info, msg));
-        });
+        this.client.ifPresent(client -> client.showMessage(new MessageParams(MessageType.Info, msg)));
     }
 
     private void sendError(String msg) {
-        this.client.ifPresent(client -> {
-            client.showMessage(new MessageParams(MessageType.Error, msg));
-        });
+        this.client.ifPresent(client -> client.showMessage(new MessageParams(MessageType.Error, msg)));
     }
 
 }

@@ -13,24 +13,25 @@
  * permissions and limitations under the License.
  */
 
-package software.amazon.smithy.lsp;
-
-import org.eclipse.lsp4j.Diagnostic;
-import org.junit.Test;
-import software.amazon.smithy.model.validation.ValidationEvent;
+package software.amazon.smithy.lsp.ext;
 
 import static org.junit.Assert.assertEquals;
 import static software.amazon.smithy.model.validation.Severity.WARNING;
 
+import org.eclipse.lsp4j.Diagnostic;
+import org.junit.Test;
+import software.amazon.smithy.lsp.ProtocolAdapter;
+import software.amazon.smithy.model.validation.ValidationEvent;
+
 public class ProtocolAdapterTests {
 	@Test
-	public void addIdToDiagnostic() throws Exception {
+	public void addIdToDiagnostic() {
 		final ValidationEvent vEvent = ValidationEvent.builder()
-			.message("Ooops")
+			.message("Oops")
 			.id("should-show-up")
 			.severity(WARNING)
 			.build();
 		final Diagnostic actual = ProtocolAdapter.toDiagnostic(vEvent);
-		assertEquals("should-show-up: Ooops", actual.getMessage());
+		assertEquals("should-show-up: Oops", actual.getMessage());
 	}
 }

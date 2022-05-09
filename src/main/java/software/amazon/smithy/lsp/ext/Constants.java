@@ -24,8 +24,6 @@ public final class Constants {
     public static final List<String> BUILD_FILES = Arrays.asList("build/smithy-dependencies.json", ".smithy.json",
             "smithy-build.json");
 
-    public static final List<String> BUILT_IN_TYPES = Arrays.asList("Blob", "Boolean", "String", "Byte", "Short",
-            "Integer", "Long", "Float", "Double", "BigInteger", "BigDecimal", "Timestamp", "Document");
     public static final List<String> KEYWORDS = Arrays.asList("bigDecimal", "bigInteger", "blob", "boolean", "byte",
             "create", "collectionOperations", "delete", "document", "double", "errors", "float", "identifiers", "input",
             "integer", "integer", "key", "list", "long", "map", "member", "metadata", "namespace", "operation",

@@ -31,12 +31,12 @@ import software.amazon.smithy.utils.ListUtils;
  * This log interface buffers the messages until the server receives information
  * about workspace root.
  * <p>
- * This helps placing the log messages into a file in the workspace, rather than
+ * This places the log messages into a file in the workspace, rather than
  * pre-defined location on filesystem.
  */
 public final class LspLog {
     private static FileWriter fw = null;
-    private static Optional<List<Object>> buffer = Optional.of(new ArrayList<Object>());
+    private static Optional<List<Object>> buffer = Optional.of(new ArrayList<>());
 
     private LspLog() {
     }
@@ -46,7 +46,7 @@ public final class LspLog {
      */
     public static void clearBuffer() {
         synchronized (buffer) {
-            buffer.ifPresent(c -> c.clear());
+            buffer.ifPresent(List::clear);
         }
     }
 
@@ -60,7 +60,7 @@ public final class LspLog {
     }
 
     /**
-     * Sets workspace foler for the logger.
+     * Sets workspace folder for the logger.
      * <p>
      * All the pending messages in the buffer will be flushed to the file created in
      * the workspace
@@ -71,7 +71,7 @@ public final class LspLog {
         try {
             fw = new FileWriter(Paths.get(folder.getAbsolutePath(), "/.smithy.lsp.log").toFile());
             synchronized (buffer) {
-                buffer.ifPresent(buf -> buf.forEach(line -> println(line)));
+                buffer.ifPresent(buf -> buf.forEach(LspLog::println));
                 buffer = Optional.empty();
             }
         } catch (IOException e) {
