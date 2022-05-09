@@ -46,7 +46,7 @@ import software.amazon.smithy.lsp.ext.ValidationException;
 
 public class SmithyLanguageServer implements LanguageServer, LanguageClientAware, SmithyProtocolExtensions {
 
-  private Optional<LanguageClient> client = Optional.empty();
+  private final Optional<LanguageClient> client = Optional.empty();
 
   private File workspaceRoot;
 
@@ -83,7 +83,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
         LspLog.setWorkspaceFolder(root);
         loadSmithyBuild(root);
       } catch (Exception e) {
-        LspLog.println("Error when loading workspace folder " + ws.toString() + ": " + e.toString());
+        LspLog.println("Error when loading workspace folder " + ws.toString() + ": " + e);
       }
     }
 
@@ -140,8 +140,8 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
       String contents = lines.stream().collect(Collectors.joining(System.lineSeparator()));
       return CompletableFuture.completedFuture(contents);
     } catch (IOException e) {
-      LspLog.println("Failed to resolve " + uri + " error: " + e.toString());
-      CompletableFuture<String> future = new CompletableFuture<String>();
+      LspLog.println("Failed to resolve " + uri + " error: " + e);
+      CompletableFuture<String> future = new CompletableFuture<>();
       future.completeExceptionally(e);
       return future;
     }

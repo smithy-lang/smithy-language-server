@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.DefinitionParams;
+import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
@@ -75,13 +76,13 @@ public class SmithyTextDocumentServiceTest {
 
             // When compiling broken file
             Set<String> filesWithDiagnostics = tds.recompile(broken, Optional.empty()).getRight().stream()
-                    .filter(pds -> (pds.getDiagnostics().size() > 0)).map(pds -> pds.getUri())
+                    .filter(pds -> (pds.getDiagnostics().size() > 0)).map(PublishDiagnosticsParams::getUri)
                     .collect(Collectors.toSet());
             assertEquals(SetUtils.of(uri(broken)), filesWithDiagnostics);
 
             // When compiling good file
             filesWithDiagnostics = tds.recompile(good, Optional.empty()).getRight().stream()
-                    .filter(pds -> (pds.getDiagnostics().size() > 0)).map(pds -> pds.getUri())
+                    .filter(pds -> (pds.getDiagnostics().size() > 0)).map(PublishDiagnosticsParams::getUri)
                     .collect(Collectors.toSet());
             assertEquals(SetUtils.of(uri(broken)), filesWithDiagnostics);
 
@@ -111,7 +112,7 @@ public class SmithyTextDocumentServiceTest {
 
             tds.didOpen(new DidOpenTextDocumentParams(textDocumentItem(broken, files.get(brokenFileName))));
 
-            // broken file has a diganostic published against it
+            // broken file has a diagnostic published against it
             assertEquals(1, fileDiagnostics(broken, client.diagnostics).size());
             assertEquals(ListUtils.of(DiagnosticSeverity.Error), getSeverities(broken, client.diagnostics));
             // To clear diagnostics correctly, we must *explicitly* publish an empty
@@ -126,7 +127,7 @@ public class SmithyTextDocumentServiceTest {
 
             tds.didSave(new DidSaveTextDocumentParams(new TextDocumentIdentifier(uri(broken))));
 
-            // broken file has a diganostic published against it
+            // broken file has a diagnostic published against it
             assertEquals(1, fileDiagnostics(broken, client.diagnostics).size());
             assertEquals(ListUtils.of(DiagnosticSeverity.Error), getSeverities(broken, client.diagnostics));
             // To clear diagnostics correctly, we must *explicitly* publish an empty
@@ -158,7 +159,7 @@ public class SmithyTextDocumentServiceTest {
             // OPEN
 
             tds.didChange(new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri(file1), 1),
-                    ListUtils.of(new TextDocumentContentChangeEvent("nmspect broken"))));
+                    ListUtils.of(new TextDocumentContentChangeEvent("inspect broken"))));
 
             // Only diagnostics for existing files are reported
             assertEquals(SetUtils.of(uri(file1), uri(file2)), SetUtils.copyOf(getUris(client.diagnostics)));
@@ -279,7 +280,7 @@ public class SmithyTextDocumentServiceTest {
         }
     }
 
-    private class StubClient implements LanguageClient {
+    private static class StubClient implements LanguageClient {
         public List<PublishDiagnosticsParams> diagnostics = new ArrayList<>();
         public List<MessageParams> shown = new ArrayList<>();
         public List<MessageParams> logged = new ArrayList<>();
@@ -322,7 +323,7 @@ public class SmithyTextDocumentServiceTest {
     }
 
     private Set<String> getUris(Collection<PublishDiagnosticsParams> diagnostics) {
-        return diagnostics.stream().map(uri -> uri.getUri()).collect(Collectors.toSet());
+        return diagnostics.stream().map(PublishDiagnosticsParams::getUri).collect(Collectors.toSet());
     }
 
     private List<PublishDiagnosticsParams> fileDiagnostics(File f, List<PublishDiagnosticsParams> diags) {
@@ -331,7 +332,7 @@ public class SmithyTextDocumentServiceTest {
 
     private List<DiagnosticSeverity> getSeverities(File f, List<PublishDiagnosticsParams> diags) {
         return fileDiagnostics(f, diags).stream()
-                .flatMap(pds -> pds.getDiagnostics().stream().map(d -> d.getSeverity())).collect(Collectors.toList());
+                .flatMap(pds -> pds.getDiagnostics().stream().map(Diagnostic::getSeverity)).collect(Collectors.toList());
     }
 
     private TextDocumentItem textDocumentItem(File f, String text) {

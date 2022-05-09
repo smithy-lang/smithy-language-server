@@ -20,7 +20,7 @@ import org.eclipse.lsp4j.util.Preconditions;
 
 public class SelectorParams {
     @NonNull
-    private String expression;
+    private final String expression;
 
     public SelectorParams(@NonNull final String selector) {
         this.expression = Preconditions.checkNotNull(selector, "selector");

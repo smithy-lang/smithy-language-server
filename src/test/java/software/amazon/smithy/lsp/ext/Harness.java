@@ -18,7 +18,7 @@ package software.amazon.smithy.lsp.ext;
 import com.google.common.io.Files;
 import java.io.File;
 import java.io.FileWriter;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -30,10 +30,10 @@ import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.utils.IoUtils;
 
 public class Harness implements AutoCloseable {
-  private File root;
-  private File temp;
-  private SmithyProject project;
-  private SmithyBuildExtensions config;
+  private final File root;
+  private final File temp;
+  private final SmithyProject project;
+  private final SmithyBuildExtensions config;
 
   private Harness(File root, File temporary, SmithyProject project, SmithyBuildExtensions config) {
     this.root = root;
@@ -74,11 +74,11 @@ public class Harness implements AutoCloseable {
   }
 
   public List<String> readFile(File file) throws Exception {
-    return Files.readLines(file, Charset.forName("UTF-8"));
+    return Files.readLines(file, StandardCharsets.UTF_8);
   }
 
   @Override
-  public void close() throws Exception {
+  public void close() {
     root.deleteOnExit();
   }
 

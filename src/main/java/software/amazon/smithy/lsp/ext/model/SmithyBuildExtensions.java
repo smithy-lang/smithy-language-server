@@ -77,8 +77,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
         public Builder merge(SmithyBuildExtensions other) {
             MavenConfig.Builder mavenConfigBuilder = maven.toBuilder();
 
-            List<String> dependencies = new ArrayList<>();
-            dependencies.addAll(maven.getDependencies());
+            List<String> dependencies = new ArrayList<>(maven.getDependencies());
             // Merge dependencies from other extension, preferring those defined on MavenConfig.
             if (other.getMavenConfig().getDependencies().isEmpty()) {
                 dependencies.addAll(other.mavenDependencies);
@@ -87,8 +86,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
             }
             mavenConfigBuilder.dependencies(dependencies);
 
-            List<MavenRepository> repositories = new ArrayList<>();
-            repositories.addAll(maven.getRepositories());
+            List<MavenRepository> repositories = new ArrayList<>(maven.getRepositories());
             // Merge repositories from other extension, preferring those defined on MavenConfig.
             if (other.getMavenConfig().getRepositories().isEmpty()) {
                 repositories.addAll(other.mavenRepositories.stream()
