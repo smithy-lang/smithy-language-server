@@ -15,18 +15,18 @@
 
 package software.amazon.smithy.lsp.ext;
 
-import org.eclipse.lsp4j.CompletionItem;
-import org.junit.Test;
-import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
-import software.amazon.smithy.utils.MapUtils;
-import software.amazon.smithy.utils.SetUtils;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import static org.junit.Assert.assertEquals;
+import org.eclipse.lsp4j.CompletionItem;
+import org.junit.Test;
+import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
+import software.amazon.smithy.utils.MapUtils;
+import software.amazon.smithy.utils.SetUtils;
 
 public class CompletionTests {
 
@@ -50,7 +50,7 @@ public class CompletionTests {
 
             DocumentPreamble barPreamble = Document.detectPreamble(hs.readFile(hs.file("bar/def1.smithy")));
             List<CompletionItem> itemsWithEdit2 = Completions.resolveImports(proj.getCompletions("Hello"), barPreamble);
-            assertEquals(null, itemsWithEdit2.get(0).getAdditionalTextEdits());
+            assertNull(itemsWithEdit2.get(0).getAdditionalTextEdits());
         }
     }
 

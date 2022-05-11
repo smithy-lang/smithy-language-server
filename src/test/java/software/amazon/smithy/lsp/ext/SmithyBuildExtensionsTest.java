@@ -24,6 +24,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 import org.junit.Test;
+import software.amazon.smithy.lsp.ext.model.MavenRepository;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 
 public class SmithyBuildExtensionsTest {
@@ -38,7 +39,7 @@ public class SmithyBuildExtensionsTest {
 
         assertEquals(ImmutableList.of("d1", "d2"), loadedMavenConfig.getMavenConfig().getDependencies());
         assertEquals(ImmutableList.of("r1", "r2"), loadedMavenConfig.getMavenConfig().getRepositories()
-                .stream().map(repo -> repo.getUrl()).collect(Collectors.toList()));
+                .stream().map(MavenRepository::getUrl).collect(Collectors.toList()));
     }
 
     @Test
@@ -48,7 +49,7 @@ public class SmithyBuildExtensionsTest {
 
         assertEquals(ImmutableList.of("a1", "a2"), loaded.getMavenConfig().getDependencies());
         assertEquals(ImmutableList.of("bla", "ta"), loaded.getMavenConfig().getRepositories()
-                .stream().map(repo -> repo.getUrl()).collect(Collectors.toList()));
+                .stream().map(MavenRepository::getUrl).collect(Collectors.toList()));
     }
 
     @Test
@@ -76,7 +77,7 @@ public class SmithyBuildExtensionsTest {
         assertNotNull(loadedNoArtifacts.getMavenConfig());
         assertEquals(ImmutableList.of(), loadedNoArtifacts.getMavenConfig().getDependencies());
         assertEquals(ImmutableList.of("r1", "r2"), loadedNoArtifacts.getMavenConfig().getRepositories()
-                .stream().map(repo -> repo.getUrl()).collect(Collectors.toList()));
+                .stream().map(MavenRepository::getUrl).collect(Collectors.toList()));
     }
 
     @Test
@@ -87,9 +88,10 @@ public class SmithyBuildExtensionsTest {
         SmithyBuildExtensions loadedConflictingConfig = SmithyBuildLoader.load(DUMMY_PATH, conflictingConfig);
         assertEquals(ImmutableList.of("d1", "d2"), loadedConflictingConfig.getMavenConfig().getDependencies());
         assertEquals(ImmutableList.of("r1", "r2"), loadedConflictingConfig.getMavenConfig().getRepositories()
-                .stream().map(repo -> repo.getUrl()).collect(Collectors.toList()));
+                .stream().map(MavenRepository::getUrl).collect(Collectors.toList()));
     }
 
+    @SuppressWarnings("deprecation")
     @Test
     public void merging() {
         SmithyBuildExtensions.Builder builder = SmithyBuildExtensions.builder();
@@ -102,7 +104,7 @@ public class SmithyBuildExtensionsTest {
 
         assertEquals(ImmutableList.of("d1", "d2", "hello", "world"), result.getMavenConfig().getDependencies());
         assertEquals(ImmutableList.of("r1", "r2", "hi", "there"), result.getMavenConfig().getRepositories()
-                .stream().map(repo -> repo.getUrl()).collect(Collectors.toList()));
+                .stream().map(MavenRepository::getUrl).collect(Collectors.toList()));
         assertEquals(ImmutableList.of("i1", "i2", "i3", "i4"), result.getImports());
     }
 }

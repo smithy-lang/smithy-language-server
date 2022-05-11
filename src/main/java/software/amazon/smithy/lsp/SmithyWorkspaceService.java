@@ -25,7 +25,7 @@ import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.LspLog;
 
 public class SmithyWorkspaceService implements WorkspaceService {
-    private Optional<SmithyTextDocumentService> tds = Optional.empty();
+    private final Optional<SmithyTextDocumentService> tds;
 
     public SmithyWorkspaceService(Optional<SmithyTextDocumentService> tds) {
         this.tds = tds;
@@ -41,11 +41,7 @@ public class SmithyWorkspaceService implements WorkspaceService {
 
         if (buildFilesChanged) {
             LspLog.println("Build files changed, rebuilding the project");
-            this.tds.ifPresent(tds -> {
-                tds.getRoot().ifPresent(root -> {
-                    tds.createProject(root);
-                });
-            });
+            this.tds.ifPresent(tds -> tds.getRoot().ifPresent(tds::createProject));
         }
 
     }

@@ -17,7 +17,6 @@ package software.amazon.smithy.lsp.ext;
 
 import coursierapi.Dependency;
 import coursierapi.Fetch;
-import coursierapi.MavenRepository;
 import coursierapi.Repository;
 import coursierapi.error.CoursierError;
 import java.io.File;
@@ -26,28 +25,30 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 import software.amazon.smithy.lsp.ext.model.MavenConfig;
+import software.amazon.smithy.lsp.ext.model.MavenRepository;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 
+
 public final class DependencyDownloader {
-  private Fetch fetch;
+  private final Fetch fetch;
 
   private DependencyDownloader(SmithyBuildExtensions extensions) throws ValidationException {
     fetch = Fetch.create();
     MavenConfig config = extensions.getMavenConfig();
-    toRepositories(config).forEach(repo -> fetch.addRepositories(repo));
-    toDependencies(config).forEach(dep -> fetch.addDependencies(dep));
+    toRepositories(config).forEach(fetch::addRepositories);
+    toDependencies(config).forEach(fetch::addDependencies);
   }
 
   private static List<Repository> toRepositories(MavenConfig mavenConfig) {
     // TODO: We assume maven repos by default.
     return mavenConfig.getRepositories().stream()
-            .map(repo -> repo.getUrl())
-            .map(MavenRepository::of)
+            .map(MavenRepository::getUrl)
+            .map(coursierapi.MavenRepository::of)
             .collect(Collectors.toList());
   }
 
   private static List<Dependency> toDependencies(MavenConfig mavenConfig) throws ValidationException {
-    List<Dependency> lst = new LinkedList<Dependency>();
+    List<Dependency> lst = new LinkedList<>();
 
     for (String dep : mavenConfig.getDependencies()) {
       // TODO: we assume Maven by default

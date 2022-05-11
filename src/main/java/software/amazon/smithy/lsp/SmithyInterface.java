@@ -20,8 +20,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Collection;
-import java.util.List;
-import java.util.stream.Collectors;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.model.Model;
@@ -47,8 +45,7 @@ public final class SmithyInterface {
     try {
       Model.Builder builder = Model.builder();
 
-      List<URL> urls = externalJars.stream().map(SmithyInterface::fileToUrl).collect(Collectors.toList());
-      URL[] urlArray = urls.toArray(new URL[urls.size()]);
+      URL[] urlArray = externalJars.stream().map(SmithyInterface::fileToUrl).toArray(URL[]::new);
 
       if (urlArray.length > 0) {
         // Loading the model just from upstream dependencies, in isolation, and adding
