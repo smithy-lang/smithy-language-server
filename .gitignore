@@ -27,3 +27,4 @@ bin
 *.smithy
 !/src/test/resources/**/*.smithy
 .ammonite
+out/
