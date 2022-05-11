@@ -153,7 +153,9 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     if (this.tds.isPresent()) {
       Either<Exception, List<Location>> result = this.tds.get().runSelector(selectorParams.getExpression());
       if (result.isRight()) {
-        return CompletableFuture.completedFuture(result.getRight());
+        List<Location> locations = result.getRight();
+        LspLog.println(String.format("Selector command found %s matching shapes.", locations.size()));
+        return CompletableFuture.completedFuture(locations);
       } else {
         LspLog.println("Resolve model validation errors and re-run selector command: " + result.getLeft());
       }
