@@ -194,6 +194,14 @@ public class SmithyTextDocumentServiceTest {
             DefinitionParams preludeTargetParams = definitionParams(mainTdi, 36, 12);
             Location preludeTargetLocation = tds.definition(preludeTargetParams).get().getLeft().get(0);
 
+            // Resolves via top-level trait location in prelude.
+            DefinitionParams preludeTraitParams = definitionParams(mainTdi, 25, 3);
+            Location preludeTraitLocation = tds.definition(preludeTraitParams).get().getLeft().get(0);
+
+            // Resolves via member-applied trait location in prelude.
+            DefinitionParams preludeMemberTraitParams = definitionParams(mainTdi, 59, 10);
+            Location preludeMemberTraitLocation = tds.definition(preludeMemberTraitParams).get().getLeft().get(0);
+
             // Resolves to current location.
             DefinitionParams selfParams = definitionParams(mainTdi, 36, 0);
             Location selfLocation = tds.definition(selfParams).get().getLeft().get(0);
@@ -231,6 +239,8 @@ public class SmithyTextDocumentServiceTest {
             correctLocation(idLocation, modelFilename, 79, 0, 79, 11);
             correctLocation(readLocation, modelFilename, 51, 0, 55, 1);
             assertTrue(preludeTargetLocation.getUri().endsWith("prelude.smithy"));
+            assertTrue(preludeTraitLocation.getUri().endsWith("prelude.smithy"));
+            assertTrue(preludeMemberTraitLocation.getUri().endsWith("prelude.smithy"));
             assertTrue(noMatchLocationList.isEmpty());
         }
     }

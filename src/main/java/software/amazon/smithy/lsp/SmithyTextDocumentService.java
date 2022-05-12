@@ -283,6 +283,15 @@ public class SmithyTextDocumentService implements TextDocumentService {
                         .map(Shape::getId)
                         .filter(shape -> shape.getName().equals(found))
                         .findFirst();
+                // If none of the neighbors match the token, check traits applied to members of the shape.
+                if (!target.isPresent()) {
+                    target = shapeWalker.walkShapes(initialShape).stream()
+                            .filter(shape -> shape.isMemberShape())
+                            .flatMap(shape -> shape.getAllTraits().values().stream())
+                            .map(trait -> trait.toShapeId())
+                            .filter(shapeId -> shapeId.getName().equals(found))
+                            .findFirst();
+                }
                 // Use location on target, or else default to initial shape.
                 locations = Collections.singletonList(project.getLocations().get(target.orElse(initialShapeId.get())));
             } else {
