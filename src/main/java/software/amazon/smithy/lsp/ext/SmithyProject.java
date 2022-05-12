@@ -223,14 +223,18 @@ public final class SmithyProject {
                     endPosition = getEndPosition(currentMemberEndMarker, lines);
                     // Advance the member end marker on any traits on the current member, so that the next member
                     // location starts in the right place.
-                    List<Trait> traits = new ArrayList<>(shape.getAllTraits().values());
+                    // TODO: Handle traits being applied to shapes before shape definition in file.
+                    List<Trait> traits = shape.getAllTraits().values().stream()
+                            .filter(trait -> !trait.getSourceLocation().equals(SourceLocation.NONE))
+                            .filter(trait -> trait.getSourceLocation().getFilename().equals(modelFile))
+                            .collect(Collectors.toList());
                     if (!traits.isEmpty()) {
                         traits.sort(new SourceLocationSorter());
                         currentMemberEndMarker = traits.get(0).getSourceLocation().getLine();
                     }
                     memberEndMarker = currentMemberEndMarker - 1;
                 } else {
-                    endMarker = advanceMarkerOnNonMemberShapes(startPosition, shape, lines);
+                    endMarker = advanceMarkerOnNonMemberShapes(startPosition, shape, lines, modelFile);
                 }
                 Location location =  new Location(getUri(modelFile), new Range(startPosition, endPosition));
                 locations.put(shape.getId(), location);
@@ -239,11 +243,16 @@ public final class SmithyProject {
         return locations;
     }
 
-    private static int advanceMarkerOnNonMemberShapes(Position startPosition, Shape shape, List<String> fileLines) {
+    private static int advanceMarkerOnNonMemberShapes(Position startPosition, Shape shape, List<String> fileLines,
+                                                      String modelFile) {
         // When handling non-member shapes, advance the end marker for traits and comments above the current
         // shape.
         int marker = startPosition.getLine();
-        List<Trait> traits = new ArrayList<>(shape.getAllTraits().values());
+        // TODO: Handle traits being applied to shapes before shape definition in file.
+        List<Trait> traits = shape.getAllTraits().values().stream()
+                .filter(trait -> !trait.getSourceLocation().equals(SourceLocation.NONE))
+                .filter(trait -> trait.getSourceLocation().getFilename().equals(modelFile))
+                .collect(Collectors.toList());
         // If the shape has traits, advance the end marker again.
         if (!traits.isEmpty()) {
             // TODO: Replace with Comparator when this class is removed.
