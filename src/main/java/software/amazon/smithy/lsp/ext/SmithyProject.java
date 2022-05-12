@@ -58,7 +58,7 @@ public final class SmithyProject {
     private final ValidatedResult<Model> model;
     private final File root;
 
-    private SmithyProject(List<Path> imports, List<File> smithyFiles, List<File> externalJars, File root,
+    SmithyProject(List<Path> imports, List<File> smithyFiles, List<File> externalJars, File root,
             ValidatedResult<Model> model) {
         this.imports = imports;
         this.root = root;
