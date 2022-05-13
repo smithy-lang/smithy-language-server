@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -32,7 +33,13 @@ import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.junit.Test;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
+import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.StringShape;
+import software.amazon.smithy.model.traits.DocumentationTrait;
+import software.amazon.smithy.model.traits.SinceTrait;
+import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.MapUtils;
 
@@ -96,6 +103,36 @@ public class SmithyProjectTest {
     }
 
     @Test
+    public void definitionLocationsEmptySourceLocationsOnTrait() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+        Path modelMain = baseDir.resolve("empty-source-location-trait.smithy");
+
+        StringShape stringShapeBar = StringShape.builder()
+                .id("ns.foo#Bar")
+                .source(new SourceLocation(modelMain.toString(), 5, 1))
+                .build();
+
+        StringShape stringShapeBaz = StringShape.builder()
+                .id("ns.foo#Baz")
+                .addTrait(new DocumentationTrait("docs", SourceLocation.NONE))
+                .addTrait(new SinceTrait("2022-05-12", new SourceLocation(modelMain.toString(), 7, 1)))
+                .source(new SourceLocation(modelMain.toString(), 8, 1))
+                .build();
+
+        Model unvalidatedModel = Model.builder()
+                .addShape(stringShapeBar)
+                .addShape(stringShapeBaz)
+                .build();
+        ValidatedResult<Model> model = Model.assembler().addModel(unvalidatedModel).assemble();
+        SmithyProject project = new SmithyProject(Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList(), baseDir.toFile(), model);
+        Map<ShapeId, Location> locationMap = project.getLocations();
+
+        correctLocation(locationMap, "ns.foo#Bar", 4, 0, 4, 10);
+        correctLocation(locationMap, "ns.foo#Baz", 7, 0, 7, 10);
+    }
+
+    @Test
     public void shapeIdFromLocation() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
         Path modelMain = baseDir.resolve("main.smithy");
@@ -107,7 +144,7 @@ public class SmithyProjectTest {
             String uri = hs.file("main.smithy").toString();
             String testUri = hs.file("test.smithy").toString();
 
-            assertFalse(project.getShapeIdFromLocation("empty.smithy", new Position(0, 0)).isPresent());
+            assertFalse(project.getShapeIdFromLocation("non-existent-model-file.smithy", new Position(0, 0)).isPresent());
             assertFalse(project.getShapeIdFromLocation(uri, new Position(0, 0)).isPresent());
             // Position on shape start line, but before char start
             assertFalse(project.getShapeIdFromLocation(uri, new Position(17, 0)).isPresent());
