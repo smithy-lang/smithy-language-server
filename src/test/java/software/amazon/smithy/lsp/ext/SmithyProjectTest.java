@@ -105,7 +105,7 @@ public class SmithyProjectTest {
     @Test
     public void definitionLocationsEmptySourceLocationsOnTrait() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
-        Path modelMain = baseDir.resolve("empty.smithy");
+        Path modelMain = baseDir.resolve("empty-source-location-trait.smithy");
 
         StringShape stringShapeBar = StringShape.builder()
                 .id("ns.foo#Bar")
@@ -144,7 +144,7 @@ public class SmithyProjectTest {
             String uri = hs.file("main.smithy").toString();
             String testUri = hs.file("test.smithy").toString();
 
-            assertFalse(project.getShapeIdFromLocation("empty.smithy", new Position(0, 0)).isPresent());
+            assertFalse(project.getShapeIdFromLocation("non-existent-model-file.smithy", new Position(0, 0)).isPresent());
             assertFalse(project.getShapeIdFromLocation(uri, new Position(0, 0)).isPresent());
             // Position on shape start line, but before char start
             assertFalse(project.getShapeIdFromLocation(uri, new Position(17, 0)).isPresent());
