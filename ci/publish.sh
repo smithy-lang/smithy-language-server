@@ -14,4 +14,11 @@ mill lsp.publish \
       --release true \
       --readTimeout 600000 \
       --awaitTimeout 600000 \
-      --gpgArgs --passphrase=$PGP_PASSPHRASE,--no-tty,--pinentry-mode,loopback,--batch,--yes,-a,-b
+      --gpgArgs --passphrase=$PGP_PASSPHRASE \
+      --gpgArgs --no-tty \
+      --gpgArgs --pinentry-mode \
+      --gpgArgs loopback \
+      --gpgArgs --batch \
+      --gpgArgs --yes \
+      --gpgArgs -a \
+      --gpgArgs -b
