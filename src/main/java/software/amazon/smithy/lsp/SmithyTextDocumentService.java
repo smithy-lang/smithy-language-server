@@ -34,6 +34,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
@@ -276,12 +277,18 @@ public class SmithyTextDocumentService implements TextDocumentService {
             if (initialShapeId.isPresent()) {
                 Model model = project.getModel().unwrap();
                 Shape initialShape = model.getShape(initialShapeId.get()).get();
-                // Find first neighbor (non-member) with name that matches token.
+                // Find the first non-member neighbor shape or trait applied to a member whose name matches the token.
                 Walker shapeWalker = new Walker(NeighborProviderIndex.of(model).getProvider());
                 Optional<ShapeId> target = shapeWalker.walkShapes(initialShape).stream()
-                        .filter(shape -> !shape.isMemberShape())
-                        .map(Shape::getId)
-                        .filter(shape -> shape.getName().equals(found))
+                        .flatMap(shape -> {
+                            if (shape.isMemberShape()) {
+                                return shape.getAllTraits().values().stream()
+                                        .map(trait -> trait.toShapeId());
+                            } else {
+                                return Stream.of(shape.getId());
+                            }
+                        })
+                        .filter(shapeId -> shapeId.getName().equals(found))
                         .findFirst();
                 // Use location on target, or else default to initial shape.
                 locations = Collections.singletonList(project.getLocations().get(target.orElse(initialShapeId.get())));
