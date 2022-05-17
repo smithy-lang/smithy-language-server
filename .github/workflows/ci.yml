@@ -39,7 +39,7 @@ jobs:
       - name: Setup mill
         uses: jodersky/setup-mill@master
         with:
-          mill-version: 0.9.10
+          mill-version: 0.10.3
 
       - name: Cache mill
         uses: coursier/cache-action@v6
