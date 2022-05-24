@@ -60,16 +60,7 @@ public final class SmithyInterface {
         builder.addShapes(upstreamModel);
       }
 
-      ModelAssembler assembler;
-      if (urlArray.length > 0) {
-        URLClassLoader validatorClassLoader = new URLClassLoader(urlArray, SmithyInterface.class.getClassLoader());
-        assembler = Model.assembler(validatorClassLoader);
-      } else {
-        assembler = Model.assembler();
-      }
-
-      // Adding the model that was loaded from upstream dependencies.
-      assembler.addModel(builder.build());
+      ModelAssembler assembler = Model.assembler().addModel(builder.build());
 
       for (File file : files) {
         assembler = assembler.addImport(file.getAbsolutePath());
