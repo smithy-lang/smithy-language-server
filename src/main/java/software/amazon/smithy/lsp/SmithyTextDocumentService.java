@@ -65,11 +65,13 @@ import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.knowledge.NeighborProviderIndex;
+import software.amazon.smithy.model.loader.ParserUtils;
 import software.amazon.smithy.model.neighbor.Walker;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
+import software.amazon.smithy.utils.SimpleParser;
 
 public class SmithyTextDocumentService implements TextDocumentService {
 
@@ -152,7 +154,6 @@ public class SmithyTextDocumentService implements TextDocumentService {
             createProject(result.build(), root);
         } else {
             sendError("Failed to load the build, following files have problems: \n" + String.join("\n", brokenFiles));
-
         }
     }
 
@@ -161,25 +162,130 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     @Override
-    public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams position) {
-        LspLog.println("Asking to complete " + position + " in class " + position.getTextDocument().getClass());
+    public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams params) {
+        LspLog.println("Asking to complete " + params + " in class " + params.getTextDocument().getClass());
 
         try {
-            String documentUri = position.getTextDocument().getUri();
-            String found = findToken(documentUri, position.getPosition());
+            String documentUri = params.getTextDocument().getUri();
+            String token = findToken(documentUri, params.getPosition());
             DocumentPreamble preamble = Document.detectPreamble(textBufferContents(documentUri));
-            LspLog.println("Token for completion: " + found + " in class " + position.getTextDocument().getClass());
 
-            List<CompletionItem> items = Completions.resolveImports(project.getCompletions(found), preamble);
+            boolean isTrait = isTrait(documentUri, params.getPosition());
+            Optional<ShapeId> target = Optional.empty();
+            if (isTrait) {
+                target = getTraitTarget(documentUri, params.getPosition(), preamble.getCurrentNamespace());
+            }
 
+            List<CompletionItem> items = Completions.resolveImports(project.getCompletions(token, isTrait, target),
+                    preamble);
             LspLog.println("Completion items: " + items);
 
             return Utils.completableFuture(Either.forLeft(items));
         } catch (Exception e) {
             LspLog.println(
-                    "Failed to identify token for completion in " + position.getTextDocument().getUri() + ": " + e);
+                    "Failed to identify token for completion in " + params.getTextDocument().getUri() + ": " + e);
         }
         return Utils.completableFuture(Either.forLeft(baseCompletions));
+    }
+
+    // Determine the target of a trait, if present.
+    private Optional<ShapeId> getTraitTarget(String documentUri, Position position, Optional<String> namespace)
+            throws IOException {
+        List<String> contents = textBufferContents(documentUri);
+        String currentLine = contents.get(position.getLine()).trim();
+        if (currentLine.startsWith("apply")) {
+            return getApplyStatementTarget(currentLine, namespace);
+        }
+
+        // Iterate through the rest of the model file, skipping docs and other traits to get trait's target.
+        for (int i = position.getLine() + 1; i < contents.size(); i++) {
+            String line = contents.get(i).trim();
+            // If an empty line is encountered, assume the trait's target has not yet been written.
+            if (line.equals("")) {
+                return Optional.empty();
+            // Skip comments lines
+            } else if (line.startsWith("//")) {
+            // Skip other traits.
+            } else if (line.startsWith("@")) {
+                // Jump to end of trait.
+                i = getEndOfTrait(i, contents);
+            } else {
+                // Offset the target shape position by accounting for leading whitespace.
+                String originalLine = contents.get(i);
+                int offset = 1;
+                while (originalLine.charAt(offset) == ' ') {
+                    offset++;
+                }
+                return project.getShapeIdFromLocation(documentUri, new Position(i, offset));
+            }
+        }
+        return Optional.empty();
+    }
+
+    // Determine target shape from an apply statement.
+    private Optional<ShapeId> getApplyStatementTarget(String applyStatement, Optional<String> namespace) {
+        SimpleParser parser = new SimpleParser(applyStatement);
+        parser.expect('a');
+        parser.expect('p');
+        parser.expect('p');
+        parser.expect('l');
+        parser.expect('y');
+        parser.ws();
+        String name = ParserUtils.parseShapeId(parser);
+        if (namespace.isPresent()) {
+            return Optional.of(ShapeId.fromParts(namespace.get(), name));
+        }
+        return Optional.empty();
+    }
+
+    // Find the line where the trait ends.
+    private int getEndOfTrait(int lineNumber, List<String> contents) {
+        String line = contents.get(lineNumber);
+        if (line.contains("(")) {
+            if (hasClosingParen(line)) {
+                return lineNumber;
+            }
+            for (int i = lineNumber + 1; i < contents.size(); i++) {
+                String nextLine = contents.get(i).trim();
+                if (hasClosingParen(nextLine)) {
+                    return i;
+                }
+            }
+        }
+        return lineNumber;
+    }
+
+    // Determine if the line has an unquoted closing parenthesis.
+    private boolean hasClosingParen(String line) {
+        boolean quote = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '"' && !quote) {
+                quote = true;
+            } else if (c == '"' && quote) {
+                quote = false;
+            }
+
+            if (c == ')' && !quote) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Work backwards from current position to determine if position is part of a trait.
+    private boolean isTrait(String documentUri, Position position) throws IOException {
+        String line = getLine(textBufferContents(documentUri), position);
+        for (int i = position.getCharacter() - 1; i >= 0; i--) {
+            char c = line.charAt(i);
+            if (c == '@') {
+                return true;
+            }
+            if (c == ' ') {
+                return false;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -259,6 +365,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
         return beforeAcc.reverse().append(afterAcc).toString();
     }
 
+    private String getLine(List<String> lines, Position position) {
+        return lines.get(position.getLine());
+    }
+
     @Override
     public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(
             DefinitionParams params) {
@@ -315,8 +425,6 @@ public class SmithyTextDocumentService implements TextDocumentService {
     public void didChange(DidChangeTextDocumentParams params) {
         File original = fileUri(params.getTextDocument());
         File tempFile = null;
-
-        // LspLog.println("Change params: " + params);
 
         try {
             if (params.getContentChanges().size() > 0) {
