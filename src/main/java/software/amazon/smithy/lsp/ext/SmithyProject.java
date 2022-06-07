@@ -106,8 +106,9 @@ public final class SmithyProject {
         return this.smithyFiles;
     }
 
-    public List<SmithyCompletionItem> getCompletions(String token) {
-        return this.model.getResult().map(model -> Completions.find(model, token)).orElse(Collections.emptyList());
+    public List<SmithyCompletionItem> getCompletions(String token, boolean isTrait, Optional<ShapeId> target) {
+        return this.model.getResult().map(model -> Completions.find(model, token, isTrait, target))
+                .orElse(Collections.emptyList());
     }
 
     public Map<ShapeId, Location> getLocations() {
