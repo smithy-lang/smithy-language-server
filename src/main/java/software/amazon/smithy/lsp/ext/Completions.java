@@ -62,32 +62,22 @@ public final class Completions {
      *
      * @param model Smithy model
      * @param token token
-     * @param isTrait boolean
+     * @param isTraitShapeId boolean
      * @param target Optional ShapeId of the target trait target
      * @return list of completion items
      */
-    public static List<SmithyCompletionItem> find(Model model, String token, boolean isTrait,
+    public static List<SmithyCompletionItem> find(Model model, String token, boolean isTraitShapeId,
                                                   Optional<ShapeId> target) {
         Map<String, SmithyCompletionItem> comps = new HashMap<>();
         String lcase = token.toLowerCase();
 
         Set<ShapeId> shapeIdSet;
-        // If the token is part of a trait statement, filter the set to trait shapes which can be applied to the shape
+        // If the token is part of a trait shapeId, filter the set to trait shapes which can be applied to the shape
         // that the trait targets.
-        if (isTrait) {
-            shapeIdSet = model.shapes()
-                    .filter(shape -> shape.hasTrait(ShapeId.from("smithy.api#trait")))
-                    .filter(shape -> {
-                        if (!target.isPresent()) {
-                            return true;
-                        }
-                        return shape.getTrait(TraitDefinition.class).get().getSelector().shapes(model)
-                                .anyMatch(matchingShape -> matchingShape.getId().equals(target.get()));
-                    })
-                    .map(shape -> shape.getId())
-                    .collect(Collectors.toSet());
+        if (isTraitShapeId) {
+            shapeIdSet = getTraitShapeIdSet(model, target);
         } else {
-            // Otherwise, use all shapes in the as potential completions.
+            // Otherwise, use all shapes in model the as potential completions.
             shapeIdSet = model.getShapeIds();
         }
 
@@ -96,7 +86,7 @@ public final class Completions {
                 if (shapeId.getName().toLowerCase().startsWith(lcase) && !comps.containsKey(shapeId.getName())) {
                     String name = shapeId.getName();
                     String namespace = shapeId.getNamespace();
-                    if (isTrait) {
+                    if (isTraitShapeId) {
                         Shape shape = model.expectShape(shapeId);
                         List<CompletionItem> completions = createTraitCompletions(shape, model,
                                 CompletionItemKind.Class);
@@ -111,7 +101,7 @@ public final class Completions {
                 }
             });
             KEYWORD_COMPLETIONS.forEach(kw -> {
-                if (!isTrait && kw.getCompletionItem().getLabel().toLowerCase().startsWith(lcase)
+                if (!isTraitShapeId && kw.getCompletionItem().getLabel().toLowerCase().startsWith(lcase)
                         && !comps.containsKey(kw.getCompletionItem().getLabel())) {
                     comps.put(kw.getCompletionItem().getLabel(), kw);
                 }
@@ -149,6 +139,21 @@ public final class Completions {
 
             return result;
         }).collect(Collectors.toList());
+    }
+
+    // Get set of trait shapes from model that can be applied to an optional shapeId.
+    private static Set<ShapeId> getTraitShapeIdSet(Model model, Optional<ShapeId> target) {
+        return model.shapes()
+                .filter(shape -> shape.hasTrait(ShapeId.from("smithy.api#trait")))
+                .filter(shape -> {
+                    if (!target.isPresent()) {
+                        return true;
+                    }
+                    return shape.expectTrait(TraitDefinition.class).getSelector().shapes(model)
+                            .anyMatch(matchingShape -> matchingShape.getId().equals(target.get()));
+                })
+                .map(shape -> shape.getId())
+                .collect(Collectors.toSet());
     }
 
     private static CompletionItem createCompletion(String s, CompletionItemKind kind) {

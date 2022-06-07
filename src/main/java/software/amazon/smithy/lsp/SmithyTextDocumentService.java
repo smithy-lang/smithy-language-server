@@ -170,13 +170,14 @@ public class SmithyTextDocumentService implements TextDocumentService {
             String token = findToken(documentUri, params.getPosition());
             DocumentPreamble preamble = Document.detectPreamble(textBufferContents(documentUri));
 
-            boolean isTrait = isTrait(documentUri, params.getPosition());
+            boolean isTraitShapeId = isTraitShapeId(documentUri, params.getPosition());
             Optional<ShapeId> target = Optional.empty();
-            if (isTrait) {
+            if (isTraitShapeId) {
                 target = getTraitTarget(documentUri, params.getPosition(), preamble.getCurrentNamespace());
             }
 
-            List<CompletionItem> items = Completions.resolveImports(project.getCompletions(token, isTrait, target),
+            List<CompletionItem> items = Completions.resolveImports(project.getCompletions(token, isTraitShapeId,
+                            target),
                     preamble);
             LspLog.println("Completion items: " + items);
 
@@ -273,8 +274,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
         return false;
     }
 
-    // Work backwards from current position to determine if position is part of a trait.
-    private boolean isTrait(String documentUri, Position position) throws IOException {
+    // Work backwards from current position to determine if position is part of a trait shapeId.
+    private boolean isTraitShapeId(String documentUri, Position position) throws IOException {
         String line = getLine(textBufferContents(documentUri), position);
         for (int i = position.getCharacter() - 1; i >= 0; i--) {
             char c = line.charAt(i);
