@@ -26,12 +26,8 @@ import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.TextEdit;
 import software.amazon.smithy.model.Model;
-import software.amazon.smithy.model.shapes.BigDecimalShape;
-import software.amazon.smithy.model.shapes.BigIntegerShape;
 import software.amazon.smithy.model.shapes.BlobShape;
 import software.amazon.smithy.model.shapes.BooleanShape;
-import software.amazon.smithy.model.shapes.DoubleShape;
-import software.amazon.smithy.model.shapes.FloatShape;
 import software.amazon.smithy.model.shapes.ListShape;
 import software.amazon.smithy.model.shapes.MapShape;
 import software.amazon.smithy.model.shapes.MemberShape;
@@ -208,16 +204,6 @@ public final class Completions {
         }
 
         @Override
-        public String bigDecimalShape(BigDecimalShape shape) {
-            return "\"\"";
-        }
-
-        @Override
-        public String bigIntegerShape(BigIntegerShape shape) {
-            return "\"\"";
-        }
-
-        @Override
         public String blobShape(BlobShape shape) {
             return "\"\"";
         }
@@ -225,16 +211,6 @@ public final class Completions {
         @Override
         public String booleanShape(BooleanShape shape) {
             return "true|false";
-        }
-
-        @Override
-        public String doubleShape(DoubleShape shape) {
-            return "\"\"";
-        }
-
-        @Override
-        public String floatShape(FloatShape shape) {
-            return "\"\"";
         }
 
         @Override

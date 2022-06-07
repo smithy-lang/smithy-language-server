@@ -94,8 +94,8 @@ public class CompletionsTest {
             // Structure trait with zero required members and default.
             assertEquals(SetUtils.of("trait", "trait()"), completeNames(proj, "trai", true, "test#Foo"));
             // Completions for each supported node value type.
-            assertEquals(SetUtils.of("test(blob: \"\", bool: true|false, short: , integer: , long: , float: \"\"," +
-                            " double: \"\", bigDecimal: \"\", bigInteger: \"\", string: \"\", timestamp: \"\", list: []," +
+            assertEquals(SetUtils.of("test(blob: \"\", bool: true|false, short: , integer: , long: , float: ," +
+                            " double: , bigDecimal: , bigInteger: , string: \"\", timestamp: \"\", list: []," +
                             " set: [], map: {}, struct: {nested: {nestedMember: \"\"}}, union: {})", "test()"),
                     completeNames(proj, "test", true, "test#Foo"));
             // Limit completions to traits that can be applied to target shape.
