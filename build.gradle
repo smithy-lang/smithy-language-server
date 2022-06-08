@@ -72,6 +72,7 @@ allprojects {
     apply plugin: "signing"
     group = "software.amazon.smithy"
     version = "0.1.0"
+    description = "Language Server Protocol implementation for Smithy"
 }
 
 repositories {
@@ -94,7 +95,7 @@ publishing {
 
     publications {
         mavenJava(MavenPublication) {
-            groupId = "software.amazon.smithy"
+            groupId = project.group
             artifactId = "smithy-language-server"
 
             from components.java
