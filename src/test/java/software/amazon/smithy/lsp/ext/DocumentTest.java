@@ -59,6 +59,8 @@ public class DocumentTest {
         DocumentPreamble preamble = Document.detectPreamble(lines);
 
         assertEquals("ns.preamble", preamble.getCurrentNamespace().get());
+        assertEquals(new Position(2, 0), preamble.getUseBlockRange().getStart());
+        assertEquals(new Position(2, 14), preamble.getUseBlockRange().getEnd());
         assertFalse(preamble.isBlankSeparated());
     }
 
