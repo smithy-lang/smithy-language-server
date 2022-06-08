@@ -15,10 +15,10 @@
 
 package software.amazon.smithy.lsp.ext;
 
-import com.google.common.io.Files;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -69,12 +69,12 @@ public class Harness implements AutoCloseable {
     return f;
   }
 
-  public File file(String path) throws Exception {
+  public File file(String path) {
     return Paths.get(root.getAbsolutePath(), path).toFile();
   }
 
   public List<String> readFile(File file) throws Exception {
-    return Files.readLines(file, StandardCharsets.UTF_8);
+    return Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
   }
 
   @Override
@@ -83,16 +83,14 @@ public class Harness implements AutoCloseable {
   }
 
   public static Harness create(SmithyBuildExtensions ext) throws Exception {
-    // TODO: How to make this safe?
-    File hs = Files.createTempDir();
-    File tmp = Files.createTempDir();
+    File hs = Files.createTempDirectory("hs").toFile();
+    File tmp = Files.createTempDirectory("tmp").toFile();
     return loadHarness(ext, hs, tmp);
   }
 
   public static Harness create(SmithyBuildExtensions ext, Map<String, String> files) throws Exception {
-    // TODO: How to make this safe?
-    File hs = Files.createTempDir();
-    File tmp = Files.createTempDir();
+    File hs = Files.createTempDirectory("hs").toFile();
+    File tmp = Files.createTempDirectory("tmp").toFile();
     for (Entry<String, String> entry : files.entrySet()) {
       safeCreateFile(entry.getKey(), entry.getValue(), hs);
     }
@@ -100,8 +98,8 @@ public class Harness implements AutoCloseable {
   }
 
   public static Harness create(SmithyBuildExtensions ext, List<Path> files) throws Exception {
-    File hs = Files.createTempDir();
-    File tmp = Files.createTempDir();
+    File hs = Files.createTempDirectory("hs").toFile();
+    File tmp = Files.createTempDirectory("tmp").toFile();
     for (Path path : files) {
       if (Utils.isJarFile(path.toString())) {
         String contents = String.join(System.lineSeparator(), Utils.jarFileContents(path.toString()));
