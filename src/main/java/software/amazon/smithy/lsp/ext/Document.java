@@ -38,65 +38,76 @@ public final class Document {
      * @return document preamble
      */
     public static DocumentPreamble detectPreamble(List<String> lines) {
-
-        Range namespace = new Range(blankPosition, blankPosition);
-        Range useBlock = new Range(blankPosition, blankPosition);
+        Range namespaceRange = new Range(blankPosition, blankPosition);
+        Range useBlockRange = new Range(blankPosition, blankPosition);
         Set<String> imports = new HashSet<>();
-
-        // First, we detect the namespace and use block in a very ugly way
+        int firstUseStatementLine = 0;
+        String firstUseStatement = "";
+        int lastUseStatementLine = 0;
+        String lastUseStatement = "";
         boolean collectUseBlock = true;
-        int lineNumber = 0;
+        int endOfPreamble = 0;
         Optional<String> currentNamespace = Optional.empty();
-        for (String line : lines) {
-            final String namespaceAnchor = "namespace ";
-            if (line.trim().startsWith(namespaceAnchor)) {
-                if (namespace.getStart() == blankPosition) {
-                    currentNamespace = Optional.of(line.trim().substring(namespaceAnchor.length()));
-                    namespace.setStart(new Position(lineNumber, 0));
-                    namespace.setEnd(new Position(lineNumber, line.length() - 1));
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i).trim();
+            if (line.startsWith("namespace ")) {
+                currentNamespace = Optional.of(line.substring(10));
+                namespaceRange = getNamespaceRange(i, lines.get(i));
+            } else if (line.startsWith("use ") && collectUseBlock) {
+                imports.add(getImport(line));
+                if (firstUseStatement.isEmpty()) {
+                    firstUseStatementLine = i;
+                    firstUseStatement = lines.get(i);
                 }
-            } else if (line.trim().startsWith("use ")) {
-                String i = line.trim().split("use ", 2)[1].trim();
-                if (useBlock.getStart() == blankPosition) {
-                    imports.add(i);
-                    useBlock.setStart(new Position(lineNumber, 0));
-                    useBlock.setEnd(new Position(lineNumber, line.length()));
-                } else if (collectUseBlock) {
-                    imports.add(i);
-                    useBlock.setEnd(new Position(lineNumber, line.length()));
+                if (i > lastUseStatementLine || lastUseStatement.isEmpty()) {
+                    lastUseStatementLine = i;
+                    lastUseStatement = lines.get(i);
                 }
-            } else if (line.trim().isEmpty()) {
-                if (collectUseBlock) {
-                    useBlock.setEnd(new Position(lineNumber, line.length()));
-                }
+            } else if (line.startsWith("//") || line.startsWith("$version:") || line.isEmpty()) {
+                // Skip docs, empty lines and the version statement.
             } else {
-                if (!line.trim().startsWith("//")) {
-                    collectUseBlock = false;
+                // Stop collecting use statements.
+                collectUseBlock = false;
+                if (endOfPreamble == 0) {
+                    endOfPreamble = i - 1;
                 }
             }
-
-            lineNumber++;
         }
 
-        boolean blankSeparated = false;
-        // Next, we reduce the use block to the last use statement, ignoring newlines
-        // It's important to do so to make sure we don't multiply newlines
-        // unnecessarily.
-        if (useBlock.getStart() != blankPosition) {
-            while (lines.get(useBlock.getEnd().getLine()).trim().isEmpty()) {
-                blankSeparated = true;
-                int curLine = useBlock.getEnd().getLine();
-                useBlock.getEnd().setLine(curLine - 1);
-                useBlock.getEnd().setCharacter(lines.get(curLine - 1).length());
-            }
-        } else if (namespace.getStart() != blankPosition) {
-            int namespaceLine = namespace.getStart().getLine();
-            if (namespaceLine < lines.size() - 1) {
-                blankSeparated = lines.get(namespaceLine + 1).trim().isEmpty();
-            }
+        if (!firstUseStatement.isEmpty()) {
+            useBlockRange = getUseBlockRange(firstUseStatementLine, firstUseStatement, lastUseStatementLine,
+                    lastUseStatement);
         }
 
-        return new DocumentPreamble(currentNamespace, namespace, useBlock, imports, blankSeparated);
+        boolean blankSeparated = lines.get(endOfPreamble).trim().isEmpty();
+
+        return new DocumentPreamble(currentNamespace, namespaceRange, useBlockRange, imports, blankSeparated);
+    }
+
+    private static String getImport(String useStatement) {
+        return useStatement.trim().split("use ", 2)[1].trim();
+    }
+
+    private static Range getUseBlockRange(int startLine, String startLineStatement,
+                                          int endLine, String endLineStatement) {
+        return new Range(getStartPosition(startLine, startLineStatement), new Position(endLine,
+                endLineStatement.length()));
+    }
+
+    private static Range getNamespaceRange(int lineNumber, String content) {
+        return new Range(getStartPosition(lineNumber, content), new Position(lineNumber, content.length()));
+    }
+
+    private static Position getStartPosition(int lineNumber, String content) {
+        return new Position(lineNumber, getStartOffset(content));
+    }
+
+    private static int getStartOffset(String line) {
+        int offset = 0;
+        while (line.charAt(offset) == ' ') {
+            offset++;
+        }
+        return offset;
     }
 
     /**
