@@ -158,6 +158,10 @@ dependencies {
     testImplementation "junit:junit:4.13"
 }
 
+tasks.withType(Javadoc).all {
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
 tasks.withType(Test) {
     testLogging {
         events TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED, TestLogEvent.STANDARD_OUT, TestLogEvent.STANDARD_ERROR
