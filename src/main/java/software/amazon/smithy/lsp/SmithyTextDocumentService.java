@@ -91,6 +91,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     /**
      * @param client Language Client to be used by text document service.
+     * @param tempFile Temporary File to be used by text document service.
      */
     public SmithyTextDocumentService(Optional<LanguageClient> client, File tempFile) {
         this.client = client;
