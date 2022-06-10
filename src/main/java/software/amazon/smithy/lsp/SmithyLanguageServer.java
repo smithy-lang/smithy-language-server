@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.CompletionOptions;
@@ -126,8 +127,16 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
   @Override
   public void connect(LanguageClient client) {
+    Properties props = new Properties();
+    String message = "Hello from smithy-language-server!";
+    try {
+      props.load(SmithyLanguageServer.class.getClassLoader().getResourceAsStream("version.properties"));
+      message = "Hello from smithy-language-server " + props.getProperty("version") + "!";
+    } catch (Exception e) {
+      LspLog.println("Could not read Language Server version: " + e);
+    }
     tds.ifPresent(tds -> tds.setClient(client));
-    client.showMessage(new MessageParams(MessageType.Info, "Hello from smithy-language-server !"));
+    client.showMessage(new MessageParams(MessageType.Info, message));
   }
 
   @Override
