@@ -44,13 +44,12 @@ import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.ValidationException;
+import software.amazon.smithy.utils.ListUtils;
 
 public class SmithyLanguageServer implements LanguageServer, LanguageClientAware, SmithyProtocolExtensions {
-
+  File tempWorkspaceRoot;
   private final Optional<LanguageClient> client = Optional.empty();
-
   private File workspaceRoot;
-
   private Optional<SmithyTextDocumentService> tds = Optional.empty();
 
   @Override
@@ -64,7 +63,6 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
   @Override
   public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
-    LspLog.println(params.getWorkspaceFolders());
     if (params.getRootUri() != null) {
       try {
         workspaceRoot = new File(new URI(params.getRootUri()));
@@ -75,6 +73,18 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
       }
     } else {
       LspLog.println("Workspace root was null");
+    }
+
+    if (params.getWorkspaceFolders() == null) {
+      try {
+        tempWorkspaceRoot = Files.createTempDirectory("smithy-lsp-workspace").toFile();
+        System.out.println("Created temporary workspace root: " + tempWorkspaceRoot);
+        tempWorkspaceRoot.deleteOnExit();
+        WorkspaceFolder workspaceFolder = new WorkspaceFolder(tempWorkspaceRoot.toURI().toString());
+        params.setWorkspaceFolders(ListUtils.of(workspaceFolder));
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     }
 
     // TODO: This will break on multi-root workspaces
@@ -102,7 +112,6 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
   @Override
   public void exit() {
     System.exit(0);
-
   }
 
   @Override
