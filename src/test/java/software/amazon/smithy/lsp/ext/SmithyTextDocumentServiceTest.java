@@ -19,7 +19,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.google.common.collect.ImmutableList;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -175,7 +174,7 @@ public class SmithyTextDocumentServiceTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
         String modelFilename = "main.smithy";
         Path modelMain = baseDir.resolve(modelFilename);
-        List<Path> modelFiles = ImmutableList.of(modelMain);
+        List<Path> modelFiles = ListUtils.of(modelMain);
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
@@ -252,7 +251,7 @@ public class SmithyTextDocumentServiceTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
         String modelFilename = "main.smithy";
         Path modelMain = baseDir.resolve(modelFilename);
-        List<Path> modelFiles = ImmutableList.of(modelMain);
+        List<Path> modelFiles = ListUtils.of(modelMain);
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
             StubClient client = new StubClient();
@@ -290,7 +289,7 @@ public class SmithyTextDocumentServiceTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
         String modelFilename = "main.smithy";
         Path modelMain = baseDir.resolve(modelFilename);
-        List<Path> modelFiles = ImmutableList.of(modelMain);
+        List<Path> modelFiles = ListUtils.of(modelMain);
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
@@ -316,7 +315,7 @@ public class SmithyTextDocumentServiceTest {
     public void runSelectorAgainstModelWithErrors() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
         Path broken = baseDir.resolve("broken.smithy");
-        List<Path> modelFiles = ImmutableList.of(broken);
+        List<Path> modelFiles = ListUtils.of(broken);
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
             StubClient client = new StubClient();

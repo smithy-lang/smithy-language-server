@@ -19,13 +19,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.google.common.collect.ImmutableList;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import org.eclipse.lsp4j.Position;
 import org.junit.Test;
+import software.amazon.smithy.utils.ListUtils;
 
 public class DocumentTest {
 
@@ -49,7 +49,7 @@ public class DocumentTest {
 
     @Test
     public void detectPreambleNonBlankSeparated() {
-        List<String> lines = ImmutableList.of(
+        List<String> lines = ListUtils.of(
                 "$version: \"1.0\"",
                 "namespace ns.preamble",
                 "use ns.foo#Foo",
@@ -66,7 +66,7 @@ public class DocumentTest {
 
     @Test
     public void detectPreambleWithoutUseStatements() {
-        List<String> lines = ImmutableList.of(
+        List<String> lines = ListUtils.of(
                 "$version: \"1.0\"",
                 "namespace ns.preamble",
                 "string MyString"
