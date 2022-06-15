@@ -15,6 +15,7 @@
 
 package software.amazon.smithy.lsp;
 
+import com.google.common.collect.ImmutableList;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -64,7 +65,6 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
   @Override
   public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
-    LspLog.println(params.getWorkspaceFolders());
     if (params.getRootUri() != null) {
       try {
         workspaceRoot = new File(new URI(params.getRootUri()));
@@ -75,6 +75,18 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
       }
     } else {
       LspLog.println("Workspace root was null");
+    }
+
+    if (params.getWorkspaceFolders() == null) {
+      try {
+        File temp = Files.createTempDirectory("tmp-smithy-language-server-workspace").toFile();
+        System.out.println("Created temporary workspace root: " + temp);
+        temp.deleteOnExit();
+        WorkspaceFolder workspaceFolder = new WorkspaceFolder(temp.toURI().toString());
+        params.setWorkspaceFolders(ImmutableList.of(workspaceFolder));
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     }
 
     // TODO: This will break on multi-root workspaces
@@ -102,7 +114,6 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
   @Override
   public void exit() {
     System.exit(0);
-
   }
 
   @Override
