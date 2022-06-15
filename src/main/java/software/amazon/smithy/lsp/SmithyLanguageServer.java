@@ -15,7 +15,6 @@
 
 package software.amazon.smithy.lsp;
 
-import com.google.common.collect.ImmutableList;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -45,13 +44,12 @@ import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.ValidationException;
+import software.amazon.smithy.utils.ListUtils;
 
 public class SmithyLanguageServer implements LanguageServer, LanguageClientAware, SmithyProtocolExtensions {
-
+  File tempWorkspaceRoot;
   private final Optional<LanguageClient> client = Optional.empty();
-
   private File workspaceRoot;
-
   private Optional<SmithyTextDocumentService> tds = Optional.empty();
 
   @Override
@@ -79,11 +77,11 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
     if (params.getWorkspaceFolders() == null) {
       try {
-        File temp = Files.createTempDirectory("tmp-smithy-language-server-workspace").toFile();
-        System.out.println("Created temporary workspace root: " + temp);
-        temp.deleteOnExit();
-        WorkspaceFolder workspaceFolder = new WorkspaceFolder(temp.toURI().toString());
-        params.setWorkspaceFolders(ImmutableList.of(workspaceFolder));
+        tempWorkspaceRoot = Files.createTempDirectory("smithy-lsp-workspace").toFile();
+        System.out.println("Created temporary workspace root: " + tempWorkspaceRoot);
+        tempWorkspaceRoot.deleteOnExit();
+        WorkspaceFolder workspaceFolder = new WorkspaceFolder(tempWorkspaceRoot.toURI().toString());
+        params.setWorkspaceFolders(ListUtils.of(workspaceFolder));
       } catch (IOException e) {
         e.printStackTrace();
       }
