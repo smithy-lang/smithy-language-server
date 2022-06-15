@@ -18,7 +18,6 @@ package software.amazon.smithy.lsp.ext;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
-import com.google.common.collect.ImmutableList;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -87,7 +86,7 @@ public class SmithyProjectTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
         Path modelMain = baseDir.resolve("main.smithy");
         Path modelTest = baseDir.resolve("test.smithy");
-        List<Path> modelFiles = ImmutableList.of(modelMain, modelTest);
+        List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
@@ -137,7 +136,7 @@ public class SmithyProjectTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
         Path modelMain = baseDir.resolve("main.smithy");
         Path modelTest = baseDir.resolve("test.smithy");
-        List<Path> modelFiles = ImmutableList.of(modelMain, modelTest);
+        List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             SmithyProject project = hs.getProject();
