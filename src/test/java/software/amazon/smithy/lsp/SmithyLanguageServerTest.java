@@ -14,12 +14,9 @@ import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
 import org.eclipse.lsp4j.WorkspaceFolder;
-import org.junit.FixMethodOrder;
 import org.junit.Test;
-import org.junit.runners.MethodSorters;
 import software.amazon.smithy.utils.ListUtils;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class SmithyLanguageServerTest {
     @Test
     public void initializeServer() throws Exception {
@@ -37,11 +34,11 @@ public class SmithyLanguageServerTest {
         assertTrue(capabilities.getDefinitionProvider().getLeft());
         assertTrue(capabilities.getDeclarationProvider().getLeft());
         assertEquals(new CompletionOptions(true, null), capabilities.getCompletionProvider());
-        assertFalse(capabilities.getHoverProvider().getLeft());
+        assertTrue(capabilities.getHoverProvider().getLeft());
     }
 
     @Test
-    public void initializeWithTemporaryWorkspace() throws Exception {
+    public void initializeWithTemporaryWorkspace() {
         InitializeParams initParams = new InitializeParams();
         SmithyLanguageServer languageServer = new SmithyLanguageServer();
         languageServer.initialize(initParams);
