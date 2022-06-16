@@ -17,6 +17,7 @@ package software.amazon.smithy.lsp;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
@@ -38,7 +39,10 @@ import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.MessageActionItem;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.Position;
@@ -378,6 +382,94 @@ public class SmithyTextDocumentServiceTest {
     }
 
     @Test
+    public void hover() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+        String modelFilename = "main.smithy";
+        Path modelMain = baseDir.resolve("main.smithy");
+        String testFilename = "test.smithy";
+        Path modelTest = baseDir.resolve(testFilename);
+        List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
+            TextDocumentIdentifier testTdi = new TextDocumentIdentifier(hs.file(testFilename).toString());
+
+            // Resolves via token => shape name.
+            Hover commentHover = tds.hover(hoverParams(mainTdi, 43, 37)).get();
+
+            // Resolves via shape target location in model.
+            Hover memberTargetHover = tds.hover(hoverParams(mainTdi, 12, 18)).get();
+
+            // Resolves from member key to shape target location in model,
+            Hover memberIdentifierHover = tds.hover(hoverParams(mainTdi, 64, 7)).get();
+
+            // Resolves via top-level trait location in prelude.
+            Hover preludeTraitHover = tds.hover(hoverParams(mainTdi, 25, 3)).get();
+            String preludeTraitContents = preludeTraitHover.getContents().getRight().getValue();
+
+            // Resolves via member shape target location in prelude.
+            Hover preludeTargetHover = tds.hover(hoverParams(mainTdi, 36, 12)).get();
+
+            // Resolves via member-applied trait location in prelude.
+            Hover preludeMemberTraitHover = tds.hover(hoverParams(mainTdi, 59, 10)).get();
+            String preludeMemberTraitContents = preludeMemberTraitHover.getContents().getRight().getValue();
+
+            // Resolves to current location.
+            Hover selfHover = tds.hover(hoverParams(mainTdi, 36, 0)).get();
+
+            // Resolves via operation input.
+            Hover inputHover = tds.hover(hoverParams(mainTdi, 52, 16)).get();
+
+            // Resolves via operation output.
+            Hover outputHover = tds.hover(hoverParams(mainTdi, 53, 17)).get();
+
+            // Resolves via operation error.
+            Hover errorHover = tds.hover(hoverParams(mainTdi, 54, 14)).get();
+
+            // Resolves via resource ids.
+            Hover idHover = tds.hover(hoverParams(mainTdi, 75, 29)).get();
+
+            // Resolves via resource read.
+            Hover readHover = tds.hover(hoverParams(mainTdi, 76, 12)).get();
+
+            // Does not correspond to shape.
+            Hover noMatchHover = tds.hover(hoverParams(mainTdi, 0, 0)).get();
+
+            // Resolves between multiple model files.
+            Hover multiFileHover = tds.hover(hoverParams(testTdi, 7, 15)).get();
+
+            correctHover("@input\n@tags([\n    \"foo\",\n])\nstructure MultiTrait {\n    a: String,\n}", commentHover);
+            correctHover("structure SingleLine {}", memberTargetHover);
+            correctHover("string String", memberIdentifierHover);
+            assertEquals(preludeTraitHover.getContents().getRight().getKind(), "markdown");
+            assertTrue(preludeTraitContents.startsWith("```smithy\n/// Specializes a structure for use only as the"
+                    + " input"));
+            assertTrue(preludeTraitContents.endsWith("structure input {}\n```"));
+            correctHover("string String", preludeTargetHover);
+            assertEquals(preludeMemberTraitHover.getContents().getRight().getKind(), "markdown");
+            assertTrue(preludeMemberTraitContents.startsWith("```smithy\n/// Marks a structure member as required"));
+            assertTrue(preludeMemberTraitContents.endsWith("structure required {}\n```"));
+            correctHover("@input\n@tags([\n    \"a\",\n    \"b\",\n    \"c\",\n    \"d\",\n    \"e\",\n    \"f\",\n"
+                    + "])\nstructure MultiTraitAndLineComments {\n    a: String,\n}", selfHover);
+            correctHover("structure MyOperationInput {\n    foo: String,\n    @required\n    myId: MyId,\n}",
+                    inputHover);
+            correctHover("structure MyOperationOutput {\n    corge: String,\n    qux: String,\n}", outputHover);
+            correctHover("@error(\"client\")\nstructure MyError {\n    blah: String,\n    blahhhh: Integer,\n}",
+                    errorHover);
+            correctHover("string MyId", idHover);
+            correctHover("@http(\n    method: \"PUT\",\n    uri: \"/bar\",\n    code: 200,\n)\n@readonly\n"
+                    + "operation MyOperation {\n    input: MyOperationInput,\n    output: MyOperationOutput,\n"
+                    + "    errors: [\n        MyError,\n    ],\n}", readHover);
+            assertNull(noMatchHover.getContents().getRight().getValue());
+            correctHover("@emptyTraitStruct\nstructure OtherStructure {\n    foo: String,\n    bar: String,\n"
+                    + "    baz: Integer,\n}", multiFileHover);
+        }
+    }
+
+    @Test
     public void completionsV2() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
         String modelFilename = "main.smithy";
@@ -570,6 +662,16 @@ public class SmithyTextDocumentServiceTest {
 
     private DefinitionParams definitionParams(TextDocumentIdentifier tdi, int line, int character) {
         return new DefinitionParams(tdi, new Position(line, character));
+    }
+
+    private HoverParams hoverParams(TextDocumentIdentifier tdi, int line, int character) {
+        return new HoverParams(tdi, new Position(line, character));
+    }
+
+    private void correctHover(String expectedValue, Hover hover) {
+        MarkupContent content = hover.getContents().getRight();
+        assertEquals("markdown", content.getKind());
+        assertEquals("```smithy\n" + expectedValue + "\n```", content.getValue());
     }
 
     private void correctLocation(Location location, String uri, int startLine, int startCol, int endLine, int endCol) {

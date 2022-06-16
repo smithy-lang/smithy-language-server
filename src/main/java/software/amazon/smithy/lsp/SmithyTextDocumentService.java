@@ -23,6 +23,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,8 +44,11 @@ import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
+import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.Position;
@@ -69,6 +73,7 @@ import software.amazon.smithy.model.loader.ParserUtils;
 import software.amazon.smithy.model.neighbor.Walker;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.SmithyIdlModelSerializer;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
 import software.amazon.smithy.utils.SimpleParser;
@@ -389,21 +394,14 @@ public class SmithyTextDocumentService implements TextDocumentService {
             if (initialShapeId.isPresent()) {
                 Model model = project.getModel().unwrap();
                 Shape initialShape = model.getShape(initialShapeId.get()).get();
-                // Find the first non-member neighbor shape or trait applied to a member whose name matches the token.
-                Walker shapeWalker = new Walker(NeighborProviderIndex.of(model).getProvider());
-                Optional<ShapeId> target = shapeWalker.walkShapes(initialShape).stream()
-                        .flatMap(shape -> {
-                            if (shape.isMemberShape()) {
-                                return shape.getAllTraits().values().stream()
-                                        .map(trait -> trait.toShapeId());
-                            } else {
-                                return Stream.of(shape.getId());
-                            }
-                        })
-                        .filter(shapeId -> shapeId.getName().equals(found))
-                        .findFirst();
-                // Use location on target, or else default to initial shape.
-                locations = Collections.singletonList(project.getLocations().get(target.orElse(initialShapeId.get())));
+                Optional<Shape> target = getTargetShape(initialShape, found, model);
+                // Use location on target if present.
+                if (target.isPresent()) {
+                    locations = Collections.singletonList(project.getLocations().get(target.get().getId()));
+                // Or else default to location of initial shape.
+                } else {
+                    locations = Collections.singletonList(project.getLocations().get(initialShapeId.get()));
+                }
             } else {
                 // If the definition params do not have a matching shape at that location, return locations of all
                 // shapes that match token by shape name. This makes it possible link the shape name in a line
@@ -421,6 +419,97 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
             return Utils.completableFuture(Either.forLeft(noLocations));
         }
+    }
+
+    @Override
+    public CompletableFuture<Hover> hover(HoverParams params) {
+        Hover hover = new Hover();
+        MarkupContent content = new MarkupContent();
+        content.setKind("markdown");
+        Optional<ShapeId> initialShapeId = project.getShapeIdFromLocation(params.getTextDocument().getUri(),
+                params.getPosition());
+        Shape shapeToSerialize = null;
+        Model model = project.getModel().unwrap();
+        try {
+            String token = findToken(params.getTextDocument().getUri(), params.getPosition());
+            LspLog.println("Found token: " + token);
+            if (initialShapeId.isPresent()) {
+                Shape initialShape = model.getShape(initialShapeId.get()).get();
+                Optional<Shape> target;
+                if (initialShape.isMemberShape()) {
+                    ShapeId targetShapeId = initialShape.asMemberShape().get().getTarget();
+                    target = model.getShape(targetShapeId);
+                } else {
+                    target = getTargetShape(initialShape, token, model);
+                }
+                if (target.isPresent()) {
+                    shapeToSerialize = target.get();
+                } else {
+                    shapeToSerialize = initialShape;
+                }
+            } else {
+                Optional<Shape> shapeMatchedByNameOnly = model.shapes()
+                        .filter(shape -> !shape.isMemberShape())
+                        .filter(shape -> shape.getId().getName().equals(token))
+                        .findAny();
+                if (shapeMatchedByNameOnly.isPresent()) {
+                    shapeToSerialize = shapeMatchedByNameOnly.get();
+                }
+            }
+        } catch (Exception e) {
+            LspLog.println("Failed to determine hover content: " + e);
+        }
+
+        // If a shape to serialize has been found, serialize the shape and set it to the hover contents.
+        if (shapeToSerialize != null) {
+            content.setValue("```smithy\n" + getSerializedShape(shapeToSerialize, model) + "\n```");
+        }
+        hover.setContents(content);
+        return Utils.completableFuture(hover);
+    }
+
+    // Finds the first non-member neighbor shape or trait applied to a member whose name matches the token.
+    private Optional<Shape> getTargetShape(Shape initialShape, String token, Model model) {
+        LspLog.println("Finding target of: " + initialShape);
+        Walker shapeWalker = new Walker(NeighborProviderIndex.of(model).getProvider());
+        return shapeWalker.walkShapes(initialShape).stream()
+                .flatMap(shape -> {
+                    if (shape.isMemberShape()) {
+                        return shape.getAllTraits().values().stream()
+                                .map(trait -> trait.toShapeId());
+                    } else {
+                        return Stream.of(shape.getId());
+                    }
+                })
+                .filter(shapeId -> shapeId.getName().equals(token))
+                .map(shapeId -> model.getShape(shapeId).get())
+                .findFirst();
+    }
+
+    private String getSerializedShape(Shape shape, Model model) {
+        SmithyIdlModelSerializer serializer = SmithyIdlModelSerializer.builder()
+                .metadataFilter(key -> false)
+                .shapeFilter(s -> s.getId().equals(shape.getId()))
+                .serializePrelude().build();
+        Map<Path, String> serialized = serializer.serialize(model);
+        Path path = Paths.get(shape.getId().getNamespace() + ".smithy");
+        return stripPreamble(serialized.get(path));
+    }
+
+
+    private String stripPreamble(String serializedModel) {
+        List<String> lines = Arrays.asList(serializedModel.split("\n"));
+        int preambleEnd = lines.size();
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (line.startsWith("$version: ") || line.startsWith("namespace ") || line.startsWith("use ")
+                    || line.isEmpty()) {
+                preambleEnd = i;
+            } else {
+                break;
+            }
+        }
+        return String.join("\n", lines.subList(preambleEnd, lines.size())).trim();
     }
 
     @Override

@@ -104,7 +104,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     capabilities.setDefinitionProvider(true);
     capabilities.setDeclarationProvider(true);
     capabilities.setCompletionProvider(new CompletionOptions(true, null));
-    capabilities.setHoverProvider(false);
+    capabilities.setHoverProvider(true);
 
     return Utils.completableFuture(new InitializeResult(capabilities));
   }
@@ -180,5 +180,4 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     }
     return CompletableFuture.completedFuture(Collections.emptyList());
   }
-
 }

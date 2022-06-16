@@ -93,3 +93,5 @@ apply MyOperation @http(method: "PUT", uri: "/bar", code: 200)
      }])
   operation AnOperation {}
 
+@trait
+structure emptyTraitStruct {}
