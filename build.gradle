@@ -66,12 +66,17 @@ task javadocJar(type: Jar) {
     archiveClassifier = "javadoc"
 }
 
+ext {
+    // Load the Smithy Language Server version from VERSION.
+    libraryVersion = project.file("VERSION").getText('UTF-8').replace(System.lineSeparator(), "")
+}
+
 allprojects {
     apply plugin: "java"
     apply plugin: "maven-publish"
     apply plugin: "signing"
     group = "software.amazon.smithy"
-    version = "0.1.0"
+    version = libraryVersion
     description = "Language Server Protocol implementation for Smithy"
 }
 
