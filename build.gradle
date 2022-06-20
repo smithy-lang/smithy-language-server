@@ -71,6 +71,8 @@ ext {
     libraryVersion = project.file("VERSION").getText('UTF-8').replace(System.lineSeparator(), "")
 }
 
+println "Smithy Language Server version: '${libraryVersion}'"
+
 allprojects {
     apply plugin: "java"
     apply plugin: "maven-publish"
