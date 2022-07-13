@@ -75,8 +75,9 @@ public final class SmithyProject {
      * This version of the method above is used when the
      * file is in ephemeral storage (temporary location when file is being changed)
      *
-     * @param changed file which may or may not be already tracked by this project
-     * @return either an error, or a loaded project
+     * @param changed file which may or may not be already tracked by this project.
+     * @param exclude file to exclude from being recompiled.
+     * @return either an error, or a loaded project.
      */
     public Either<Exception, SmithyProject> recompile(File changed, File exclude) {
         List<File> newFiles = new ArrayList<>();
@@ -106,8 +107,9 @@ public final class SmithyProject {
         return this.smithyFiles;
     }
 
-    public List<SmithyCompletionItem> getCompletions(String token) {
-        return this.model.getResult().map(model -> Completions.find(model, token)).orElse(Collections.emptyList());
+    public List<SmithyCompletionItem> getCompletions(String token, boolean isTrait, Optional<ShapeId> target) {
+        return this.model.getResult().map(model -> Completions.find(model, token, isTrait, target))
+                .orElse(Collections.emptyList());
     }
 
     public Map<ShapeId, Location> getLocations() {
@@ -118,9 +120,9 @@ public final class SmithyProject {
      * Load the project using a SmithyBuildExtensions configuration and workspace
      * root.
      *
-     * @param config configuration
-     * @param root   workspace root
-     * @return either an error or a loaded project
+     * @param config configuration.
+     * @param root workspace root.
+     * @return either an error or a loaded project.
      */
     public static Either<Exception, SmithyProject> load(SmithyBuildExtensions config, File root) {
         List<Path> imports = config.getImports().stream().map(p -> Paths.get(root.getAbsolutePath(), p).normalize())
@@ -144,8 +146,8 @@ public final class SmithyProject {
 
     /**
      * Run a selector expression against the loaded model in the workspace.
-     * @param expression the selector expression
-     * @return list of locations of shapes that match expression
+     * @param expression the selector expression.
+     * @return list of locations of shapes that match expression.
      */
     public Either<Exception, List<Location>> runSelector(String expression) {
         try {
@@ -272,8 +274,8 @@ public final class SmithyProject {
     /**
      * Returns the shapeId of the shape that corresponds to the file uri and position within the model.
      *
-     * @param uri String uri of model file
-     * @param position Cursor position within model file
+     * @param uri String uri of model file.
+     * @param position Cursor position within model file.
      * @return ShapeId of corresponding shape defined at location.
      */
     public Optional<ShapeId> getShapeIdFromLocation(String uri, Position position) {

@@ -23,7 +23,7 @@ structure MultiTrait {
 
 // Line comments
 // comments
-@input
+  @input
     // comments
     @tags(["a",
         "b",
@@ -50,18 +50,18 @@ structure MultiTraitAndDocComments {
 
 @readonly
 operation MyOperation {
-    input: MyInput,
-    output: MyOutput,
+    input: MyOperationInput,
+    output: MyOperationOutput,
     errors: [MyError]
 }
 
-structure MyInput {
+structure MyOperationInput {
     foo: String,
     @required
     myId: MyId
 }
 
-structure MyOutput {
+structure MyOperationOutput {
     corge: String,
     qux: String
 }
@@ -78,3 +78,18 @@ resource MyResource {
 }
 
 string MyId
+
+string InputString
+
+apply MyOperation @http(method: "PUT", uri: "/bar", code: 200)
+
+     @http(method: "PUT", uri: "/foo", code: 200)
+     @documentation("doc has parens ()")
+     @tags(["foo)",
+            "bar)",
+            "baz)"])
+     @examples([{
+         title: "An)Operation"
+     }])
+  operation AnOperation {}
+

@@ -19,7 +19,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.google.common.collect.ImmutableList;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -31,6 +30,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticSeverity;
@@ -173,7 +174,7 @@ public class SmithyTextDocumentServiceTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
         String modelFilename = "main.smithy";
         Path modelMain = baseDir.resolve(modelFilename);
-        List<Path> modelFiles = ImmutableList.of(modelMain);
+        List<Path> modelFiles = ListUtils.of(modelMain);
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
@@ -246,11 +247,49 @@ public class SmithyTextDocumentServiceTest {
     }
 
     @Test
+    public void completions() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+        String modelFilename = "main.smithy";
+        Path modelMain = baseDir.resolve(modelFilename);
+        List<Path> modelFiles = ListUtils.of(modelMain);
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
+
+            CompletionParams traitParams = completionParams(mainTdi, 85, 10);
+            List<CompletionItem> traitCompletionItems = tds.completion(traitParams).get().getLeft();
+
+            CompletionParams shapeParams = completionParams(mainTdi, 51,16);
+            List<CompletionItem> shapeCompletionItems = tds.completion(shapeParams).get().getLeft();
+
+            CompletionParams applyStatementParams = completionParams(mainTdi,83, 23);
+            List<CompletionItem> applyStatementCompletionItems = tds.completion(applyStatementParams).get().getLeft();
+
+            CompletionParams whiteSpaceParams = completionParams(mainTdi, 0,0);
+            List<CompletionItem> whiteSpaceCompletionItems = tds.completion(whiteSpaceParams).get().getLeft();
+
+            assertEquals(SetUtils.of("MyOperation", "MyOperationInput", "MyOperationOutput"),
+                    completionLabels(shapeCompletionItems));
+
+            assertEquals(SetUtils.of("http(method: \"\", uri: \"\")", "http()", "httpChecksumRequired"),
+                    completionLabels(applyStatementCompletionItems));
+
+            assertEquals(SetUtils.of("http(method: \"\", uri: \"\")", "http()", "httpChecksumRequired"),
+                    completionLabels(traitCompletionItems));
+
+            assertTrue(whiteSpaceCompletionItems.isEmpty());
+        }
+    }
+
+    @Test
     public void runSelector() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
         String modelFilename = "main.smithy";
         Path modelMain = baseDir.resolve(modelFilename);
-        List<Path> modelFiles = ImmutableList.of(modelMain);
+        List<Path> modelFiles = ListUtils.of(modelMain);
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
@@ -276,7 +315,7 @@ public class SmithyTextDocumentServiceTest {
     public void runSelectorAgainstModelWithErrors() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
         Path broken = baseDir.resolve("broken.smithy");
-        List<Path> modelFiles = ImmutableList.of(broken);
+        List<Path> modelFiles = ListUtils.of(broken);
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
             StubClient client = new StubClient();
@@ -363,5 +402,13 @@ public class SmithyTextDocumentServiceTest {
         assertEquals(endLine, location.getRange().getEnd().getLine());
         assertEquals(endCol, location.getRange().getEnd().getCharacter());
         assertTrue(location.getUri().endsWith(uri));
+    }
+
+    private CompletionParams completionParams(TextDocumentIdentifier tdi, int line, int character) {
+        return new CompletionParams(tdi, new Position(line, character));
+    }
+
+    private Set<String> completionLabels(List<CompletionItem> completionItems) {
+        return completionItems.stream().map(item -> item.getLabel()).collect(Collectors.toSet());
     }
 }

@@ -33,6 +33,8 @@ plugins {
     id "application"
 
     id "maven-publish"
+    id "signing"
+    id "io.codearte.nexus-staging" version "0.30.0"
     id "com.palantir.git-version" version "0.12.3"
     id "checkstyle"
 }
@@ -40,12 +42,44 @@ plugins {
 
 version gitVersion().replaceFirst("v", "")
 
+// Reusable license copySpec for building JARs
+def licenseSpec = copySpec {
+    from "${project.rootDir}/LICENSE"
+    from "${project.rootDir}/NOTICE"
+}
+
+// Set up tasks that build source and javadoc jars.
+task sourcesJar(type: Jar) {
+    metaInf.with(licenseSpec)
+    from {
+        sourceSets.main.allJava
+    }
+    archiveClassifier = "sources"
+}
+
+// Build a javadoc JAR too.
+task javadocJar(type: Jar) {
+    metaInf.with(licenseSpec)
+    from {
+        tasks.javadoc
+    }
+    archiveClassifier = "javadoc"
+}
+
+ext {
+    // Load the Smithy Language Server version from VERSION.
+    libraryVersion = project.file("VERSION").getText('UTF-8').replace(System.lineSeparator(), "")
+}
+
+println "Smithy Language Server version: '${libraryVersion}'"
 
 allprojects {
     apply plugin: "java"
     apply plugin: "maven-publish"
+    apply plugin: "signing"
     group = "software.amazon.smithy"
-    version = "0.0.0-SNAPSHOT"
+    version = libraryVersion
+    description = "Language Server Protocol implementation for Smithy"
 }
 
 repositories {
@@ -54,27 +88,85 @@ repositories {
 }
 
 publishing {
+    repositories {
+        mavenCentral {
+            url = uri("https://aws.oss.sonatype.org/service/local/staging/deploy/maven2/")
+            if (project.hasProperty("sonatypeUser")) {
+                credentials {
+                    username = project.property("sonatypeUser")
+                    password = project.property("sonatypePassword")
+                }
+            }
+        }
+    }
+
     publications {
         mavenJava(MavenPublication) {
-            groupId = "com.disneystreaming.smithy"
+            groupId = project.group
             artifactId = "smithy-language-server"
 
             from components.java
 
             jar
+
+            // Ship the source and javadoc jars.
+            artifact(tasks["sourcesJar"])
+            artifact(tasks["javadocJar"])
+
+            // Include extra information in the POMs.
+            project.afterEvaluate {
+                pom {
+                    name.set("Smithy Language Server")
+                    description.set(project.description)
+                    url.set("https://github.com/awslabs/smithy-language-server")
+                    licenses {
+                        license {
+                            name.set("Apache License 2.0")
+                            url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+                            distribution.set("repo")
+                        }
+                    }
+                    developers {
+                        developer {
+                            id.set("smithy")
+                            name.set("Smithy")
+                            organization.set("Amazon Web Services")
+                            organizationUrl.set("https://aws.amazon.com")
+                            roles.add("developer")
+                        }
+                    }
+                    scm {
+                        url.set("https://github.com/awslabs/smithy-language-server.git")
+                    }
+                }
+            }
+        }
+    }
+
+    // Don't sign the artifacts if we didn't get a key and password to use.
+    if (project.hasProperty("signingKey") && project.hasProperty("signingPassword")) {
+        signing {
+            useInMemoryPgpKeys(
+                    (String) project.property("signingKey"),
+                    (String) project.property("signingPassword"))
+            sign(publishing.publications["mavenJava"])
         }
     }
 }
 
 
 dependencies {
-    implementation "org.eclipse.lsp4j:org.eclipse.lsp4j:0.9.0"
+    implementation "org.eclipse.lsp4j:org.eclipse.lsp4j:0.14.0"
     implementation "software.amazon.smithy:smithy-model:[1.0, 2.0["
     implementation 'io.get-coursier:interface:1.0.4'
 
 
     // Use JUnit test framework
     testImplementation "junit:junit:4.13"
+}
+
+tasks.withType(Javadoc).all {
+    options.addStringOption('Xdoclint:none', '-quiet')
 }
 
 tasks.withType(Test) {
@@ -87,6 +179,19 @@ tasks.withType(Test) {
     }
 }
 
+task createProperties(dependsOn: processResources) {
+    doLast {
+        new File("$buildDir/resources/main/version.properties").withWriter { w ->
+            Properties p = new Properties()
+            p['version'] = project.version.toString()
+            p.store w, null
+        }
+    }
+}
+
+classes {
+    dependsOn createProperties
+}
 
 application {
     // Define the main class for the application.
@@ -115,5 +220,24 @@ jar {
     }
     manifest {
         attributes("Main-Class": "software.amazon.smithy.lsp.Main")
+    }
+}
+
+/*
+ * Sonatype Staging Finalization
+ * ====================================================
+ *
+ * When publishing to Maven Central, we need to close the staging
+ * repository and release the artifacts after they have been
+ * validated. This configuration is for the root project because
+ * it operates at the "group" level.
+ */
+if (project.hasProperty("sonatypeUser") && project.hasProperty("sonatypePassword")) {
+    apply plugin: "io.codearte.nexus-staging"
+    nexusStaging {
+        packageGroup = "software.amazon"
+        stagingProfileId = "e789115b6c941"
+        username = project.property("sonatypeUser")
+        password = project.property("sonatypePassword")
     }
 }
