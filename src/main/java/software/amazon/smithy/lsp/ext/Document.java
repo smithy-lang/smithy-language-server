@@ -99,10 +99,6 @@ public final class Document {
         return Optional.of(quotedValue.substring(2, quotedValue.length() - 1));
     }
 
-    private static String stripQuotes(String string) {
-        return string.substring(1, string.length() - 1);
-    }
-
     private static String getImport(String useStatement) {
         return useStatement.trim().split("use ", 2)[1].trim();
     }
