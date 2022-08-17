@@ -48,6 +48,9 @@ public final class Document {
         boolean collectUseBlock = true;
         int endOfPreamble = 0;
         Optional<String> currentNamespace = Optional.empty();
+        Optional<String> idlVersion = Optional.empty();
+        Optional<String> operationInputSuffix = Optional.empty();
+        Optional<String> operationOutputSuffix = Optional.empty();
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i).trim();
             if (line.startsWith("namespace ")) {
@@ -63,7 +66,13 @@ public final class Document {
                     lastUseStatementLine = i;
                     lastUseStatement = lines.get(i);
                 }
-            } else if (line.startsWith("//") || line.startsWith("$version:") || line.isEmpty()) {
+            } else if (line.startsWith("$version:")) {
+                idlVersion = getControlStatementValue(line, "version");
+            } else if (line.startsWith("$operationInputSuffix:")) {
+                operationInputSuffix = getControlStatementValue(line, "operationInputSuffix");
+            } else if (line.startsWith("$operationOutputSuffix:")) {
+                operationOutputSuffix = getControlStatementValue(line, "operationOutputSuffix");
+            } else if (line.startsWith("//") || line.isEmpty()) {
                 // Skip docs, empty lines and the version statement.
             } else {
                 // Stop collecting use statements.
@@ -81,7 +90,17 @@ public final class Document {
 
         boolean blankSeparated = lines.get(endOfPreamble).trim().isEmpty();
 
-        return new DocumentPreamble(currentNamespace, namespaceRange, useBlockRange, imports, blankSeparated);
+        return new DocumentPreamble(currentNamespace, namespaceRange, idlVersion, operationInputSuffix,
+                operationOutputSuffix, useBlockRange, imports, blankSeparated);
+    }
+
+    private static Optional<String> getControlStatementValue(String line, String key) {
+        String quotedValue = line.substring(key.length() + 2);
+        return Optional.of(quotedValue.substring(2, quotedValue.length() - 1));
+    }
+
+    private static String stripQuotes(String string) {
+        return string.substring(1, string.length() - 1);
     }
 
     private static String getImport(String useStatement) {
