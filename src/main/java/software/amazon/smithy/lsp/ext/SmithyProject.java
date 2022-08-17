@@ -202,9 +202,7 @@ public final class SmithyProject {
              // Get shapes reverse-sorted by source location to work from bottom of file to top.
             List<Shape> shapes = model.shapes()
                     .filter(shape -> shape.getSourceLocation().getFilename().equals(modelFile))
-                    // TODO: Once the change in https://github.com/awslabs/smithy/pull/1192 lands, replace with with
-                    // `.sorted(Comparator.comparing(Shape::getSourceLocation).reversed())`.
-                    .sorted(new SourceLocationSorter().reversed())
+                    .sorted(Comparator.comparing(Shape::getSourceLocation).reversed())
                     .collect(Collectors.toList());
 
 
@@ -359,8 +357,7 @@ public final class SmithyProject {
                 .collect(Collectors.toList());
         // If the shape has traits, advance the end marker again.
         if (!traits.isEmpty()) {
-            // TODO: Replace with Comparator when this class is removed.
-            traits.sort(new SourceLocationSorter());
+            traits.sort(Comparator.comparing(Trait::getSourceLocation));
             marker = traits.get(0).getSourceLocation().getLine() - 1;
         }
         // Move the end marker when encountering line comments or empty lines.
