@@ -94,9 +94,9 @@ public final class Document {
                 operationOutputSuffix, useBlockRange, imports, blankSeparated);
     }
 
+    // Strip control statement key, whitespace and quotes.
     private static Optional<String> getControlStatementValue(String line, String key) {
-        String quotedValue = line.substring(key.length() + 2);
-        return Optional.of(quotedValue.substring(2, quotedValue.length() - 1));
+        return Optional.of(line.substring(key.length() + 4, line.length() - 1));
     }
 
     private static String getImport(String useStatement) {
