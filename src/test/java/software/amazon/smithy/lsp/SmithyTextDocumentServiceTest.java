@@ -441,7 +441,7 @@ public class SmithyTextDocumentServiceTest {
             // Resolves between multiple model files.
             Hover multiFileHover = tds.hover(hoverParams(testTdi, 7, 15)).get();
 
-            correctHover("@input\n@tags([\n    \"foo\",\n])\nstructure MultiTrait {\n    a: String,\n}", commentHover);
+            correctHover("@input\n@tags([\n    \"foo\"\n])\nstructure MultiTrait {\n    a: String\n}", commentHover);
             correctHover("structure SingleLine {}", memberTargetHover);
             correctHover("string String", memberIdentifierHover);
             assertEquals(preludeTraitHover.getContents().getRight().getKind(), "markdown");
@@ -452,20 +452,20 @@ public class SmithyTextDocumentServiceTest {
             assertEquals(preludeMemberTraitHover.getContents().getRight().getKind(), "markdown");
             assertTrue(preludeMemberTraitContents.startsWith("```smithy\n/// Marks a structure member as required"));
             assertTrue(preludeMemberTraitContents.endsWith("structure required {}\n```"));
-            correctHover("@input\n@tags([\n    \"a\",\n    \"b\",\n    \"c\",\n    \"d\",\n    \"e\",\n    \"f\",\n"
-                    + "])\nstructure MultiTraitAndLineComments {\n    a: String,\n}", selfHover);
-            correctHover("structure MyOperationInput {\n    foo: String,\n    @required\n    myId: MyId,\n}",
+            correctHover("@input\n@tags([\n    \"a\"\n    \"b\"\n    \"c\"\n    \"d\"\n    \"e\"\n    \"f\"\n"
+                    + "])\nstructure MultiTraitAndLineComments {\n    a: String\n}", selfHover);
+            correctHover("structure MyOperationInput {\n    foo: String\n    @required\n    myId: MyId\n}",
                     inputHover);
-            correctHover("structure MyOperationOutput {\n    corge: String,\n    qux: String,\n}", outputHover);
-            correctHover("@error(\"client\")\nstructure MyError {\n    blah: String,\n    blahhhh: Integer,\n}",
+            correctHover("structure MyOperationOutput {\n    corge: String\n    qux: String\n}", outputHover);
+            correctHover("@error(\"client\")\nstructure MyError {\n    blah: String\n    blahhhh: Integer\n}",
                     errorHover);
             correctHover("string MyId", idHover);
-            correctHover("@http(\n    method: \"PUT\",\n    uri: \"/bar\",\n    code: 200,\n)\n@readonly\n"
-                    + "operation MyOperation {\n    input: MyOperationInput,\n    output: MyOperationOutput,\n"
-                    + "    errors: [\n        MyError,\n    ],\n}", readHover);
+            correctHover("@http(\n    method: \"PUT\"\n    uri: \"/bar\"\n    code: 200\n)\n@readonly\n"
+                    + "operation MyOperation {\n    input: MyOperationInput\n    output: MyOperationOutput\n"
+                    + "    errors: [\n        MyError\n    ]\n}", readHover);
             assertNull(noMatchHover.getContents().getRight().getValue());
-            correctHover("@emptyTraitStruct\nstructure OtherStructure {\n    foo: String,\n    bar: String,\n"
-                    + "    baz: Integer,\n}", multiFileHover);
+            correctHover("@emptyTraitStruct\nstructure OtherStructure {\n    foo: String\n    bar: String\n"
+                    + "    baz: Integer\n}", multiFileHover);
         }
     }
 
