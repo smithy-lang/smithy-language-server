@@ -161,3 +161,40 @@ enum Suit {
     HEART = "heart"
     SPADE = "spade"
 }
+
+operation MyInlineOperationReversed {
+    output := {
+        baz: String
+    }
+    input := {
+        foo: String
+    }
+}
+
+// The input and output match the name conventions for inline inputs and outputs,
+// but are not actually inlined.
+operation FalseInlined {
+    input: FalseInlinedFooInput
+    output: FalseInlinedBarOutput
+}
+
+structure FalseInlinedFooInput {
+    a: String
+}
+
+structure FalseInlinedBarOutput {
+    b: String
+}
+
+operation FalseInlinedReversed {
+    output: FalseInlinedReversedBarOutput
+    input: FalseInlinedReversedFooInput
+}
+
+structure FalseInlinedReversedFooInput {
+    c: String
+}
+
+structure FalseInlinedReversedBarOutput {
+    d: String
+}

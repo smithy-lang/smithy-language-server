@@ -73,6 +73,31 @@ public class DocumentTest {
     }
 
     @Test
+    public void detectPreambleMajorIdlVersionOnly() {
+        List<String> linesIdl1 = ListUtils.of(
+                "$version: \"1\"",
+                "namespace ns.one",
+                "@Foo",
+                "string MyString"
+        );
+        DocumentPreamble preambleIdl1 = Document.detectPreamble(linesIdl1);
+
+        List<String> linesIdl2 = ListUtils.of(
+                "$version: \"2\"",
+                "namespace ns.two",
+                "@Foo",
+                "string MyString"
+        );
+        DocumentPreamble preambleIdl2 = Document.detectPreamble(linesIdl2);
+
+        assertEquals("ns.one", preambleIdl1.getCurrentNamespace().get());
+        assertEquals("1", preambleIdl1.getIdlVersion().get());
+
+        assertEquals("ns.two", preambleIdl2.getCurrentNamespace().get());
+        assertEquals("2", preambleIdl2.getIdlVersion().get());
+    }
+
+    @Test
     public void detectPreambleNonBlankSeparated() {
         List<String> lines = ListUtils.of(
                 "$version: \"1.0\"",

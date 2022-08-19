@@ -361,7 +361,7 @@ public class SmithyTextDocumentServiceTest {
             CompletionParams applyStatementParams = completionParams(mainTdi,83, 23);
             List<CompletionItem> applyStatementCompletionItems = tds.completion(applyStatementParams).get().getLeft();
 
-            CompletionParams whiteSpaceParams = completionParams(mainTdi, 0,0);
+            CompletionParams whiteSpaceParams = completionParams(mainTdi, 0, 0);
             List<CompletionItem> whiteSpaceCompletionItems = tds.completion(whiteSpaceParams).get().getLeft();
 
             assertEquals(SetUtils.of("MyOperation", "MyOperationInput", "MyOperationOutput"),
@@ -393,10 +393,10 @@ public class SmithyTextDocumentServiceTest {
             CompletionParams traitParams = completionParams(mainTdi, 87, 10);
             List<CompletionItem> traitCompletionItems = tds.completion(traitParams).get().getLeft();
 
-            CompletionParams shapeParams = completionParams(mainTdi, 53,16);
+            CompletionParams shapeParams = completionParams(mainTdi, 53, 16);
             List<CompletionItem> shapeCompletionItems = tds.completion(shapeParams).get().getLeft();
 
-            CompletionParams applyStatementParams = completionParams(mainTdi,85, 23);
+            CompletionParams applyStatementParams = completionParams(mainTdi, 85, 23);
             List<CompletionItem> applyStatementCompletionItems = tds.completion(applyStatementParams).get().getLeft();
 
             CompletionParams whiteSpaceParams = completionParams(mainTdi, 0,0);

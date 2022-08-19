@@ -117,7 +117,7 @@ public class SmithyProjectTest {
             correctLocation(locationMap, "com.foo#SingleTrait", 18, 4, 18, 22);
             correctLocation(locationMap, "com.foo#MultiTrait", 22, 0,23, 14);
             correctLocation(locationMap, "com.foo#MultiTraitAndLineComments", 37, 0,39, 1);
-            correctLocation(locationMap,"com.foo#MultiTraitAndDocComments", 48, 0,50, 1);
+            correctLocation(locationMap, "com.foo#MultiTraitAndDocComments", 48, 0, 50, 1);
             correctLocation(locationMap, "com.example#OtherStructure", 4, 0, 8, 1);
             correctLocation(locationMap, "com.foo#StructWithDefaultSugar", 97, 0, 99, 1);
             correctLocation(locationMap, "com.foo#MyInlineOperation", 101, 0, 109, 1);
@@ -144,6 +144,18 @@ public class SmithyProjectTest {
             correctLocation(locationMap, "com.foo#Suit", 157, 0, 162, 1);
             correctLocation(locationMap, "com.foo#Suit$CLUB", 159, 4, 159, 17);
             correctLocation(locationMap, "com.foo#Suit$SPADE", 161, 4, 161, 19);
+
+            correctLocation(locationMap, "com.foo#MyInlineOperationReversed", 164, 0, 171, 1);
+            correctLocation(locationMap, "com.foo#MyInlineOperationReversedFooInput", 168, 13, 170, 5);
+            correctLocation(locationMap, "com.foo#MyInlineOperationReversedBarOutput", 165, 14, 167, 5);
+
+            correctLocation(locationMap, "com.foo#FalseInlined", 175, 0, 178, 1);
+            correctLocation(locationMap, "com.foo#FalseInlinedFooInput", 180, 0, 182, 1);
+            correctLocation(locationMap, "com.foo#FalseInlinedBarOutput", 184, 0, 186, 1);
+
+            correctLocation(locationMap, "com.foo#FalseInlinedReversed", 188, 0, 191, 1);
+            correctLocation(locationMap, "com.foo#FalseInlinedReversedFooInput", 193, 0, 195, 1);
+            correctLocation(locationMap, "com.foo#FalseInlinedReversedBarOutput", 197, 0, 199, 1);
 
             // Elided members with empty ranges.
             correctLocation(locationMap, "com.foo#ElidedUserInfo$id", 134, 0, 134, 0);

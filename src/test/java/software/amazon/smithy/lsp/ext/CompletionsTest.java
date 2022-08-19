@@ -90,7 +90,7 @@ public class CompletionsTest {
             assertEquals(SetUtils.of(), completeNames(proj, "", false));
             // built-in
             assertEquals(SetUtils.of("string", "String"), completeNames(proj, "Strin", false));
-            assertEquals(SetUtils.of("integer", "Integer"), completeNames(proj, "integer", false));
+            assertEquals(SetUtils.of("integer", "Integer"), completeNames(proj, "intege", false));
             // Structure trait with zero required members and default.
             assertEquals(SetUtils.of("trait", "trait()"), completeNames(proj, "trai", true, "test#Foo"));
             // Completions for each supported node value type.
@@ -135,7 +135,7 @@ public class CompletionsTest {
             assertEquals(SetUtils.of(), completeNames(proj, "", false));
             // built-in
             assertEquals(SetUtils.of("string", "String"), completeNames(proj, "Strin", false));
-            assertEquals(SetUtils.of("integer", "Integer"), completeNames(proj, "integer", false));
+            assertEquals(SetUtils.of("integer", "Integer"), completeNames(proj, "intege", false));
             // Structure trait with zero required members and default.
             assertEquals(SetUtils.of("trait", "trait()"), completeNames(proj, "trai", true, "test#Foo"));
             // Completions for each supported node value type.
