@@ -46,6 +46,7 @@ public final class Document {
         int lastUseStatementLine = 0;
         String lastUseStatement = "";
         boolean collectUseBlock = true;
+        boolean collectNamespace = true;
         int endOfPreamble = 0;
         Optional<String> currentNamespace = Optional.empty();
         Optional<String> idlVersion = Optional.empty();
@@ -53,9 +54,10 @@ public final class Document {
         Optional<String> operationOutputSuffix = Optional.empty();
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i).trim();
-            if (line.startsWith("namespace ")) {
+            if (line.startsWith("namespace ") && collectNamespace) {
                 currentNamespace = Optional.of(line.substring(10));
                 namespaceRange = getNamespaceRange(i, lines.get(i));
+                collectNamespace = false;
             } else if (line.startsWith("use ") && collectUseBlock) {
                 imports.add(getImport(line));
                 if (firstUseStatement.isEmpty()) {
@@ -72,8 +74,10 @@ public final class Document {
                 operationInputSuffix = getControlStatementValue(line, "operationInputSuffix");
             } else if (line.startsWith("$operationOutputSuffix:")) {
                 operationOutputSuffix = getControlStatementValue(line, "operationOutputSuffix");
-            } else if (line.startsWith("//") || line.isEmpty()) {
-                // Skip docs, empty lines and the version statement.
+            } else if (line.startsWith("//") || line.isEmpty() || line.startsWith("metadata")) {
+                // Skip docs, empty lines and single-line metadata.
+            } else if (collectNamespace) {
+                // While the namespace has not been collected, skip any lines related to the metadata section.
             } else {
                 // Stop collecting use statements.
                 collectUseBlock = false;
