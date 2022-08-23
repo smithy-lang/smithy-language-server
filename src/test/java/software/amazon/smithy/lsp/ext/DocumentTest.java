@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Optional;
 import org.eclipse.lsp4j.Position;
 import org.junit.Test;
 import software.amazon.smithy.utils.ListUtils;
@@ -30,8 +31,8 @@ import software.amazon.smithy.utils.ListUtils;
 public class DocumentTest {
 
     @Test
-    public void detectPreamble() throws Exception {
-        Path baseDir = Paths.get(Document.class.getResource("models").toURI());
+    public void detectPreambleV1() throws Exception {
+        Path baseDir = Paths.get(Document.class.getResource("models/v1").toURI());
         Path preambleModel = baseDir.resolve("preamble.smithy");
         List<String> lines = Files.readAllLines(preambleModel);
         DocumentPreamble preamble = Document.detectPreamble(lines);
@@ -39,12 +40,61 @@ public class DocumentTest {
         assertEquals("ns.preamble", preamble.getCurrentNamespace().get());
         assertEquals(new Position(2, 0), preamble.getNamespaceRange().getStart());
         assertEquals(new Position(2, 21), preamble.getNamespaceRange().getEnd());
+        assertEquals("1.0", preamble.getIdlVersion().get());
+        assertEquals(Optional.empty(), preamble.getOperationInputSuffix());
+        assertEquals(Optional.empty(), preamble.getOperationOutputSuffix());
         assertEquals(new Position(4, 0), preamble.getUseBlockRange().getStart());
         assertEquals(new Position(6, 19), preamble.getUseBlockRange().getEnd());
         assertTrue(preamble.hasImport("ns.foo#FooTrait"));
         assertTrue(preamble.hasImport("ns.bar#BarTrait"));
         assertFalse(preamble.hasImport("ns.baz#Baz"));
         assertTrue(preamble.isBlankSeparated());
+    }
+
+    @Test
+    public void detectPreambleV2() throws Exception {
+        Path baseDir = Paths.get(Document.class.getResource("models/v2").toURI());
+        Path preambleModel = baseDir.resolve("preamble.smithy");
+        List<String> lines = Files.readAllLines(preambleModel);
+        DocumentPreamble preamble = Document.detectPreamble(lines);
+
+        assertEquals("ns.preamble", preamble.getCurrentNamespace().get());
+        assertEquals(new Position(4, 0), preamble.getNamespaceRange().getStart());
+        assertEquals(new Position(4, 21), preamble.getNamespaceRange().getEnd());
+        assertEquals("2.0", preamble.getIdlVersion().get());
+        assertEquals("Request", preamble.getOperationInputSuffix().get());
+        assertEquals("Response", preamble.getOperationOutputSuffix().get());
+        assertEquals(new Position(6, 0), preamble.getUseBlockRange().getStart());
+        assertEquals(new Position(8, 19), preamble.getUseBlockRange().getEnd());
+        assertTrue(preamble.hasImport("ns.foo#FooTrait"));
+        assertTrue(preamble.hasImport("ns.bar#BarTrait"));
+        assertFalse(preamble.hasImport("ns.baz#Baz"));
+        assertTrue(preamble.isBlankSeparated());
+    }
+
+    @Test
+    public void detectPreambleMajorIdlVersionOnly() {
+        List<String> linesIdl1 = ListUtils.of(
+                "$version: \"1\"",
+                "namespace ns.one",
+                "@Foo",
+                "string MyString"
+        );
+        DocumentPreamble preambleIdl1 = Document.detectPreamble(linesIdl1);
+
+        List<String> linesIdl2 = ListUtils.of(
+                "$version: \"2\"",
+                "namespace ns.two",
+                "@Foo",
+                "string MyString"
+        );
+        DocumentPreamble preambleIdl2 = Document.detectPreamble(linesIdl2);
+
+        assertEquals("ns.one", preambleIdl1.getCurrentNamespace().get());
+        assertEquals("1", preambleIdl1.getIdlVersion().get());
+
+        assertEquals("ns.two", preambleIdl2.getCurrentNamespace().get());
+        assertEquals("2", preambleIdl2.getIdlVersion().get());
     }
 
     @Test
@@ -75,5 +125,82 @@ public class DocumentTest {
 
         assertEquals("ns.preamble", preamble.getCurrentNamespace().get());
         assertFalse(preamble.isBlankSeparated());
+    }
+
+    @Test
+    public void detectPreambleWithoutVersionStatement() {
+        List<String> lines = ListUtils.of(
+                "namespace ns.preamble",
+                "string MyString"
+        );
+        DocumentPreamble preamble = Document.detectPreamble(lines);
+
+        assertEquals("ns.preamble", preamble.getCurrentNamespace().get());
+        assertFalse(preamble.isBlankSeparated());
+    }
+
+    @Test
+    public void detectPreambleWithMetadataAndVersion() {
+        List<String> lines = ListUtils.of(
+                "$version: \"1.0\"",
+                "metadata foo = [",
+                "    { bar: \"baz\" }",
+                "]",
+                "metadata hello = there",
+                "namespace ns.preamble",
+                "string MyString"
+        );
+        DocumentPreamble preamble = Document.detectPreamble(lines);
+
+        assertEquals("ns.preamble", preamble.getCurrentNamespace().get());
+        assertFalse(preamble.isBlankSeparated());
+    }
+
+    @Test
+    public void detectPreambleWithMetadataWithoutVersionStatement() {
+        List<String> lines = ListUtils.of(
+                "metadata foo = [",
+                "    { bar: \"baz\" }",
+                "]",
+                "metadata hello = there",
+                "",
+                "namespace ns.preamble",
+                "string MyString"
+        );
+        DocumentPreamble preamble = Document.detectPreamble(lines);
+
+        assertEquals("ns.preamble", preamble.getCurrentNamespace().get());
+        assertFalse(preamble.isBlankSeparated());
+    }
+
+    @Test
+    public void detectPreambleWithMetadataWithoutVersionStatementBlankSeparated() {
+        List<String> lines = ListUtils.of(
+                "metadata foo = [",
+                "    { bar: \"baz\" }",
+                "]",
+                "metadata hello = there",
+                "",
+                "namespace ns.preamble",
+                "",
+                "string MyString"
+        );
+        DocumentPreamble preamble = Document.detectPreamble(lines);
+
+        assertEquals("ns.preamble", preamble.getCurrentNamespace().get());
+        assertTrue(preamble.isBlankSeparated());
+    }
+
+    @Test
+    public void detectPreambleWithoutMetadataOrVersionStatement() {
+        List<String> lines = ListUtils.of(
+                "namespace ns.preamble",
+                "",
+                "string MyString"
+        );
+        DocumentPreamble preamble = Document.detectPreamble(lines);
+
+        assertEquals("ns.preamble", preamble.getCurrentNamespace().get());
+        assertTrue(preamble.isBlankSeparated());
     }
 }

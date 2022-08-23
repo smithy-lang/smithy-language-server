@@ -62,8 +62,8 @@ public class CompletionsTest {
     }
 
     @Test
-    public void multiFile() throws Exception {
-        Path baseDir = Paths.get(Completions.class.getResource("models").toURI());
+    public void multiFileV1() throws Exception {
+        Path baseDir = Paths.get(Completions.class.getResource("models/v1").toURI());
         Path traitDefModel = baseDir.resolve("trait-def.smithy");
         String traitDef = IoUtils.readUtf8File(traitDefModel);
 
@@ -90,13 +90,58 @@ public class CompletionsTest {
             assertEquals(SetUtils.of(), completeNames(proj, "", false));
             // built-in
             assertEquals(SetUtils.of("string", "String"), completeNames(proj, "Strin", false));
-            assertEquals(SetUtils.of("integer", "Integer"), completeNames(proj, "integer", false));
+            assertEquals(SetUtils.of("integer", "Integer"), completeNames(proj, "intege", false));
             // Structure trait with zero required members and default.
             assertEquals(SetUtils.of("trait", "trait()"), completeNames(proj, "trai", true, "test#Foo"));
             // Completions for each supported node value type.
             assertEquals(SetUtils.of("test(blob: \"\", bool: true|false, short: , integer: , long: , float: ," +
                             " double: , bigDecimal: , bigInteger: , string: \"\", timestamp: \"\", list: []," +
                             " set: [], map: {}, struct: {nested: {nestedMember: \"\"}}, union: {})", "test()"),
+                    completeNames(proj, "test", true, "test#Foo"));
+            // Limit completions to traits that can be applied to target shape.
+            // Other http* traits cannot apply to an operation.
+            assertEquals(SetUtils.of("http(method: \"\", uri: \"\")", "http()", "httpChecksumRequired"),
+                    completeNames(proj, "htt", true, "test#Bar"));
+
+        }
+    }
+
+    @Test
+    public void multiFileV2() throws Exception {
+        Path baseDir = Paths.get(Completions.class.getResource("models/v2").toURI());
+        Path traitDefModel = baseDir.resolve("trait-def.smithy");
+        String traitDef = IoUtils.readUtf8File(traitDefModel);
+
+        Map<String, String> files = MapUtils.ofEntries(
+                MapUtils.entry("def1.smithy", "namespace test\nstring MyId"),
+                MapUtils.entry("bar/def2.smithy", "namespace test\nstructure Hello{}\ninteger MyId2"),
+                MapUtils.entry("foo/hello/def3.smithy", "namespace test\n@test()\n@trait\nstructure Foo {}"),
+                MapUtils.entry("foo/hello/def4.smithy", "namespace test\n@http()\noperation Bar{}"),
+                MapUtils.entry("trait-def.smithy", traitDef)
+        );
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+            SmithyProject proj = hs.getProject();
+            // Complete match
+            assertEquals(SetUtils.of("Foo"), completeNames(proj, "Foo", false));
+            // Partial match
+            assertEquals(SetUtils.of("MyId", "MyId2"), completeNames(proj, "MyI", false));
+            // Partial match (case insensitive)
+            assertEquals(SetUtils.of("MyId", "MyId2"), completeNames(proj, "myi", false));
+
+            // no matches
+            assertEquals(SetUtils.of(), completeNames(proj, "basdasdasdasd", false));
+            // empty token
+            assertEquals(SetUtils.of(), completeNames(proj, "", false));
+            // built-in
+            assertEquals(SetUtils.of("string", "String"), completeNames(proj, "Strin", false));
+            assertEquals(SetUtils.of("integer", "Integer"), completeNames(proj, "intege", false));
+            // Structure trait with zero required members and default.
+            assertEquals(SetUtils.of("trait", "trait()"), completeNames(proj, "trai", true, "test#Foo"));
+            // Completions for each supported node value type.
+            assertEquals(SetUtils.of("test(blob: \"\", bool: true|false, short: , integer: , long: , float: ," +
+                            " double: , bigDecimal: , bigInteger: , string: \"\", timestamp: \"\", list: []," +
+                            " map: {}, struct: {nested: {nestedMember: \"\"}}, union: {})", "test()"),
                     completeNames(proj, "test", true, "test#Foo"));
             // Limit completions to traits that can be applied to target shape.
             // Other http* traits cannot apply to an operation.

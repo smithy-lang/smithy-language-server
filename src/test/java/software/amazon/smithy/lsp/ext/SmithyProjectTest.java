@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
@@ -82,8 +83,8 @@ public class SmithyProjectTest {
     }
 
     @Test
-    public void definitionLocations() throws Exception {
-        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+    public void definitionLocationsV1() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
         Path modelMain = baseDir.resolve("main.smithy");
         Path modelTest = baseDir.resolve("test.smithy");
         List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
@@ -102,8 +103,72 @@ public class SmithyProjectTest {
     }
 
     @Test
-    public void definitionLocationsEmptySourceLocationsOnTrait() throws Exception {
-        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+    public void definitionLocationsV2() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
+        Path modelMain = baseDir.resolve("main.smithy");
+        Path modelTest = baseDir.resolve("test.smithy");
+        List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
+
+            correctLocation(locationMap, "com.foo#SingleLine", 6, 0, 6, 23);
+            correctLocation(locationMap, "com.foo#MultiLine", 8, 8,15, 9);
+            correctLocation(locationMap, "com.foo#SingleTrait", 18, 4, 18, 22);
+            correctLocation(locationMap, "com.foo#MultiTrait", 22, 0,23, 14);
+            correctLocation(locationMap, "com.foo#MultiTraitAndLineComments", 37, 0,39, 1);
+            correctLocation(locationMap, "com.foo#MultiTraitAndDocComments", 48, 0, 50, 1);
+            correctLocation(locationMap, "com.example#OtherStructure", 4, 0, 8, 1);
+            correctLocation(locationMap, "com.foo#StructWithDefaultSugar", 97, 0, 99, 1);
+            correctLocation(locationMap, "com.foo#MyInlineOperation", 101, 0, 109, 1);
+            correctLocation(locationMap, "com.foo#MyInlineOperationFooInput", 102, 13, 105, 5);
+            correctLocation(locationMap, "com.foo#MyInlineOperationBarOutput", 106, 14, 108, 5);
+            correctLocation(locationMap, "com.foo#UserIds", 112, 0, 118, 1);
+            correctLocation(locationMap, "com.foo#UserIds$email", 114, 4, 114, 17);
+            correctLocation(locationMap, "com.foo#UserIds$id", 117, 4, 117, 14);
+            correctLocation(locationMap, "com.foo#UserDetails", 121, 0, 123, 1);
+            correctLocation(locationMap, "com.foo#UserDetails$status", 122, 4, 122, 18);
+            correctLocation(locationMap, "com.foo#GetUser", 125, 0, 132, 1);
+            correctLocation(locationMap, "com.foo#GetUserFooInput", 126, 13, 128, 5);
+            correctLocation(locationMap, "com.foo#GetUserBarOutput", 129, 14, 131, 5);
+            correctLocation(locationMap, "com.foo#ElidedUserInfo", 134, 0, 140, 1);
+            correctLocation(locationMap, "com.foo#ElidedUserInfo$email", 136, 4, 136, 10);
+            correctLocation(locationMap, "com.foo#ElidedUserInfo$status", 139, 4, 139, 11);
+            correctLocation(locationMap, "com.foo#ElidedGetUser", 142, 0, 155, 1);
+            correctLocation(locationMap, "com.foo#ElidedGetUserFooInput", 143, 13, 148, 5);
+            correctLocation(locationMap, "com.foo#ElidedGetUserFooInput$id", 146, 7, 146, 10);
+            correctLocation(locationMap, "com.foo#ElidedGetUserFooInput$optional", 147, 7, 147, 23);
+            correctLocation(locationMap, "com.foo#ElidedGetUserBarOutput", 149, 14, 154, 5);
+            correctLocation(locationMap, "com.foo#ElidedGetUserBarOutput$status", 151, 8, 151, 15);
+            correctLocation(locationMap, "com.foo#ElidedGetUserBarOutput$description", 153, 8, 153, 27);
+            correctLocation(locationMap, "com.foo#Suit", 157, 0, 162, 1);
+            correctLocation(locationMap, "com.foo#Suit$CLUB", 159, 4, 159, 17);
+            correctLocation(locationMap, "com.foo#Suit$SPADE", 161, 4, 161, 19);
+
+            correctLocation(locationMap, "com.foo#MyInlineOperationReversed", 164, 0, 171, 1);
+            correctLocation(locationMap, "com.foo#MyInlineOperationReversedFooInput", 168, 13, 170, 5);
+            correctLocation(locationMap, "com.foo#MyInlineOperationReversedBarOutput", 165, 14, 167, 5);
+
+            correctLocation(locationMap, "com.foo#FalseInlined", 175, 0, 178, 1);
+            correctLocation(locationMap, "com.foo#FalseInlinedFooInput", 180, 0, 182, 1);
+            correctLocation(locationMap, "com.foo#FalseInlinedBarOutput", 184, 0, 186, 1);
+
+            correctLocation(locationMap, "com.foo#FalseInlinedReversed", 188, 0, 191, 1);
+            correctLocation(locationMap, "com.foo#FalseInlinedReversedFooInput", 193, 0, 195, 1);
+            correctLocation(locationMap, "com.foo#FalseInlinedReversedBarOutput", 197, 0, 199, 1);
+
+            // Elided members with empty ranges.
+            correctLocation(locationMap, "com.foo#ElidedUserInfo$id", 134, 0, 134, 0);
+            correctLocation(locationMap, "com.foo#ElidedGetUserFooInput$email", 143, 13, 143, 13);
+            correctLocation(locationMap, "com.foo#ElidedGetUserFooInput$status", 143, 13, 143, 13);
+            correctLocation(locationMap, "com.foo#ElidedGetUserBarOutput$email", 149, 14, 149, 14);
+            correctLocation(locationMap, "com.foo#ElidedGetUserBarOutput$id", 149, 14, 149, 14);
+        }
+    }
+
+    @Test
+    public void definitionLocationsEmptySourceLocationsOnTraitV1() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
         Path modelMain = baseDir.resolve("empty-source-location-trait.smithy");
 
         StringShape stringShapeBar = StringShape.builder()
@@ -132,8 +197,38 @@ public class SmithyProjectTest {
     }
 
     @Test
-    public void shapeIdFromLocation() throws Exception {
-        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+    public void definitionLocationsEmptySourceLocationsOnTraitV2() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
+        Path modelMain = baseDir.resolve("empty-source-location-trait.smithy");
+
+        StringShape stringShapeBar = StringShape.builder()
+                .id("ns.foo#Bar")
+                .source(new SourceLocation(modelMain.toString(), 5, 1))
+                .build();
+
+        StringShape stringShapeBaz = StringShape.builder()
+                .id("ns.foo#Baz")
+                .addTrait(new DocumentationTrait("docs", SourceLocation.NONE))
+                .addTrait(new SinceTrait("2022-05-12", new SourceLocation(modelMain.toString(), 7, 1)))
+                .source(new SourceLocation(modelMain.toString(), 8, 1))
+                .build();
+
+        Model unvalidatedModel = Model.builder()
+                .addShape(stringShapeBar)
+                .addShape(stringShapeBaz)
+                .build();
+        ValidatedResult<Model> model = Model.assembler().addModel(unvalidatedModel).assemble();
+        SmithyProject project = new SmithyProject(Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList(), baseDir.toFile(), model);
+        Map<ShapeId, Location> locationMap = project.getLocations();
+
+        correctLocation(locationMap, "ns.foo#Bar", 4, 0, 4, 10);
+        correctLocation(locationMap, "ns.foo#Baz", 7, 0, 7, 10);
+    }
+
+    @Test
+    public void shapeIdFromLocationV1() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
         Path modelMain = baseDir.resolve("main.smithy");
         Path modelTest = baseDir.resolve("test.smithy");
         List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
@@ -172,6 +267,89 @@ public class SmithyProjectTest {
                     new Position(10,18)).get());
             assertEquals(ShapeId.from("com.foo#MultiLine$c"), project.getShapeIdFromLocation(uri,
                     new Position(12,18)).get());
+            assertEquals(ShapeId.from("com.example#OtherStructure"), project.getShapeIdFromLocation(testUri,
+                    new Position(4, 15)).get());
+        }
+    }
+
+    @Test
+    public void shapeIdFromLocationV2() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
+        Path modelMain = baseDir.resolve("main.smithy");
+        Path modelTest = baseDir.resolve("test.smithy");
+        List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            SmithyProject project = hs.getProject();
+            String uri = hs.file("main.smithy").toString();
+            String testUri = hs.file("test.smithy").toString();
+
+            assertFalse(project.getShapeIdFromLocation("non-existent-model-file.smithy", new Position(0, 0)).isPresent());
+            assertFalse(project.getShapeIdFromLocation(uri, new Position(0, 0)).isPresent());
+            // Position on shape start line, but before char start
+            assertFalse(project.getShapeIdFromLocation(uri, new Position(19, 0)).isPresent());
+            // Position on shape end line, but after char end
+            assertFalse(project.getShapeIdFromLocation(uri, new Position(16, 10)).isPresent());
+            // Position on shape start line
+            Optional<ShapeId> foo = project.getShapeIdFromLocation(uri, new Position(6, 10));
+            assertEquals(ShapeId.from("com.foo#SingleLine"), project.getShapeIdFromLocation(uri,
+                    new Position(6, 10)).get());
+            // Position on multi-line shape start line
+            assertEquals(ShapeId.from("com.foo#MultiLine"), project.getShapeIdFromLocation(uri,
+                    new Position(8, 8)).get());
+            // Position on multi-line shape end line
+            assertEquals(ShapeId.from("com.foo#MultiLine"), project.getShapeIdFromLocation(uri,
+                    new Position(15, 6)).get());
+            // Member positions
+            assertEquals(ShapeId.from("com.foo#MultiLine$a"), project.getShapeIdFromLocation(uri,
+                    new Position(9,14)).get());
+            assertEquals(ShapeId.from("com.foo#MultiLine$b"), project.getShapeIdFromLocation(uri,
+                    new Position(12,14)).get());
+            assertEquals(ShapeId.from("com.foo#MultiLine$c"), project.getShapeIdFromLocation(uri,
+                    new Position(14,14)).get());
+            // Member positions on target
+            assertEquals(ShapeId.from("com.foo#MultiLine$a"), project.getShapeIdFromLocation(uri,
+                    new Position(9,18)).get());
+            assertEquals(ShapeId.from("com.foo#MultiLine$b"), project.getShapeIdFromLocation(uri,
+                    new Position(12,18)).get());
+            assertEquals(ShapeId.from("com.foo#MultiLine$c"), project.getShapeIdFromLocation(uri,
+                    new Position(14,18)).get());
+            assertEquals(ShapeId.from("com.foo#GetUser"), project.getShapeIdFromLocation(uri,
+                    new Position(125,13)).get());
+            assertEquals(ShapeId.from("com.foo#GetUserFooInput$email"), project.getShapeIdFromLocation(uri,
+                    new Position(126,13)).get());
+            assertEquals(ShapeId.from("com.foo#GetUserFooInput$optional"), project.getShapeIdFromLocation(uri,
+                    new Position(127,14)).get());
+            assertEquals(ShapeId.from("com.foo#GetUserBarOutput"), project.getShapeIdFromLocation(uri,
+                    new Position(129,19)).get());
+            assertEquals(ShapeId.from("com.foo#GetUserBarOutput$description"), project.getShapeIdFromLocation(uri,
+                    new Position(130,12)).get());
+            assertEquals(ShapeId.from("com.foo#ElidedUserInfo"), project.getShapeIdFromLocation(uri,
+                    new Position(134,17)).get());
+            assertEquals(ShapeId.from("com.foo#ElidedUserInfo$email"), project.getShapeIdFromLocation(uri,
+                    new Position(136,8)).get());
+            assertEquals(ShapeId.from("com.foo#ElidedUserInfo$status"), project.getShapeIdFromLocation(uri,
+                    new Position(139,9)).get());
+            assertEquals(ShapeId.from("com.foo#ElidedGetUser"), project.getShapeIdFromLocation(uri,
+                    new Position(142,18)).get());
+            assertEquals(ShapeId.from("com.foo#ElidedGetUserFooInput"), project.getShapeIdFromLocation(uri,
+                    new Position(144,18)).get());
+            assertEquals(ShapeId.from("com.foo#ElidedGetUserFooInput$id"), project.getShapeIdFromLocation(uri,
+                    new Position(146,10)).get());
+            assertEquals(ShapeId.from("com.foo#ElidedGetUserFooInput$optional"), project.getShapeIdFromLocation(uri,
+                    new Position(147,13)).get());
+            assertEquals(ShapeId.from("com.foo#ElidedGetUserBarOutput"), project.getShapeIdFromLocation(uri,
+                    new Position(149,16)).get());
+            assertEquals(ShapeId.from("com.foo#ElidedGetUserBarOutput$status"), project.getShapeIdFromLocation(uri,
+                    new Position(151,12)).get());
+            assertEquals(ShapeId.from("com.foo#ElidedGetUserBarOutput$description"), project.getShapeIdFromLocation(uri,
+                    new Position(153,18)).get());
+            assertEquals(ShapeId.from("com.foo#Suit"), project.getShapeIdFromLocation(uri,
+                    new Position(157,8)).get());
+            assertEquals(ShapeId.from("com.foo#Suit$DIAMOND"), project.getShapeIdFromLocation(uri,
+                    new Position(158,8)).get());
+            assertEquals(ShapeId.from("com.foo#Suit$HEART"), project.getShapeIdFromLocation(uri,
+                    new Position(160,8)).get());
             assertEquals(ShapeId.from("com.example#OtherStructure"), project.getShapeIdFromLocation(testUri,
                     new Position(4, 15)).get());
         }

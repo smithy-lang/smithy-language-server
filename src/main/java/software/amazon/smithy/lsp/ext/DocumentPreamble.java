@@ -21,6 +21,9 @@ import org.eclipse.lsp4j.Range;
 
 public final class DocumentPreamble {
     private final Optional<String> currentNamespace;
+    private final Optional<String> idlVersion;
+    private final Optional<String> operationInputSuffix;
+    private final Optional<String> operationOutputSuffix;
     private final Range namespace;
     private final Range useBlock;
     private final Set<String> imports;
@@ -31,19 +34,25 @@ public final class DocumentPreamble {
      * This information is required to correctly implement features such as auto-import of definitions
      * on completions.
      *
-     * @param currentNamespace namespace value in the document
-     * @param namespace      position of namespace declaration
-     * @param useBlock       start and end of the use statements block
-     * @param imports        set of imported (fully qualified) identifiers
-     * @param blankSeparated whether document preamble is separated from other definitions by newline(s)
+     * @param currentNamespace      namespace value in the document
+     * @param namespace             position of namespace declaration
+     * @param idlVersion            IDL version
+     * @param operationInputSuffix  suffix applied to name of inline operation inputs
+     * @param operationOutputSuffix suffix applied to name of inline operation outputs
+     * @param useBlock              start and end of the use statements block
+     * @param imports               set of imported (fully qualified) identifiers
+     * @param blankSeparated        whether document preamble is separated from other definitions by newline(s)
      */
     public DocumentPreamble(
-        Optional<String> currentNamespace,
-        Range namespace, Range useBlock, Set<String> imports,
-        boolean blankSeparated
+        Optional<String> currentNamespace, Range namespace, Optional<String> idlVersion,
+        Optional<String> operationInputSuffix, Optional<String> operationOutputSuffix, Range useBlock,
+        Set<String> imports, boolean blankSeparated
     ) {
         this.currentNamespace = currentNamespace;
         this.namespace = namespace;
+        this.idlVersion = idlVersion;
+        this.operationInputSuffix = operationInputSuffix;
+        this.operationOutputSuffix = operationOutputSuffix;
         this.useBlock = useBlock;
         this.imports = imports;
         this.blankSeparated = blankSeparated;
@@ -67,6 +76,18 @@ public final class DocumentPreamble {
 
     public Optional<String> getCurrentNamespace() {
         return this.currentNamespace;
+    }
+
+    public Optional<String> getIdlVersion() {
+        return this.idlVersion;
+    }
+
+    public Optional<String> getOperationInputSuffix() {
+        return this.operationInputSuffix;
+    }
+
+    public Optional<String> getOperationOutputSuffix() {
+        return this.operationOutputSuffix;
     }
 
     @Override

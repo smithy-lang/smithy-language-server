@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package software.amazon.smithy.lsp.ext;
+package software.amazon.smithy.lsp;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -51,7 +51,8 @@ import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.junit.Test;
-import software.amazon.smithy.lsp.SmithyTextDocumentService;
+import software.amazon.smithy.lsp.ext.Harness;
+import software.amazon.smithy.lsp.ext.SmithyProjectTest;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.MapUtils;
@@ -170,8 +171,8 @@ public class SmithyTextDocumentServiceTest {
     }
 
     @Test
-    public void definitions() throws Exception {
-        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+    public void definitionsV1() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
         String modelFilename = "main.smithy";
         Path modelMain = baseDir.resolve(modelFilename);
         List<Path> modelFiles = ListUtils.of(modelMain);
@@ -247,8 +248,100 @@ public class SmithyTextDocumentServiceTest {
     }
 
     @Test
-    public void completions() throws Exception {
-        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+    public void definitionsV2() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
+        String modelFilename = "main.smithy";
+        Path modelMain = baseDir.resolve(modelFilename);
+        List<Path> modelFiles = ListUtils.of(modelMain);
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
+
+            // Resolves via token => shape name.
+            DefinitionParams commentParams = definitionParams(mainTdi, 45, 37);
+            Location commentLocation = tds.definition(commentParams).get().getLeft().get(0);
+
+            // Resolves via shape target location in model.
+            DefinitionParams memberParams = definitionParams(mainTdi, 14, 18);
+            Location memberTargetLocation = tds.definition(memberParams).get().getLeft().get(0);
+
+            // Resolves via member shape target location in prelude.
+            DefinitionParams preludeTargetParams = definitionParams(mainTdi, 38, 12);
+            Location preludeTargetLocation = tds.definition(preludeTargetParams).get().getLeft().get(0);
+
+            // Resolves via top-level trait location in prelude.
+            DefinitionParams preludeTraitParams = definitionParams(mainTdi, 27, 3);
+            Location preludeTraitLocation = tds.definition(preludeTraitParams).get().getLeft().get(0);
+
+            // Resolves via member-applied trait location in prelude.
+            DefinitionParams preludeMemberTraitParams = definitionParams(mainTdi, 61, 10);
+            Location preludeMemberTraitLocation = tds.definition(preludeMemberTraitParams).get().getLeft().get(0);
+
+            // Resolves to current location.
+            DefinitionParams selfParams = definitionParams(mainTdi, 38, 0);
+            Location selfLocation = tds.definition(selfParams).get().getLeft().get(0);
+
+            // Resolves via operation input.
+            DefinitionParams inputParams = definitionParams(mainTdi, 54, 16);
+            Location inputLocation = tds.definition(inputParams).get().getLeft().get(0);
+
+            // Resolves via operation output.
+            DefinitionParams outputParams = definitionParams(mainTdi, 55, 17);
+            Location outputLocation = tds.definition(outputParams).get().getLeft().get(0);
+
+            // Resolves via operation error.
+            DefinitionParams errorParams = definitionParams(mainTdi, 56, 14);
+            Location errorLocation = tds.definition(errorParams).get().getLeft().get(0);
+
+            // Resolves via resource ids.
+            DefinitionParams idParams = definitionParams(mainTdi, 77, 29);
+            Location idLocation = tds.definition(idParams).get().getLeft().get(0);
+
+            // Resolves via resource read.
+            DefinitionParams readParams = definitionParams(mainTdi, 78, 12);
+            Location readLocation = tds.definition(readParams).get().getLeft().get(0);
+
+            // Does not correspond to shape.
+            DefinitionParams noMatchParams = definitionParams(mainTdi, 0, 0);
+            List<Location> noMatchLocationList = (List<Location>) tds.definition(noMatchParams).get().getLeft();
+
+            // Resolves via mixin target on operation input.
+            DefinitionParams mixinInputParams = definitionParams(mainTdi, 143, 24);
+            Location mixinInputLocation = tds.definition(mixinInputParams).get().getLeft().get(0);
+
+            // Resolves via mixin target on operation output.
+            DefinitionParams mixinOutputParams = definitionParams(mainTdi, 149, 36);
+            Location mixinOutputLocation = tds.definition(mixinOutputParams).get().getLeft().get(0);
+
+            // Resolves via mixin target on structure.
+            DefinitionParams mixinStructureParams = definitionParams(mainTdi, 134, 36);
+            Location mixinStructureLocation = tds.definition(mixinStructureParams).get().getLeft().get(0);
+
+            correctLocation(commentLocation, modelFilename, 22, 0, 23, 14);
+            correctLocation(memberTargetLocation, modelFilename, 6, 0, 6, 23);
+            correctLocation(selfLocation, modelFilename, 37, 0, 39, 1);
+            correctLocation(inputLocation, modelFilename, 59, 0, 63, 1);
+            correctLocation(outputLocation, modelFilename, 65, 0, 68, 1);
+            correctLocation(errorLocation, modelFilename, 71, 0, 74, 1);
+            correctLocation(idLocation, modelFilename, 81, 0, 81, 11);
+            correctLocation(readLocation, modelFilename, 53, 0, 57, 1);
+            correctLocation(mixinInputLocation, modelFilename, 112, 0, 118, 1);
+            correctLocation(mixinOutputLocation, modelFilename, 121, 0, 123, 1);
+            correctLocation(mixinStructureLocation, modelFilename, 112, 0, 118, 1);
+            assertTrue(preludeTargetLocation.getUri().endsWith("prelude.smithy"));
+            assertTrue(preludeTraitLocation.getUri().endsWith("prelude.smithy"));
+            assertTrue(preludeMemberTraitLocation.getUri().endsWith("prelude.smithy"));
+            assertTrue(noMatchLocationList.isEmpty());
+        }
+    }
+
+    @Test
+    public void completionsV1() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
         String modelFilename = "main.smithy";
         Path modelMain = baseDir.resolve(modelFilename);
         List<Path> modelFiles = ListUtils.of(modelMain);
@@ -268,6 +361,44 @@ public class SmithyTextDocumentServiceTest {
             CompletionParams applyStatementParams = completionParams(mainTdi,83, 23);
             List<CompletionItem> applyStatementCompletionItems = tds.completion(applyStatementParams).get().getLeft();
 
+            CompletionParams whiteSpaceParams = completionParams(mainTdi, 0, 0);
+            List<CompletionItem> whiteSpaceCompletionItems = tds.completion(whiteSpaceParams).get().getLeft();
+
+            assertEquals(SetUtils.of("MyOperation", "MyOperationInput", "MyOperationOutput"),
+                    completionLabels(shapeCompletionItems));
+
+            assertEquals(SetUtils.of("http(method: \"\", uri: \"\")", "http()", "httpChecksumRequired"),
+                    completionLabels(applyStatementCompletionItems));
+
+            assertEquals(SetUtils.of("http(method: \"\", uri: \"\")", "http()", "httpChecksumRequired"),
+                    completionLabels(traitCompletionItems));
+
+            assertTrue(whiteSpaceCompletionItems.isEmpty());
+        }
+    }
+
+    @Test
+    public void completionsV2() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
+        String modelFilename = "main.smithy";
+        Path modelMain = baseDir.resolve(modelFilename);
+        List<Path> modelFiles = ListUtils.of(modelMain);
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
+
+            CompletionParams traitParams = completionParams(mainTdi, 87, 10);
+            List<CompletionItem> traitCompletionItems = tds.completion(traitParams).get().getLeft();
+
+            CompletionParams shapeParams = completionParams(mainTdi, 53, 16);
+            List<CompletionItem> shapeCompletionItems = tds.completion(shapeParams).get().getLeft();
+
+            CompletionParams applyStatementParams = completionParams(mainTdi, 85, 23);
+            List<CompletionItem> applyStatementCompletionItems = tds.completion(applyStatementParams).get().getLeft();
+
             CompletionParams whiteSpaceParams = completionParams(mainTdi, 0,0);
             List<CompletionItem> whiteSpaceCompletionItems = tds.completion(whiteSpaceParams).get().getLeft();
 
@@ -285,8 +416,8 @@ public class SmithyTextDocumentServiceTest {
     }
 
     @Test
-    public void runSelector() throws Exception {
-        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+    public void runSelectorV1() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
         String modelFilename = "main.smithy";
         Path modelMain = baseDir.resolve(modelFilename);
         List<Path> modelFiles = ListUtils.of(modelMain);
@@ -312,8 +443,53 @@ public class SmithyTextDocumentServiceTest {
     }
 
     @Test
-    public void runSelectorAgainstModelWithErrors() throws Exception {
-        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models").toURI());
+    public void runSelectorV2() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
+        String modelFilename = "main.smithy";
+        Path modelMain = baseDir.resolve(modelFilename);
+        List<Path> modelFiles = ListUtils.of(modelMain);
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+
+            Either<Exception, List<Location>> result = tds.runSelector("[id|namespace=com.foo]");
+
+            assertTrue(result.isRight());
+            assertFalse(result.getRight().isEmpty());
+
+            Optional<Location> location = result.getRight().stream()
+                    .filter(location1 -> location1.getRange().getStart().getLine() == 22)
+                    .findFirst();
+
+            assertTrue(location.isPresent());
+            correctLocation(location.get(), modelFilename, 22, 0, 23, 14);
+        }
+    }
+
+    @Test
+    public void runSelectorAgainstModelWithErrorsV1() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
+        Path broken = baseDir.resolve("broken.smithy");
+        List<Path> modelFiles = ListUtils.of(broken);
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+
+            Either<Exception, List<Location>> result = tds.runSelector("[id|namespace=com.foo]");
+
+            assertTrue(result.isLeft());
+            assertTrue(result.getLeft().getMessage().contains("Result contained ERROR severity validation events:"));
+        }
+    }
+
+    @Test
+    public void runSelectorAgainstModelWithErrorsV2() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
         Path broken = baseDir.resolve("broken.smithy");
         List<Path> modelFiles = ListUtils.of(broken);
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {

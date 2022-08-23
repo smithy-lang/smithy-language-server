@@ -17,7 +17,6 @@ package software.amazon.smithy.lsp.ext;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -39,13 +38,16 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.lsp.SmithyInterface;
 import software.amazon.smithy.lsp.Utils;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
-import software.amazon.smithy.model.FromSourceLocation;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.selector.Selector;
+import software.amazon.smithy.model.shapes.MemberShape;
+import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.ShapeType;
+import software.amazon.smithy.model.traits.InputTrait;
+import software.amazon.smithy.model.traits.OutputTrait;
 import software.amazon.smithy.model.traits.Trait;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidatedResultException;
@@ -190,59 +192,209 @@ public final class SmithyProject {
                 .collect(Collectors.toList());
         for (String modelFile : modelFiles) {
             List<String> lines = getFileLines(modelFile);
+            DocumentPreamble preamble = Document.detectPreamble(lines);
+            Map<OperationShape, List<Shape>> operationsWithInlineInputOutputMap = new HashMap<>();
+            Map<ShapeId, List<MemberShape>> containerMembersMap = new HashMap<>();
             int endMarker = getInitialEndMarker(lines);
-            int memberEndMarker = getInitialEndMarker(lines);
 
              // Get shapes reverse-sorted by source location to work from bottom of file to top.
             List<Shape> shapes = model.shapes()
                     .filter(shape -> shape.getSourceLocation().getFilename().equals(modelFile))
-                    // TODO: Once the change in https://github.com/awslabs/smithy/pull/1192 lands, replace with with
-                    // `.sorted(Comparator.comparing(Shape::getSourceLocation).reversed())`.
-                    .sorted(new SourceLocationSorter().reversed())
+                    .sorted(Comparator.comparing(Shape::getSourceLocation).reversed())
                     .collect(Collectors.toList());
 
 
             for (Shape shape : shapes) {
                 SourceLocation sourceLocation = shape.getSourceLocation();
-                Position startPosition = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
+                Position startPosition = getStartPosition(sourceLocation);
                 Position endPosition;
                 if (endMarker < sourceLocation.getLine()) {
                     endPosition = new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
                 } else {
                     endPosition = getEndPosition(endMarker, lines);
                 }
-
-                // Find the end of a member's location by first trimming trailing commas, empty lines and closing
-                // structure braces.
-                if (shape.getType() == ShapeType.MEMBER) {
-                    int currentMemberEndMarker = Math.min(endMarker, memberEndMarker);
-                    String currentLine = lines.get(currentMemberEndMarker - 1).trim();
-                    while (currentLine.startsWith("//") || currentLine.equals("") || currentLine.equals("}")) {
-                        currentMemberEndMarker = currentMemberEndMarker - 1;
-                        currentLine = lines.get(currentMemberEndMarker - 1).trim();
-                    }
-                    // Set the member's end position.
-                    endPosition = getEndPosition(currentMemberEndMarker, lines);
-                    // Advance the member end marker on any traits on the current member, so that the next member
-                    // location starts in the right place.
-                    // TODO: Handle traits being applied to shapes before shape definition in file.
-                    List<Trait> traits = shape.getAllTraits().values().stream()
-                            .filter(trait -> !trait.getSourceLocation().equals(SourceLocation.NONE))
-                            .filter(trait -> trait.getSourceLocation().getFilename().equals(modelFile))
-                            .collect(Collectors.toList());
-                    if (!traits.isEmpty()) {
-                        traits.sort(new SourceLocationSorter());
-                        currentMemberEndMarker = traits.get(0).getSourceLocation().getLine();
-                    }
-                    memberEndMarker = currentMemberEndMarker - 1;
+                // If a shape belongs to an operation as an inlined input or output, collect a map of the operation
+                // with the reversed ordered list of inputs and outputs within that operation. Once the location of
+                // the containing operation has been determined, the map can be revisited to determine the locations of
+                // the inlined inputs and outputs.
+                Optional<OperationShape> matchingOperation = getOperationForInlinedInputOrOutput(model, shape,
+                        preamble, lines);
+                if (matchingOperation.isPresent()) {
+                    operationsWithInlineInputOutputMap.computeIfAbsent(matchingOperation.get(), s -> new ArrayList<>())
+                            .add(shape);
+                // Collect a map of container shapes and a list of member shapes, reverse ordered by source location
+                // in the model file. This map will be revisited after the location of the containing shape has been
+                // determined since it is needed to determine the locations of each member.
+                } else if (shape.getType() == ShapeType.MEMBER) {
+                    MemberShape memberShape = shape.asMemberShape().get();
+                    ShapeId containerId = memberShape.getContainer();
+                    containerMembersMap.computeIfAbsent(containerId, s -> new ArrayList<>()).add(memberShape);
                 } else {
                     endMarker = advanceMarkerOnNonMemberShapes(startPosition, shape, lines, modelFile);
+                    locations.put(shape.getId(), createLocation(modelFile, startPosition, endPosition));
                 }
-                Location location =  new Location(getUri(modelFile), new Range(startPosition, endPosition));
-                locations.put(shape.getId(), location);
             }
+
+            collectInlineInputOutputLocations(operationsWithInlineInputOutputMap, modelFile, lines, locations);
+            collectMemberLocations(containerMembersMap, modelFile, lines, locations);
         }
         return locations;
+    }
+
+    // Determine the location of inlined inputs and outputs can be determined using the containing operation.
+    private static void collectInlineInputOutputLocations(
+            Map<OperationShape, List<Shape>> operationsWithInlineInputOutputMap,
+            String modelFile,
+            List<String> lines,
+            Map<ShapeId, Location> locations
+    ) {
+        for (Map.Entry<OperationShape, List<Shape>> entry : operationsWithInlineInputOutputMap.entrySet()) {
+            OperationShape operation = entry.getKey();
+            int operationEndMarker = locations.get(operation.getId()).getRange().getEnd().getLine();
+            for (Shape shape : entry.getValue()) {
+                SourceLocation sourceLocation = shape.getSourceLocation();
+                Position startPosition = getStartPosition(sourceLocation);
+                Position endPosition = getEndPosition(operationEndMarker, lines);
+                Location location = createLocation(modelFile, startPosition, endPosition);
+                locations.put(shape.getId(), location);
+                operationEndMarker = sourceLocation.getLine() - 1;
+            }
+        }
+    }
+
+    // Determine locations of members using containing shape locations.
+    private static void collectMemberLocations(
+            Map<ShapeId, List<MemberShape>> containerMembersMap,
+            String modelFile, List<String> lines,
+            Map<ShapeId,
+            Location> locations
+    ) {
+        for (Map.Entry<ShapeId, List<MemberShape>> entry : containerMembersMap.entrySet()) {
+            Location containerLocation = locations.get(entry.getKey());
+            Range containerLocationRange = containerLocation.getRange();
+            int memberEndMarker = containerLocationRange.getEnd().getLine();
+            // Keep track of previous line to make sure that end marker has been advanced.
+            String previousLine = "";
+            // The member shapes were reverse ordered by source location when assembling this list, so we can
+            // iterate through it as-is to work from bottom to top in the model file.
+            for (MemberShape memberShape : entry.getValue()) {
+                int memberShapeSourceLocationLine = memberShape.getSourceLocation().getLine();
+                // If the member's source location matches the container location's starting line (with offset),
+                // the member is mixed in and not present in the model file.
+                if (memberShapeSourceLocationLine == containerLocationRange.getStart().getLine() + 1) {
+                    locations.put(memberShape.getId(), createElidedMemberLocation(containerLocation));
+                    // Otherwise, determine the correct location by trimming comments, empty lines and applied traits.
+                } else {
+                    String currentLine = lines.get(memberEndMarker - 1).trim();
+                    while (currentLine.startsWith("//") || currentLine.equals("") || currentLine.equals("}")
+                            || currentLine.startsWith("@") || currentLine.equals(previousLine)) {
+                        memberEndMarker = memberEndMarker - 1;
+                        currentLine = lines.get(memberEndMarker - 1).trim();
+                    }
+                    Position startPosition = getStartPosition(memberShape.getSourceLocation());
+                    Position endPosition = getEndPosition(memberEndMarker, lines);
+                    // Advance the member end marker on any non-mixin traits on the current member, so that the next
+                    // member location end is correct. Mixin traits will have been declared outside the
+                    // containing shape and shouldn't impact determining the end location of the next member.
+                    List<Trait> traits = memberShape.getAllTraits().values().stream()
+                            .filter(trait -> !trait.getSourceLocation().equals(SourceLocation.NONE))
+                            .filter(trait -> trait.getSourceLocation().getFilename().equals(modelFile))
+                            .filter(trait -> !isFromMixin(containerLocationRange, trait))
+                            .collect(Collectors.toList());
+                    if (!traits.isEmpty()) {
+                        traits.sort(Comparator.comparing(Trait::getSourceLocation));
+                        memberEndMarker = traits.get(0).getSourceLocation().getLine();
+                    }
+                    locations.put(memberShape.getId(), createLocation(modelFile, startPosition, endPosition));
+                    previousLine = currentLine;
+                }
+            }
+        }
+    }
+
+    // Use an empty range at the container's start since elided members are not present in the model file.
+    private static Location createElidedMemberLocation(Location containerLocation) {
+        Position startPosition = containerLocation.getRange().getStart();
+        Range memberRange = new Range(startPosition, startPosition);
+        return new Location(containerLocation.getUri(), memberRange);
+    }
+
+    // If the trait was defined outside the container, it was mixed in.
+    private static boolean isFromMixin(Range containerRange, Trait trait) {
+        int traitLocationLine = trait.getSourceLocation().getLine();
+        return traitLocationLine < containerRange.getStart().getLine()
+                || traitLocationLine > containerRange.getEnd().getLine();
+    }
+
+    // Get the operation that matches an inlined input or output structure.
+    private static Optional<OperationShape> getOperationForInlinedInputOrOutput(
+            Model model,
+            Shape shape,
+            DocumentPreamble preamble,
+            List<String> lines
+    ) {
+        if (preamble.getIdlVersion().isPresent()) {
+            if (preamble.getIdlVersion().get().startsWith("2") && shape.isStructureShape()
+                    && (shape.hasTrait(OutputTrait.class) || shape.hasTrait(InputTrait.class))) {
+                String suffix = null;
+                if (shape.hasTrait(InputTrait.class)) {
+                    suffix = preamble.getOperationInputSuffix().orElse("Input");
+                }
+
+                if (shape.hasTrait(OutputTrait.class)) {
+                    suffix = preamble.getOperationOutputSuffix().orElse("Output");
+                }
+
+                String shapeName = shape.getId().getName();
+                String matchingOperationName = shapeName.substring(0, shapeName.length() - suffix.length());
+                Optional<OperationShape> operation = model.shapes(OperationShape.class)
+                        .filter(operationShape -> operationShape.getId().getName().equals(matchingOperationName))
+                        .findFirst();
+                if (shapeWasDefinedInline(operation, shape, model, lines)) {
+                    return operation;
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    // Iterate through lines in reverse order from current shape start, to the beginning of the above shape, or the
+    // start of the operation. If the inline structure assignment operator is encountered, the current shape was
+    // defined inline. This check eliminates instances where an operation and its input or output matches the inline
+    // structure naming convention.
+    private static boolean shapeWasDefinedInline(Optional<OperationShape> optionalOperation, Shape shape, Model model,
+                                                 List<String> lines) {
+        if (!optionalOperation.isPresent()) {
+            return false;
+        }
+        int shapeStartLine = shape.getSourceLocation().getLine();
+        int priorShapeLine = 0;
+        OperationShape operation = optionalOperation.get();
+        if (shape.hasTrait(InputTrait.class) && operation.getOutput().isPresent()) {
+            Shape output = model.expectShape(operation.getOutputShape().toShapeId());
+            if (output.getSourceLocation().getLine() < shape.getSourceLocation().getLine()) {
+                priorShapeLine = output.getSourceLocation().getLine();
+            }
+        }
+        if (shape.hasTrait(OutputTrait.class) && operation.getInput().isPresent()) {
+            Shape input = model.expectShape(operation.getInputShape().toShapeId());
+            if (input.getSourceLocation().getLine() < shape.getSourceLocation().getLine()) {
+                priorShapeLine = input.getSourceLocation().getLine();
+            }
+        }
+        int boundary = Math.max(priorShapeLine, operation.getSourceLocation().getLine());
+        while (shapeStartLine >= boundary) {
+            String line = lines.get(shapeStartLine);
+            if (line.contains(":=")) {
+                return true;
+            }
+            shapeStartLine--;
+        }
+        return false;
+    }
+
+    private static Location createLocation(String file, Position startPosition, Position endPosition) {
+        return new Location(getUri(file), new Range(startPosition, endPosition));
     }
 
     private static int advanceMarkerOnNonMemberShapes(Position startPosition, Shape shape, List<String> fileLines,
@@ -257,8 +409,7 @@ public final class SmithyProject {
                 .collect(Collectors.toList());
         // If the shape has traits, advance the end marker again.
         if (!traits.isEmpty()) {
-            // TODO: Replace with Comparator when this class is removed.
-            traits.sort(new SourceLocationSorter());
+            traits.sort(Comparator.comparing(Trait::getSourceLocation));
             marker = traits.get(0).getSourceLocation().getLine() - 1;
         }
         // Move the end marker when encountering line comments or empty lines.
@@ -281,7 +432,6 @@ public final class SmithyProject {
     public Optional<ShapeId> getShapeIdFromLocation(String uri, Position position) {
         Comparator<Map.Entry<ShapeId, Location>> rangeSize = Comparator.comparing(entry ->
                 entry.getValue().getRange().getEnd().getLine() - entry.getValue().getRange().getStart().getLine());
-
         return locations.entrySet().stream()
                 .filter(entry -> entry.getValue().getUri().endsWith(Paths.get(uri).toString()))
                 .filter(entry -> isPositionInRange(entry.getValue().getRange(), position))
@@ -298,7 +448,12 @@ public final class SmithyProject {
         if (range.getEnd().getLine() < position.getLine()) {
             return false;
         }
-        if (range.getStart().getLine() == position.getLine()) {
+        // For single-line ranges, make sure position is between start and end chars.
+        if (range.getStart().getLine() == position.getLine()
+                && range.getEnd().getLine() == position.getLine()) {
+            return (range.getStart().getCharacter() <= position.getCharacter()
+                    && range.getEnd().getCharacter() >= position.getCharacter());
+        } else if (range.getStart().getLine() == position.getLine()) {
             return range.getStart().getCharacter() <= position.getCharacter();
         } else if (range.getEnd().getLine() == position.getLine()) {
             return range.getEnd().getCharacter() >= position.getCharacter();
@@ -315,6 +470,10 @@ public final class SmithyProject {
             }
         }
         return endMarker;
+    }
+
+    private static Position getStartPosition(SourceLocation sourceLocation) {
+        return new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1);
     }
 
     // If the lines of the model were successfully loaded, return the end position of the actual shape line,
@@ -390,25 +549,5 @@ public final class SmithyProject {
 
     private static List<File> onlyExistingFiles(Collection<File> files) {
         return files.stream().filter(File::isFile).collect(Collectors.toList());
-    }
-
-    // TODO: Remove this Class once the change in https://github.com/awslabs/smithy/pull/1192 is available.
-    private static class SourceLocationSorter implements Comparator<FromSourceLocation>, Serializable {
-        @Override
-        public int compare(FromSourceLocation s1, FromSourceLocation s2) {
-            SourceLocation sourceLocation = s1.getSourceLocation();
-            SourceLocation otherSourceLocation = s2.getSourceLocation();
-
-            if (!sourceLocation.getFilename().equals(otherSourceLocation.getFilename())) {
-                return sourceLocation.getFilename().compareTo(otherSourceLocation.getFilename());
-            }
-
-            int lineComparison = Integer.compare(sourceLocation.getLine(), otherSourceLocation.getLine());
-            if (lineComparison != 0) {
-                return lineComparison;
-            }
-
-            return Integer.compare(sourceLocation.getColumn(), otherSourceLocation.getColumn());
-        }
     }
 }
