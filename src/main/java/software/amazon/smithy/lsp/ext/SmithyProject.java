@@ -243,8 +243,11 @@ public final class SmithyProject {
 
     // Determine the location of inlined inputs and outputs can be determined using the containing operation.
     private static void collectInlineInputOutputLocations(
-            Map<OperationShape, List<Shape>> operationsWithInlineInputOutputMap, String modelFile, List<String> lines,
-            Map<ShapeId, Location> locations) {
+            Map<OperationShape, List<Shape>> operationsWithInlineInputOutputMap,
+            String modelFile,
+            List<String> lines,
+            Map<ShapeId, Location> locations
+    ) {
         for (Map.Entry<OperationShape, List<Shape>> entry : operationsWithInlineInputOutputMap.entrySet()) {
             OperationShape operation = entry.getKey();
             int operationEndMarker = locations.get(operation.getId()).getRange().getEnd().getLine();
@@ -260,10 +263,12 @@ public final class SmithyProject {
     }
 
     // Determine locations of members using containing shape locations.
-    private static void collectMemberLocations(Map<ShapeId, List<MemberShape>> containerMembersMap,
-                                               String modelFile, List<String> lines,
-                                               Map<ShapeId, Location> locations) {
-
+    private static void collectMemberLocations(
+            Map<ShapeId, List<MemberShape>> containerMembersMap,
+            String modelFile, List<String> lines,
+            Map<ShapeId,
+            Location> locations
+    ) {
         for (Map.Entry<ShapeId, List<MemberShape>> entry : containerMembersMap.entrySet()) {
             Location containerLocation = locations.get(entry.getKey());
             Range containerLocationRange = containerLocation.getRange();
@@ -322,9 +327,12 @@ public final class SmithyProject {
     }
 
     // Get the operation that matches an inlined input or output structure.
-    private static Optional<OperationShape> getOperationForInlinedInputOrOutput(Model model, Shape shape,
-                                                                                DocumentPreamble preamble,
-                                                                                List<String> lines) {
+    private static Optional<OperationShape> getOperationForInlinedInputOrOutput(
+            Model model,
+            Shape shape,
+            DocumentPreamble preamble,
+            List<String> lines
+    ) {
         if (preamble.getIdlVersion().isPresent()) {
             if (preamble.getIdlVersion().get().startsWith("2") && shape.isStructureShape()
                     && (shape.hasTrait(OutputTrait.class) || shape.hasTrait(InputTrait.class))) {
