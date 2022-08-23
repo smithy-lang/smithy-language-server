@@ -118,7 +118,7 @@ public class SmithyProjectTest {
             correctLocation(locationMap, "com.foo#MultiTrait", 22, 0,23, 14);
             correctLocation(locationMap, "com.foo#MultiTraitAndLineComments", 37, 0,39, 1);
             correctLocation(locationMap, "com.foo#MultiTraitAndDocComments", 48, 0, 50, 1);
-            correctLocation(locationMap, "com.example#OtherStructure", 4, 0, 8, 1);
+            correctLocation(locationMap, "com.example#OtherStructure", 7, 0, 11, 1);
             correctLocation(locationMap, "com.foo#StructWithDefaultSugar", 97, 0, 99, 1);
             correctLocation(locationMap, "com.foo#MyInlineOperation", 101, 0, 109, 1);
             correctLocation(locationMap, "com.foo#MyInlineOperationFooInput", 102, 13, 105, 5);
@@ -351,7 +351,7 @@ public class SmithyProjectTest {
             assertEquals(ShapeId.from("com.foo#Suit$HEART"), project.getShapeIdFromLocation(uri,
                     new Position(160,8)).get());
             assertEquals(ShapeId.from("com.example#OtherStructure"), project.getShapeIdFromLocation(testUri,
-                    new Position(4, 15)).get());
+                    new Position(7, 15)).get());
         }
     }
 

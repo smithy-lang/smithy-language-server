@@ -451,13 +451,16 @@ public class SmithyTextDocumentServiceTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
         String modelFilename = "main.smithy";
         Path modelMain = baseDir.resolve(modelFilename);
-        List<Path> modelFiles = ListUtils.of(modelMain);
+        String testFilename = "test.smithy";
+        Path modelTest = baseDir.resolve(testFilename);
+        List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
             StubClient client = new StubClient();
             tds.createProject(hs.getConfig(), hs.getRoot());
             tds.setClient(client);
             TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
+            TextDocumentIdentifier testTdi = new TextDocumentIdentifier(hs.file(testFilename).toString());
 
             Hover commentHover = tds.hover(hoverParams(mainTdi, 45, 37)).get();
             Hover memberTargetHover = tds.hover(hoverParams(mainTdi, 14, 18)).get();
@@ -474,6 +477,7 @@ public class SmithyTextDocumentServiceTest {
             Hover idHover = tds.hover(hoverParams(mainTdi, 77, 29)).get();
             Hover readHover = tds.hover(hoverParams(mainTdi, 78, 12)).get();
             Hover noMatchHover = tds.hover(hoverParams(mainTdi, 0, 0)).get();
+            Hover multiFileHover = tds.hover(hoverParams(testTdi, 7, 15)).get();
             Hover operationInlineMixinHover = tds.hover(hoverParams(mainTdi, 143, 36)).get();
             Hover structureMixinHover = tds.hover(hoverParams(mainTdi, 134, 45)).get();
             Hover falseOperationInlineHover = tds.hover(hoverParams(mainTdi, 176, 18)).get();
@@ -501,6 +505,8 @@ public class SmithyTextDocumentServiceTest {
                     + "operation MyOperation {\n    input: MyOperationInput\n    output: MyOperationOutput\n"
                     + "    errors: [\n        MyError\n    ]\n}", readHover);
             assertNull(noMatchHover.getContents().getRight().getValue());
+            correctHover("@emptyTraitStruct\nstructure OtherStructure {\n    foo: String\n    bar: String\n"
+                    + "    baz: Integer\n}", multiFileHover);
             correctHover("@mixin\nstructure UserDetails {\n    status: String\n}", operationInlineMixinHover);
             correctHover("@mixin\nstructure UserDetails {\n    status: String\n}", structureMixinHover);
             correctHover("structure FalseInlinedFooInput {\n    a: String\n}", falseOperationInlineHover);
