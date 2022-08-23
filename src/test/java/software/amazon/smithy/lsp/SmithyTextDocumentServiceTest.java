@@ -415,20 +415,19 @@ public class SmithyTextDocumentServiceTest {
             Hover noMatchHover = tds.hover(hoverParams(mainTdi, 0, 0)).get();
             Hover multiFileHover = tds.hover(hoverParams(testTdi, 7, 15)).get();
 
-
-            assertEquals(preludeMemberTraitHover.getContents().getRight().getKind(), "markdown");
-            assertTrue(preludeMemberTraitHoverContents.getValue().startsWith("```smithy\n/// Marks a structure member as required"));
-            assertTrue(preludeMemberTraitHoverContents.getValue().endsWith("structure required {}\n```"));
-
             assertEquals(preludeTraitHoverContents.getKind(), "markdown");
             assertTrue(preludeTraitHoverContents.getValue().startsWith("```smithy\n/// Specializes a structure for use only as the"
                     + " input"));
             assertTrue(preludeTraitHoverContents.getValue().endsWith("structure input {}\n```"));
 
+            assertEquals(preludeMemberTraitHoverContents.getKind(), "markdown");
+            assertTrue(preludeMemberTraitHoverContents.getValue().startsWith("```smithy\n/// Marks a structure member as required"));
+            assertTrue(preludeMemberTraitHoverContents.getValue().endsWith("structure required {}\n```"));
+
+            correctHover("string String", preludeTargetHover);
             correctHover("@input\n@tags([\n    \"foo\"\n])\nstructure MultiTrait {\n    a: String\n}", commentHover);
             correctHover("structure SingleLine {}", memberTargetHover);
             correctHover("string String", memberIdentifierHover);
-            correctHover("string String", preludeTargetHover);
             correctHover("@input\n@tags([\n    \"a\"\n    \"b\"\n    \"c\"\n    \"d\"\n    \"e\"\n    \"f\"\n"
                     + "])\nstructure MultiTraitAndLineComments {\n    a: String\n}", selfHover);
             correctHover("structure MyOperationInput {\n    foo: String\n    @required\n    myId: MyId\n}",
@@ -462,14 +461,15 @@ public class SmithyTextDocumentServiceTest {
             TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
             TextDocumentIdentifier testTdi = new TextDocumentIdentifier(hs.file(testFilename).toString());
 
+            Hover preludeTraitHover = tds.hover(hoverParams(mainTdi, 27, 3)).get();
+            MarkupContent preludeTraitHoverContents = preludeTraitHover.getContents().getRight();
+            Hover preludeMemberTraitHover = tds.hover(hoverParams(mainTdi, 61, 10)).get();
+            MarkupContent preludeMemberTraitHoverContents = preludeMemberTraitHover.getContents().getRight();
+
+            Hover preludeTargetHover = tds.hover(hoverParams(mainTdi, 38, 12)).get();
             Hover commentHover = tds.hover(hoverParams(mainTdi, 45, 37)).get();
             Hover memberTargetHover = tds.hover(hoverParams(mainTdi, 14, 18)).get();
             Hover memberIdentifierHover = tds.hover(hoverParams(mainTdi, 66, 7)).get();
-            Hover preludeTraitHover = tds.hover(hoverParams(mainTdi, 27, 3)).get();
-            String preludeTraitContents = preludeTraitHover.getContents().getRight().getValue();
-            Hover preludeTargetHover = tds.hover(hoverParams(mainTdi, 38, 12)).get();
-            Hover preludeMemberTraitHover = tds.hover(hoverParams(mainTdi, 61, 10)).get();
-            String preludeMemberTraitContents = preludeMemberTraitHover.getContents().getRight().getValue();
             Hover selfHover = tds.hover(hoverParams(mainTdi, 38, 0)).get();
             Hover inputHover = tds.hover(hoverParams(mainTdi, 54, 16)).get();
             Hover outputHover = tds.hover(hoverParams(mainTdi, 55, 17)).get();
@@ -482,17 +482,19 @@ public class SmithyTextDocumentServiceTest {
             Hover structureMixinHover = tds.hover(hoverParams(mainTdi, 134, 45)).get();
             Hover falseOperationInlineHover = tds.hover(hoverParams(mainTdi, 176, 18)).get();
 
+            assertEquals(preludeTraitHoverContents.getKind(), "markdown");
+            assertTrue(preludeTraitHoverContents.getValue().startsWith("```smithy\n/// Specializes a structure for use only as the"
+                    + " input"));
+            assertTrue(preludeTraitHoverContents.getValue().endsWith("structure input {}\n```"));
+
+            assertEquals(preludeMemberTraitHoverContents.getKind(), "markdown");
+            assertTrue(preludeMemberTraitHoverContents.getValue().startsWith("```smithy\n/// Marks a structure member as required"));
+            assertTrue(preludeMemberTraitHoverContents.getValue().endsWith("structure required {}\n```"));
+
+            correctHover("string String", preludeTargetHover);
             correctHover("@input\n@tags([\n    \"foo\"\n])\nstructure MultiTrait {\n    a: String\n}", commentHover);
             correctHover("structure SingleLine {}", memberTargetHover);
             correctHover("string String", memberIdentifierHover);
-            assertEquals(preludeTraitHover.getContents().getRight().getKind(), "markdown");
-            assertTrue(preludeTraitContents.startsWith("```smithy\n/// Specializes a structure for use only as the"
-                    + " input"));
-            assertTrue(preludeTraitContents.endsWith("structure input {}\n```"));
-            correctHover("string String", preludeTargetHover);
-            assertEquals(preludeMemberTraitHover.getContents().getRight().getKind(), "markdown");
-            assertTrue(preludeMemberTraitContents.startsWith("```smithy\n/// Marks a structure member as required"));
-            assertTrue(preludeMemberTraitContents.endsWith("structure required {}\n```"));
             correctHover("@input\n@tags([\n    \"a\"\n    \"b\"\n    \"c\"\n    \"d\"\n    \"e\"\n    \"f\"\n"
                     + "])\nstructure MultiTraitAndLineComments {\n    a: String\n}", selfHover);
             correctHover("structure MyOperationInput {\n    foo: String\n    @required\n    myId: MyId\n}",
