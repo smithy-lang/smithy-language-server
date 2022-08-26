@@ -14,9 +14,12 @@ import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
 import org.eclipse.lsp4j.WorkspaceFolder;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 import software.amazon.smithy.utils.ListUtils;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class SmithyLanguageServerTest {
     @Test
     public void initializeServer() throws Exception {
