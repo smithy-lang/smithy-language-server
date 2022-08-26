@@ -484,23 +484,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 .serializePrelude().build();
         Map<Path, String> serialized = serializer.serialize(model);
         Path path = Paths.get(shape.getId().getNamespace() + ".smithy");
-        return stripPreamble(serialized.get(path));
-    }
-
-
-    private String stripPreamble(String serializedModel) {
-        List<String> lines = Arrays.asList(serializedModel.split("\n"));
-        int preambleEnd = lines.size();
-        for (int i = 0; i < lines.size(); i++) {
-            String line = lines.get(i);
-            if (line.startsWith("$version: ") || line.startsWith("namespace ") || line.startsWith("use ")
-                    || line.isEmpty()) {
-                preambleEnd = i;
-            } else {
-                break;
-            }
-        }
-        return String.join("\n", lines.subList(preambleEnd, lines.size())).trim();
+        return serialized.get(path).trim();
     }
 
     @Override
