@@ -379,6 +379,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
     @Override
     public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(
             DefinitionParams params) {
+        // TODO More granular error handling
         try {
             // This attempts to return the definition location that corresponds to a position within a text document.
             // First, the position is used to find any shapes in the model that are defined at that location. Next,
@@ -395,13 +396,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 Model model = project.getModel().unwrap();
                 Shape initialShape = model.getShape(initialShapeId.get()).get();
                 Optional<Shape> target = getTargetShape(initialShape, found, model);
-                // Use location on target if present.
-                if (target.isPresent()) {
-                    locations = Collections.singletonList(project.getLocations().get(target.get().getId()));
-                // Or else default to location of initial shape.
-                } else {
-                    locations = Collections.singletonList(project.getLocations().get(initialShapeId.get()));
-                }
+
+                // Use location of target shape or default to the location of the initial shape.
+                ShapeId shapeId = target.map(Shape::getId).orElse(initialShapeId.get());
+                Location shapeLocation = project.getLocations().get(shapeId);
+                locations = Collections.singletonList(shapeLocation);
             } else {
                 // If the definition params do not have a matching shape at that location, return locations of all
                 // shapes that match token by shape name. This makes it possible link the shape name in a line
@@ -430,40 +429,32 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 params.getPosition());
         Shape shapeToSerialize = null;
         Model model = project.getModel().unwrap();
+        // TODO More granular error handling
         try {
             String token = findToken(params.getTextDocument().getUri(), params.getPosition());
             LspLog.println("Found token: " + token);
             if (initialShapeId.isPresent()) {
                 Shape initialShape = model.getShape(initialShapeId.get()).get();
-                Optional<Shape> target;
-                if (initialShape.isMemberShape()) {
-                    ShapeId targetShapeId = initialShape.asMemberShape().get().getTarget();
-                    target = model.getShape(targetShapeId);
-                } else {
-                    target = getTargetShape(initialShape, token, model);
-                }
-                if (target.isPresent()) {
-                    shapeToSerialize = target.get();
-                } else {
-                    shapeToSerialize = initialShape;
-                }
+                Optional<Shape> target = initialShape.asMemberShape()
+                        .map(memberShape -> model.getShape(memberShape.getTarget()))
+                        .orElse(getTargetShape(initialShape, token, model));
+                shapeToSerialize = target.orElse(initialShape);
             } else {
-                Optional<Shape> shapeMatchedByNameOnly = model.shapes()
+                shapeToSerialize = model.shapes()
                         .filter(shape -> !shape.isMemberShape())
                         .filter(shape -> shape.getId().getName().equals(token))
-                        .findAny();
-                if (shapeMatchedByNameOnly.isPresent()) {
-                    shapeToSerialize = shapeMatchedByNameOnly.get();
-                }
+                        .findAny()
+                        .orElse(null);
             }
         } catch (Exception e) {
             LspLog.println("Failed to determine hover content: " + e);
         }
 
-        // If a shape to serialize has been found, serialize the shape and set it to the hover contents.
+        // If a shape to serialize has been found, serialize the shape and set the markup content to render
         if (shapeToSerialize != null) {
             content.setValue("```smithy\n" + getSerializedShape(shapeToSerialize, model) + "\n```");
         }
+
         hover.setContents(content);
         return Utils.completableFuture(hover);
     }
