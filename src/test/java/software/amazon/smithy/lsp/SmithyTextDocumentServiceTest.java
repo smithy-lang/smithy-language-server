@@ -397,49 +397,72 @@ public class SmithyTextDocumentServiceTest {
             TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
             TextDocumentIdentifier testTdi = new TextDocumentIdentifier(hs.file(testFilename).toString());
 
+            // Resolves via top-level trait location in prelude.
             Hover preludeTraitHover = tds.hover(hoverParams(mainTdi, 25, 3)).get();
             MarkupContent preludeTraitHoverContents = preludeTraitHover.getContents().getRight();
-            Hover preludeMemberTraitHover = tds.hover(hoverParams(mainTdi, 59, 10)).get();
-            MarkupContent preludeMemberTraitHoverContents = preludeMemberTraitHover.getContents().getRight();
-
-            Hover preludeTargetHover = tds.hover(hoverParams(mainTdi, 36, 12)).get();
-            Hover commentHover = tds.hover(hoverParams(mainTdi, 43, 37)).get();
-            Hover memberTargetHover = tds.hover(hoverParams(mainTdi, 12, 18)).get();
-            Hover memberIdentifierHover = tds.hover(hoverParams(mainTdi, 64, 7)).get();
-            Hover selfHover = tds.hover(hoverParams(mainTdi, 36, 0)).get();
-            Hover inputHover = tds.hover(hoverParams(mainTdi, 52, 16)).get();
-            Hover outputHover = tds.hover(hoverParams(mainTdi, 53, 17)).get();
-            Hover errorHover = tds.hover(hoverParams(mainTdi, 54, 14)).get();
-            Hover idHover = tds.hover(hoverParams(mainTdi, 75, 29)).get();
-            Hover readHover = tds.hover(hoverParams(mainTdi, 76, 12)).get();
-            Hover noMatchHover = tds.hover(hoverParams(mainTdi, 0, 0)).get();
-            Hover multiFileHover = tds.hover(hoverParams(testTdi, 7, 15)).get();
-
             assertEquals(preludeTraitHoverContents.getKind(), "markdown");
             assertTrue(preludeTraitHoverContents.getValue().startsWith("```smithy\n/// Specializes a structure for use only as the"
                     + " input"));
             assertTrue(preludeTraitHoverContents.getValue().endsWith("structure input {}\n```"));
 
+            // Resolves via member shape target location in prelude.
+            Hover preludeMemberTraitHover = tds.hover(hoverParams(mainTdi, 59, 10)).get();
+            MarkupContent preludeMemberTraitHoverContents = preludeMemberTraitHover.getContents().getRight();
             assertEquals(preludeMemberTraitHoverContents.getKind(), "markdown");
             assertTrue(preludeMemberTraitHoverContents.getValue().startsWith("```smithy\n/// Marks a structure member as required"));
             assertTrue(preludeMemberTraitHoverContents.getValue().endsWith("structure required {}\n```"));
 
+            // Resolves via member shape target location in prelude.
+            Hover preludeTargetHover = tds.hover(hoverParams(mainTdi, 36, 12)).get();
             correctHover("string String", preludeTargetHover);
+
+            // Resolves via token => shape name.
+            Hover commentHover = tds.hover(hoverParams(mainTdi, 43, 37)).get();
             correctHover("@input\n@tags([\n    \"foo\"\n])\nstructure MultiTrait {\n    a: String\n}", commentHover);
+
+            // Resolves via shape target location in model.
+            Hover memberTargetHover = tds.hover(hoverParams(mainTdi, 12, 18)).get();
             correctHover("structure SingleLine {}", memberTargetHover);
+
+            // Resolves from member key to shape target location in model.
+            Hover memberIdentifierHover = tds.hover(hoverParams(mainTdi, 64, 7)).get();
             correctHover("string String", memberIdentifierHover);
+
+            // Resolves to current location.
+            Hover selfHover = tds.hover(hoverParams(mainTdi, 36, 0)).get();
             correctHover("@input\n@tags([\n    \"a\"\n    \"b\"\n    \"c\"\n    \"d\"\n    \"e\"\n    \"f\"\n"
                     + "])\nstructure MultiTraitAndLineComments {\n    a: String\n}", selfHover);
+
+            // Resolves via operation input.
+            Hover inputHover = tds.hover(hoverParams(mainTdi, 52, 16)).get();
             correctHover("structure MyOperationInput {\n    foo: String\n    @required\n    myId: MyId\n}",
                     inputHover);
+
+            // Resolves via operation output.
+            Hover outputHover = tds.hover(hoverParams(mainTdi, 53, 17)).get();
             correctHover("structure MyOperationOutput {\n    corge: String\n    qux: String\n}", outputHover);
+
+            // Resolves via operation error.
+            Hover errorHover = tds.hover(hoverParams(mainTdi, 54, 14)).get();
             correctHover("@error(\"client\")\nstructure MyError {\n    blah: String\n    blahhhh: Integer\n}",
                     errorHover);
+
+            // Resolves via resource ids.
+            Hover idHover = tds.hover(hoverParams(mainTdi, 75, 29)).get();
             correctHover("string MyId", idHover);
+
+            // Resolves via resource read.
+            Hover readHover = tds.hover(hoverParams(mainTdi, 76, 12)).get();
             correctHover("@http(\n    method: \"PUT\"\n    uri: \"/bar\"\n    code: 200\n)\n@readonly\n"
                     + "operation MyOperation {\n    input: MyOperationInput\n    output: MyOperationOutput\n"
                     + "    errors: [\n        MyError\n    ]\n}", readHover);
+
+            // Does not correspond to shape.
+            Hover noMatchHover = tds.hover(hoverParams(mainTdi, 0, 0)).get();
             assertNull(noMatchHover.getContents().getRight().getValue());
+
+            // Resolves between multiple model files.
+            Hover multiFileHover = tds.hover(hoverParams(testTdi, 7, 15)).get();
             correctHover("@emptyTraitStruct\nstructure OtherStructure {\n    foo: String\n    bar: String\n"
                     + "    baz: Integer\n}", multiFileHover);
         }
@@ -461,56 +484,85 @@ public class SmithyTextDocumentServiceTest {
             TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
             TextDocumentIdentifier testTdi = new TextDocumentIdentifier(hs.file(testFilename).toString());
 
+            // Resolves via top-level trait location in prelude.
             Hover preludeTraitHover = tds.hover(hoverParams(mainTdi, 27, 3)).get();
             MarkupContent preludeTraitHoverContents = preludeTraitHover.getContents().getRight();
-            Hover preludeMemberTraitHover = tds.hover(hoverParams(mainTdi, 61, 10)).get();
-            MarkupContent preludeMemberTraitHoverContents = preludeMemberTraitHover.getContents().getRight();
-
-            Hover preludeTargetHover = tds.hover(hoverParams(mainTdi, 38, 12)).get();
-            Hover commentHover = tds.hover(hoverParams(mainTdi, 45, 37)).get();
-            Hover memberTargetHover = tds.hover(hoverParams(mainTdi, 14, 18)).get();
-            Hover memberIdentifierHover = tds.hover(hoverParams(mainTdi, 66, 7)).get();
-            Hover selfHover = tds.hover(hoverParams(mainTdi, 38, 0)).get();
-            Hover inputHover = tds.hover(hoverParams(mainTdi, 54, 16)).get();
-            Hover outputHover = tds.hover(hoverParams(mainTdi, 55, 17)).get();
-            Hover errorHover = tds.hover(hoverParams(mainTdi, 56, 14)).get();
-            Hover idHover = tds.hover(hoverParams(mainTdi, 77, 29)).get();
-            Hover readHover = tds.hover(hoverParams(mainTdi, 78, 12)).get();
-            Hover noMatchHover = tds.hover(hoverParams(mainTdi, 0, 0)).get();
-            Hover multiFileHover = tds.hover(hoverParams(testTdi, 7, 15)).get();
-            Hover operationInlineMixinHover = tds.hover(hoverParams(mainTdi, 143, 36)).get();
-            Hover structureMixinHover = tds.hover(hoverParams(mainTdi, 134, 45)).get();
-            Hover falseOperationInlineHover = tds.hover(hoverParams(mainTdi, 176, 18)).get();
-
             assertEquals(preludeTraitHoverContents.getKind(), "markdown");
             assertTrue(preludeTraitHoverContents.getValue().startsWith("```smithy\n/// Specializes a structure for use only as the"
                     + " input"));
             assertTrue(preludeTraitHoverContents.getValue().endsWith("structure input {}\n```"));
 
+            // Resolves via member shape target location in prelude.
+            Hover preludeMemberTraitHover = tds.hover(hoverParams(mainTdi, 61, 10)).get();
+            MarkupContent preludeMemberTraitHoverContents = preludeMemberTraitHover.getContents().getRight();
             assertEquals(preludeMemberTraitHoverContents.getKind(), "markdown");
             assertTrue(preludeMemberTraitHoverContents.getValue().startsWith("```smithy\n/// Marks a structure member as required"));
             assertTrue(preludeMemberTraitHoverContents.getValue().endsWith("structure required {}\n```"));
 
+            // Resolves via member shape target location in prelude.
+            Hover preludeTargetHover = tds.hover(hoverParams(mainTdi, 38, 12)).get();
             correctHover("string String", preludeTargetHover);
+
+            // Resolves via token => shape name.
+            Hover commentHover = tds.hover(hoverParams(mainTdi, 45, 37)).get();
             correctHover("@input\n@tags([\n    \"foo\"\n])\nstructure MultiTrait {\n    a: String\n}", commentHover);
+
+            // Resolves via shape target location in model.
+            Hover memberTargetHover = tds.hover(hoverParams(mainTdi, 14, 18)).get();
             correctHover("structure SingleLine {}", memberTargetHover);
+
+            // Resolves from member key to shape target location in model.
+            Hover memberIdentifierHover = tds.hover(hoverParams(mainTdi, 66, 7)).get();
             correctHover("string String", memberIdentifierHover);
+
+            // Resolves to current location.
+            Hover selfHover = tds.hover(hoverParams(mainTdi, 38, 0)).get();
             correctHover("@input\n@tags([\n    \"a\"\n    \"b\"\n    \"c\"\n    \"d\"\n    \"e\"\n    \"f\"\n"
                     + "])\nstructure MultiTraitAndLineComments {\n    a: String\n}", selfHover);
+
+            // Resolves via operation input.
+            Hover inputHover = tds.hover(hoverParams(mainTdi, 54, 16)).get();
             correctHover("structure MyOperationInput {\n    foo: String\n    @required\n    myId: MyId\n}",
                     inputHover);
+
+            // Resolves via operation output.
+            Hover outputHover = tds.hover(hoverParams(mainTdi, 55, 17)).get();
             correctHover("structure MyOperationOutput {\n    corge: String\n    qux: String\n}", outputHover);
+
+            // Resolves via operation error.
+            Hover errorHover = tds.hover(hoverParams(mainTdi, 56, 14)).get();
             correctHover("@error(\"client\")\nstructure MyError {\n    blah: String\n    blahhhh: Integer\n}",
                     errorHover);
+
+            // Resolves via resource ids.
+            Hover idHover = tds.hover(hoverParams(mainTdi, 77, 29)).get();
             correctHover("string MyId", idHover);
+
+            // Resolves via resource read.
+            Hover readHover = tds.hover(hoverParams(mainTdi, 78, 12)).get();
             correctHover("@http(\n    method: \"PUT\"\n    uri: \"/bar\"\n    code: 200\n)\n@readonly\n"
                     + "operation MyOperation {\n    input: MyOperationInput\n    output: MyOperationOutput\n"
                     + "    errors: [\n        MyError\n    ]\n}", readHover);
+
+            // Does not correspond to shape.
+            Hover noMatchHover = tds.hover(hoverParams(mainTdi, 0, 0)).get();
             assertNull(noMatchHover.getContents().getRight().getValue());
+
+            // Resolves between multiple model files.
+            Hover multiFileHover = tds.hover(hoverParams(testTdi, 7, 15)).get();
             correctHover("@emptyTraitStruct\nstructure OtherStructure {\n    foo: String\n    bar: String\n"
                     + "    baz: Integer\n}", multiFileHover);
+
+            // Resolves mixin used within an inlined input/output in an operation shape
+            Hover operationInlineMixinHover = tds.hover(hoverParams(mainTdi, 143, 36)).get();
             correctHover("@mixin\nstructure UserDetails {\n    status: String\n}", operationInlineMixinHover);
+
+            // Resolves mixin used on a structure
+            Hover structureMixinHover = tds.hover(hoverParams(mainTdi, 134, 45)).get();
             correctHover("@mixin\nstructure UserDetails {\n    status: String\n}", structureMixinHover);
+
+            // Resolves shape with a name that matches operation input/output suffix but is not inlined
+            Hover falseOperationInlineHover = tds.hover(hoverParams(mainTdi, 176, 18)).get();
             correctHover("structure FalseInlinedFooInput {\n    a: String\n}", falseOperationInlineHover);
         }
     }
