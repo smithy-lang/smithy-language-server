@@ -1,5 +1,11 @@
 # Smithy Language Server Changelog
 
+## 0.2.0 (2022-08-29)
+
+### Features
+* Added Smithy IDL 2 support ([#61](https://github.com/awslabs/smithy-language-server/pull/61))
+* Added support for hovering over shapes to show their definitions ([#63](https://github.com/awslabs/smithy-language-server/pull/63))
+
 ## 0.1.0 (2022-06-08)
 
 ### Features
