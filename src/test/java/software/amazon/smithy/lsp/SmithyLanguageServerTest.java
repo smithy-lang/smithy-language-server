@@ -37,11 +37,11 @@ public class SmithyLanguageServerTest {
         assertTrue(capabilities.getDefinitionProvider().getLeft());
         assertTrue(capabilities.getDeclarationProvider().getLeft());
         assertEquals(new CompletionOptions(true, null), capabilities.getCompletionProvider());
-        assertFalse(capabilities.getHoverProvider().getLeft());
+        assertTrue(capabilities.getHoverProvider().getLeft());
     }
 
     @Test
-    public void initializeWithTemporaryWorkspace() throws Exception {
+    public void initializeWithTemporaryWorkspace() {
         InitializeParams initParams = new InitializeParams();
         SmithyLanguageServer languageServer = new SmithyLanguageServer();
         languageServer.initialize(initParams);

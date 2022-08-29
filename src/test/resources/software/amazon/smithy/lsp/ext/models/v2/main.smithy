@@ -198,3 +198,6 @@ structure FalseInlinedReversedFooInput {
 structure FalseInlinedReversedBarOutput {
     d: String
 }
+
+@trait
+structure emptyTraitStruct {}
