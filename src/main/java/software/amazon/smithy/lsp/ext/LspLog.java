@@ -110,15 +110,13 @@ public final class LspLog {
     private static String processMessage(Object message) {
         if (message == null) {
             return "null";
+        } else if (message instanceof Throwable) {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            ((Throwable) message).printStackTrace(pw);
+            return sw.toString();
         } else {
-            if (message instanceof Throwable) {
-                StringWriter sw = new StringWriter();
-                PrintWriter pw = new PrintWriter(sw);
-                ((Throwable) message).printStackTrace(pw);
-                return sw.toString();
-            } else {
-                return message.toString();
-            }
+            return message.toString();
         }
     }
 }
