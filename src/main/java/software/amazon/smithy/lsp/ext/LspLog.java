@@ -107,7 +107,7 @@ public final class LspLog {
         }
     }
 
-    private static String processMessage(Object message) {
+    private static String getStringifiedMessage(Object message) {
         if (message == null) {
             return "null";
         } else if (message instanceof Throwable) {
