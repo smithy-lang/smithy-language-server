@@ -92,7 +92,7 @@ public final class LspLog {
      * @param message object to write, will be converted to String
      */
     public static void println(Object message) {
-        String sanitizedMessage = processMessage(message);
+        String sanitizedMessage = getStringifiedMessage(message);
         String timestamped = "[" + currentTime() + "] " + sanitizedMessage;
         try {
             if (fw != null) {
