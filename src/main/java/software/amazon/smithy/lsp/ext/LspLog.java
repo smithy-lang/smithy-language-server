@@ -17,6 +17,8 @@ package software.amazon.smithy.lsp.ext;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.StringWriter;
+import java.io.PrintWriter;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.time.LocalTime;
@@ -90,18 +92,32 @@ public final class LspLog {
      * @param message object to write, will be converted to String
      */
     public static void println(Object message) {
-        String sanitizedMessage = message != null ? message.toString() : "null";
+        String sanitizedMessage = processMessage(message);
         String timestamped = "[" + currentTime() + "] " + sanitizedMessage;
         try {
             if (fw != null) {
                 fw.append(timestamped + "\n").flush();
             } else {
                 synchronized (buffer) {
-                    buffer.ifPresent(buf -> buf.add(timestamped));
+                    buffer.ifPresent(buf -> buf.add(sanitizedMessage));
                 }
             }
         } catch (Exception e) {
 
+        }
+    }
+    private static String processMessage(Object message) {
+        if (message == null) {
+            return "null";
+        } else {
+            if (message instanceof Throwable) {
+                StringWriter sw = new StringWriter();
+                PrintWriter pw = new PrintWriter(sw);
+                ((Throwable) message).printStackTrace(pw);
+                return sw.toString();
+            } else {
+                return message.toString();
+            }
         }
     }
 }
