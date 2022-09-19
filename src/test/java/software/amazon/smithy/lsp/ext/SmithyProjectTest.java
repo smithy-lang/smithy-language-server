@@ -82,6 +82,23 @@ public class SmithyProjectTest {
         }
     }
 
+    // TODO Add test cases to the other tests that will check for this behavior too
+    @Test
+    public void handlesApplyWithMixins() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
+        Path applyWithMixin = baseDir.resolve("apply-with-mixin.smithy");
+        Path mixinImports = baseDir.resolve("mixin-imports.smithy");
+        List<Path> modelFiles = ListUtils.of(applyWithMixin, mixinImports);
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
+
+            // An `apply` with a mixin is ignored, so the shape directly above the `apply` will potentially have a location
+            // that includes everything up to and including the `apply`
+            correctLocation(locationMap, "com.applywithmixin#SomeOpInput", 6, 0, 9, 1);
+        }
+    }
+
     @Test
     public void definitionLocationsV1() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
