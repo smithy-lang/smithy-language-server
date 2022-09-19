@@ -1,6 +1,6 @@
 $version: "2.0"
 
-namespace com.mixinimports
+namespace com.imports
 
 boolean IsTestInput
 
