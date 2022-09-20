@@ -83,6 +83,39 @@ public class SmithyProjectTest {
     }
 
     @Test
+    public void ignoresUnmodeledApplyStatements() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
+        Path main = baseDir.resolve("apply.smithy");
+        Path imports = baseDir.resolve("apply-imports.smithy");
+        List<Path> modelFiles = ListUtils.of(main, imports);
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+            Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
+
+            // Structure shape unchanged by apply
+            correctLocation(locationMap, "com.main#SomeOpInput", 12, 0, 15, 1);
+
+            // Member is unchanged by apply
+            correctLocation(locationMap, "com.main#SomeOpInput$body", 14, 4, 14, 16);
+
+            // The mixed in member should have an empty position
+            correctLocation(locationMap, "com.main#SomeOpInput$isTest", 12, 0, 12, 0);
+
+            // Structure shape unchanged by apply
+            correctLocation(locationMap, "com.main#ArbitraryStructure", 25, 0, 27, 1);
+
+            // Member is unchanged by apply
+            correctLocation(locationMap, "com.main#ArbitraryStructure$member", 26, 4, 26, 18);
+
+            // Mixed-in member in another namespace unchanged by apply
+            correctLocation(locationMap, "com.imports#HasIsTestParam$isTest", 8, 4, 8, 19);
+
+            // Structure in another namespace unchanged by apply
+            correctLocation(locationMap, "com.imports#HasIsTestParam", 7, 0, 9, 1);
+        }
+    }
+
+    @Test
     public void definitionLocationsV1() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
         Path modelMain = baseDir.resolve("main.smithy");
