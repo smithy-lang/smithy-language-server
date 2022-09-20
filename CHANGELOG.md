@@ -1,5 +1,15 @@
 # Smithy Language Server Changelog
 
+## 0.2.1 (2022-09-29)
+
+### Features
+* Display error message in hover content when hovering on a shape with unknown traits ([#74](https://github.com/awslabs/smithy-language-server/pull/74))
+* Allow definition and hover to continue working in a model with unknown traits ([#74](https://github.com/awslabs/smithy-language-server/pull/74))
+
+### Bug fixes
+* Fix crashes when trying to hover in a model with unknown traits ([#74](https://github.com/awslabs/smithy-language-server/pull/74))
+* Fix crashes caused by using an apply statement on mixed in members from another namespace ([#70](https://github.com/awslabs/smithy-language-server/pull/70))
+
 ## 0.2.0 (2022-08-29)
 
 ### Features
