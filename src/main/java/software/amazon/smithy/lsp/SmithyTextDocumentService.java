@@ -427,10 +427,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
         content.setKind("markdown");
         Optional<ShapeId> initialShapeId = project.getShapeIdFromLocation(params.getTextDocument().getUri(),
                 params.getPosition());
-        Shape shapeToSerialize = null;
-        Model model = project.getModel().unwrap();
         // TODO More granular error handling
         try {
+            Shape shapeToSerialize;
+            Model model = project.getModel().unwrap();
             String token = findToken(params.getTextDocument().getUri(), params.getPosition());
             LspLog.println("Found token: " + token);
             if (initialShapeId.isPresent()) {
@@ -446,13 +446,12 @@ public class SmithyTextDocumentService implements TextDocumentService {
                         .findAny()
                         .orElse(null);
             }
+
+            if (shapeToSerialize != null) {
+                content.setValue(getHoverContentsForShape(shapeToSerialize, model));
+            }
         } catch (Exception e) {
             LspLog.println("Failed to determine hover content: " + e);
-        }
-
-        // If a shape to serialize has been found, serialize the shape and set the markup content to render
-        if (shapeToSerialize != null) {
-            content.setValue("```smithy\n" + getSerializedShape(shapeToSerialize, model) + "\n```");
         }
 
         hover.setContents(content);
@@ -477,7 +476,25 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 .findFirst();
     }
 
-    private String getSerializedShape(Shape shape, Model model) {
+    private String getHoverContentsForShape(Shape shape, Model model) {
+        try {
+            String serializedShape = serializeShape(shape, model);
+            return "```smithy\n" + serializedShape + "\n```";
+        } catch (Exception e) {
+            List<ValidationEvent> validationEvents = getValidationEventsForShape(shape);
+            StringBuilder contents = new StringBuilder();
+            contents.append("Can't display shape ").append("`").append(shape.getId().toString()).append("`:");
+            for (ValidationEvent event : validationEvents) {
+                contents.append(System.lineSeparator()).append(event.getMessage());
+            }
+            if (validationEvents.isEmpty()) {
+                contents.append(System.lineSeparator()).append(e);
+            }
+            return contents.toString();
+        }
+    }
+
+    private String serializeShape(Shape shape, Model model) {
         SmithyIdlModelSerializer serializer = SmithyIdlModelSerializer.builder()
                 .metadataFilter(key -> false)
                 .shapeFilter(s -> s.getId().equals(shape.getId()))
@@ -485,6 +502,12 @@ public class SmithyTextDocumentService implements TextDocumentService {
         Map<Path, String> serialized = serializer.serialize(model);
         Path path = Paths.get(shape.getId().getNamespace() + ".smithy");
         return serialized.get(path).trim();
+    }
+
+    private List<ValidationEvent> getValidationEventsForShape(Shape shape) {
+        return project.getModel().getValidationEvents().stream()
+                .filter(validationEvent -> shape.getId().equals(validationEvent.getShapeId().orElse(null)))
+                .collect(Collectors.toList());
     }
 
     @Override

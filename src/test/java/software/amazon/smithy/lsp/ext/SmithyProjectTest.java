@@ -83,6 +83,15 @@ public class SmithyProjectTest {
     }
 
     @Test
+    public void ableToLoadWithUnknownTrait() throws Exception {
+        Path modelFile = Paths.get(getClass().getResource("models/unknown-trait.smithy").toURI());
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), ListUtils.of(modelFile))) {
+            ValidatedResult<Model> modelValidatedResult = hs.getProject().getModel();
+            assertFalse(modelValidatedResult.isBroken());
+        }
+    }
+
+    @Test
     public void ignoresUnmodeledApplyStatements() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
         Path main = baseDir.resolve("apply.smithy");
