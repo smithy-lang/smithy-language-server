@@ -47,6 +47,7 @@ import org.eclipse.lsp4j.MessageActionItem;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.ShowMessageRequestParams;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
@@ -64,7 +65,7 @@ import software.amazon.smithy.utils.SetUtils;
 
 public class SmithyTextDocumentServiceTest {
 
-    // All hover responses are wrapped between these strings
+    // All successful hover responses are wrapped between these strings
     private static final String HOVER_DEFAULT_PREFIX = "```smithy\n$version: \"2.0\"\n\n";
     private static final String HOVER_DEFAULT_SUFFIX = "\n```";
 
@@ -147,6 +148,83 @@ public class SmithyTextDocumentServiceTest {
 
         }
 
+    }
+
+    @Test
+    public void attributesDiagnosticsForUnknownTraits() throws Exception {
+        String modelFilename = "ext/models/unknown-trait.smithy";
+        Path modelFilePath = Paths.get(getClass().getResource(modelFilename).toURI());
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), ListUtils.of(modelFilePath))) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+
+            File modelFile = hs.file(modelFilename);
+
+            // There must be one warning diagnostic at the unknown trait's location
+            Range unknownTraitRange = new Range(new Position(6, 0), new Position(6, 0));
+            long matchingDiagnostics = tds.recompile(modelFile, Optional.empty()).getRight().stream()
+                    .flatMap(params -> params.getDiagnostics().stream())
+                    .filter(diagnostic -> diagnostic.getSeverity().equals(DiagnosticSeverity.Warning))
+                    .filter(diagnostic -> diagnostic.getRange().equals(unknownTraitRange))
+                    .count();
+            assertEquals(1, matchingDiagnostics);
+        }
+    }
+
+    @Test
+    public void allowsDefinitionWhenThereAreUnknownTraits() throws Exception {
+        Path baseDir = Paths.get(getClass().getResource("ext/models").toURI());
+        String modelFilename = "unknown-trait.smithy";
+        Path modelFilePath = baseDir.resolve(modelFilename);
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), ListUtils.of(modelFilePath))) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+
+            // We should still be able to respond with a location when there are unknown traits in the model
+            TextDocumentIdentifier tdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
+            int locationCount = tds.definition(definitionParams(tdi, 10, 13)).get().getLeft().size();
+            assertEquals(locationCount, 1);
+        }
+    }
+
+    @Test
+    public void allowsHoverWhenThereAreUnknownTraits() throws Exception {
+        Path baseDir = Paths.get(getClass().getResource("ext/models").toURI());
+        String modelFilename = "unknown-trait.smithy";
+        Path modelFilePath = baseDir.resolve(modelFilename);
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), ListUtils.of(modelFilePath))) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+
+            // We should still be able to respond with hover content when there are unknown traits in the model
+            TextDocumentIdentifier tdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
+            Hover hover = tds.hover(hoverParams(tdi, 14, 13)).get();
+            correctHover("namespace com.foo\n\n", "structure Bar {\n    member: Foo\n}", hover);
+        }
+    }
+
+    @Test
+    public void hoverOnBrokenShapeShowsErrorMessage() throws Exception {
+        Path baseDir = Paths.get(getClass().getResource("ext/models").toURI());
+        String modelFilename = "unknown-trait.smithy";
+        Path modelFilePath = baseDir.resolve(modelFilename);
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), ListUtils.of(modelFilePath))) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+
+            TextDocumentIdentifier tdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
+            Hover hover = tds.hover(hoverParams(tdi, 10, 13)).get();
+            MarkupContent hoverContent = hover.getContents().getRight();
+            assertTrue(hoverContent.getValue().startsWith("Can't display shape"));
+        }
     }
 
     @Test

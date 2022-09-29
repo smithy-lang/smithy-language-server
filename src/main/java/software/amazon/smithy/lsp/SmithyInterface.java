@@ -54,13 +54,20 @@ public final class SmithyInterface {
         // Contrary to model assemblers, model builders do not complain about the
         // duplication of shapes. Shapes will simply overwrite each other in a "last
         // write wins" kind of way.
-
         URLClassLoader urlClassLoader = new URLClassLoader(urlArray);
-        Model upstreamModel = Model.assembler().discoverModels(urlClassLoader).assemble().unwrap();
+        Model upstreamModel = Model.assembler()
+                .putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true)
+                .discoverModels(urlClassLoader)
+                .assemble()
+                .unwrap();
         builder.addShapes(upstreamModel);
       }
 
-      ModelAssembler assembler = Model.assembler().addModel(builder.build());
+      ModelAssembler assembler = Model.assembler()
+              // We don't want the model to be broken when there are unknown traits,
+              // because that will essentially disable language server features.
+              .putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true)
+              .addModel(builder.build());
 
       for (File file : files) {
         assembler = assembler.addImport(file.getAbsolutePath());
