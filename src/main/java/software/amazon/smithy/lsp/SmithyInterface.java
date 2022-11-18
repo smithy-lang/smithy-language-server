@@ -72,7 +72,7 @@ public final class SmithyInterface {
         // duplication of shapes. Shapes will simply overwrite each other in a "last
         // write wins" kind of way.
         URLClassLoader urlClassLoader = new URLClassLoader(urlArray);
-        assembler = Model.assembler(urlClassLoader);
+        assembler = Model.assembler(); //reverting for the `runValidators` test
       } else {
         assembler = Model.assembler();
       }

@@ -15,8 +15,6 @@
 
 package software.amazon.smithy.lsp;
 
-import static org.junit.Assert.assertTrue;
-
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -26,6 +24,8 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.junit.Test;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.validation.ValidatedResult;
+
+import static org.junit.Assert.*;
 
 public class SmithyInterfaceTest {
     @Test
@@ -39,5 +39,20 @@ public class SmithyInterfaceTest {
         Either<Exception, ValidatedResult<Model>> resultTwo = SmithyInterface.readModel(files, externalJars);
         assertTrue(result.isRight());
         assertTrue(resultTwo.isRight());
+    }
+
+    @Test
+    public void runValidators() throws Exception {
+        Path baseDir = Paths.get(SmithyInterface.class.getResource("traits").toURI());
+        Path model = baseDir.resolve("validate-traits.smithy");
+        Path dependencyJar = baseDir.resolve("alloy-core.jar");
+        List<File> files = Collections.singletonList(model.toFile());
+        List<File> externalJars = Collections.singletonList(dependencyJar.toFile());
+        Either<Exception, ValidatedResult<Model>> result = SmithyInterface.readModel(files, externalJars);
+        assertTrue(result.isRight());
+        assertEquals(
+            result.getRight().getValidationEvents().get(0).getMessage(),
+            "Proto index 1 is used muliple times in members name,age of shape (structure: `some.test#MyStruct`)."
+        );
     }
 }
