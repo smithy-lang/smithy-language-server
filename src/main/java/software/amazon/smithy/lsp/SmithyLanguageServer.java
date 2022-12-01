@@ -107,6 +107,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     capabilities.setDeclarationProvider(true);
     capabilities.setCompletionProvider(new CompletionOptions(true, null));
     capabilities.setHoverProvider(true);
+    capabilities.setDocumentFormattingProvider(true);
 
     return Utils.completableFuture(new InitializeResult(capabilities));
   }
