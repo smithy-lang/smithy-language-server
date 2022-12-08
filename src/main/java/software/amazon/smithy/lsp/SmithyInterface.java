@@ -46,28 +46,29 @@ public final class SmithyInterface {
       Model.Builder builder = Model.builder();
 
       URL[] urlArray = externalJars.stream().map(SmithyInterface::fileToUrl).toArray(URL[]::new);
+      URLClassLoader urlClassLoader = new URLClassLoader(urlArray);
 
-      if (urlArray.length > 0) {
-        // Loading the model just from upstream dependencies, in isolation, and adding
-        // all its shapes to the builder.
-        //
-        // Contrary to model assemblers, model builders do not complain about the
-        // duplication of shapes. Shapes will simply overwrite each other in a "last
-        // write wins" kind of way.
-        URLClassLoader urlClassLoader = new URLClassLoader(urlArray);
-        Model upstreamModel = Model.assembler()
-                .putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true)
-                .discoverModels(urlClassLoader)
-                .assemble()
-                .unwrap();
-        builder.addShapes(upstreamModel);
-      }
+      // Loading the model just from upstream dependencies, in isolation, and adding
+      // all its shapes to the builder.
+      //
+      // Contrary to model assemblers, model builders do not complain about the
+      // duplication of shapes. Shapes will simply overwrite each other in a "last
+      // write wins" kind of way.
+      Model upstreamModel = Model.assembler()
+              .putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true)
+              .discoverModels(urlClassLoader)
+              .assemble()
+              .unwrap();
+      builder.addShapes(upstreamModel);
 
       ModelAssembler assembler = Model.assembler()
               // We don't want the model to be broken when there are unknown traits,
               // because that will essentially disable language server features.
               .putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true)
               .addModel(builder.build());
+
+      assembler.validatorFactory(ValidatorFactory.createServiceFactory(urlClassLoader));
+      assembler.traitFactory(TraitFactory.createServiceFactory(urlClassLoader));
 
       for (File file : files) {
         assembler = assembler.addImport(file.getAbsolutePath());
