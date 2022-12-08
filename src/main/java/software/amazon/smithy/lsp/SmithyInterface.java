@@ -24,7 +24,9 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.ModelAssembler;
+import software.amazon.smithy.model.traits.TraitFactory;
 import software.amazon.smithy.model.validation.ValidatedResult;
+import software.amazon.smithy.model.validation.ValidatorFactory;
 
 public final class SmithyInterface {
   private SmithyInterface() {
