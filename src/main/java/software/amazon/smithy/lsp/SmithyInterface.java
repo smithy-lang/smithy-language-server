@@ -27,6 +27,7 @@ import software.amazon.smithy.model.loader.ModelAssembler;
 import software.amazon.smithy.model.validation.ValidatedResult;
 
 public final class SmithyInterface {
+
   private SmithyInterface() {
 
   }
@@ -41,36 +42,17 @@ public final class SmithyInterface {
    */
   public static Either<Exception, ValidatedResult<Model>> readModel(Collection<File> files,
       Collection<File> externalJars) {
-
     try {
-      Model.Builder builder = Model.builder();
-
-      URL[] urlArray = externalJars.stream().map(SmithyInterface::fileToUrl).toArray(URL[]::new);
-
-      if (urlArray.length > 0) {
-        // Loading the model just from upstream dependencies, in isolation, and adding
-        // all its shapes to the builder.
-        //
-        // Contrary to model assemblers, model builders do not complain about the
-        // duplication of shapes. Shapes will simply overwrite each other in a "last
-        // write wins" kind of way.
-        URLClassLoader urlClassLoader = new URLClassLoader(urlArray);
-        Model upstreamModel = Model.assembler()
-                .putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true)
-                .discoverModels(urlClassLoader)
-                .assemble()
-                .unwrap();
-        builder.addShapes(upstreamModel);
-      }
-
-      ModelAssembler assembler = Model.assembler()
+      URL[] urls = externalJars.stream().map(SmithyInterface::fileToUrl).toArray(URL[]::new);
+      URLClassLoader urlClassLoader = new URLClassLoader(urls);
+      ModelAssembler assembler = Model.assembler(urlClassLoader)
+              .discoverModels(urlClassLoader)
               // We don't want the model to be broken when there are unknown traits,
               // because that will essentially disable language server features.
-              .putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true)
-              .addModel(builder.build());
+              .putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true);
 
       for (File file : files) {
-        assembler = assembler.addImport(file.getAbsolutePath());
+        assembler.addImport(file.getAbsolutePath());
       }
 
       return Either.forRight(assembler.assemble());
