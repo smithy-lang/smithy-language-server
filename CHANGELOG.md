@@ -1,5 +1,10 @@
 # Smithy Language Server Changelog
 
+## 0.2.2 (2022-12-27)
+
+### Bug fixes
+* Fix bug where validators from external jars were not being used ([#82](https://github.com/awslabs/smithy-language-server/pull/82))
+
 ## 0.2.1 (2022-09-29)
 
 ### Features
