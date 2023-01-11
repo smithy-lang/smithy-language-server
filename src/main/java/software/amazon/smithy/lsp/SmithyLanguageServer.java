@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import org.eclipse.lsp4j.CodeActionOptions;
 import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
@@ -42,6 +43,7 @@ import org.eclipse.lsp4j.services.LanguageClientAware;
 import org.eclipse.lsp4j.services.LanguageServer;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
+import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.ValidationException;
 import software.amazon.smithy.utils.ListUtils;
@@ -100,7 +102,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
     ServerCapabilities capabilities = new ServerCapabilities();
     capabilities.setTextDocumentSync(TextDocumentSyncKind.Full);
-    capabilities.setCodeActionProvider(false);
+    capabilities.setCodeActionProvider(new CodeActionOptions(SmithyCodeActions.all()));
     capabilities.setDefinitionProvider(true);
     capabilities.setDeclarationProvider(true);
     capabilities.setCompletionProvider(new CompletionOptions(true, null));
