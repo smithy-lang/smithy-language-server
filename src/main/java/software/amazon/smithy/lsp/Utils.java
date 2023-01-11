@@ -169,11 +169,37 @@ public final class Utils {
 
     }
 
+    /**
+     * Given a content, split it on new line and extract the first n lines.
+     * @param content content to look at
+     * @param n number of lines to extract
+     * @return list of numbered lines, empty if the content has no newline in it.
+     */
+    public static List<NumberedLine> contentFirstNLines(String content, int n) {
+        if (n < 0) {
+            throw new IllegalArgumentException("n must be greater or equal to 0");
+        }
+
+        if (content == null) {
+            throw new IllegalArgumentException("content must not be null");
+        }
+
+        String[] contentLines = content.split("\n");
+
+        if (contentLines.length == 0) {
+            return Collections.emptyList();
+        }
+
+        return IntStream.range(0, Math.min(n, contentLines.length))
+                 .mapToObj(i -> new NumberedLine(contentLines[i], i))
+                 .collect(Collectors.toList());
+    }
+
     static class NumberedLine {
         private final String content;
         private final int lineNumber;
 
-        public NumberedLine(String content, int lineNumber) {
+        NumberedLine(String content, int lineNumber) {
             this.content = content;
             this.lineNumber = lineNumber;
         }

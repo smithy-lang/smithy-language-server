@@ -689,13 +689,22 @@ public class SmithyTextDocumentService implements TextDocumentService {
      * Produces a diagnostic for each file which w/o a `$version` control statement or
      * file which have a `$version` control statement, but it is out dated.
      *
+     * Before looking into a file, we look into {@link #temporaryContents} to make sure
+     * it's not an open buffer currently being modified. If it is, we should use this content
+     * rather than what's on disk for this specific file. This avoids showing diagnostic for
+     * content that's on disk but different from what's in the buffer.
+     *
      * @param allFiles smithy files of the workplace
      * @return a list of PublishDiagnosticsParams
      */
     public List<PublishDiagnosticsParams> createVersionDiagnostics(List<File> allFiles) {
+        // number of line to read in which we expect the $version statement
+        int n = 5;
         return allFiles.stream().flatMap(f -> {
             try {
-                List<Utils.NumberedLine> lines = Utils.readFirstNLines(f, 5);
+                String editedContent = temporaryContents.get(f);
+                List<Utils.NumberedLine> lines =
+                    editedContent == null ? Utils.readFirstNLines(f, n) : Utils.contentFirstNLines(editedContent, n);
                 Optional<Utils.NumberedLine> $version = lines.stream().filter(nl -> nl.getContent().startsWith("$version")).findFirst();
                 Stream<Diagnostic> diagStream = $version.map(nl -> {
                     // version is set, its 1
