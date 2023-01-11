@@ -37,9 +37,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.eclipse.lsp4j.Command;
 import org.eclipse.lsp4j.CodeAction;
 import org.eclipse.lsp4j.CodeActionParams;
+import org.eclipse.lsp4j.Command;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
@@ -525,13 +525,17 @@ public class SmithyTextDocumentService implements TextDocumentService {
         ArrayList<Either<Command, CodeAction>> actions = new ArrayList<>();
 
         String fileUri = params.getTextDocument().getUri();
-        boolean defineVersion = params.getContext().getDiagnostics().stream().anyMatch(diagnosticCodePredicate(SmithyCodeActions.SMITHY_DEFINE_VERSION));
+        boolean defineVersion = params.getContext().getDiagnostics().stream()
+            .anyMatch(diagnosticCodePredicate(SmithyCodeActions.SMITHY_DEFINE_VERSION));
         if (defineVersion) {
             actions.add(Either.forRight(DefineVersionCodeAction.build(fileUri)));
         }
-        Optional<Diagnostic> updateVersionDiagnostic = params.getContext().getDiagnostics().stream().filter(diagnosticCodePredicate(SmithyCodeActions.SMITHY_UPDATE_VERSION)).findFirst();
+        Optional<Diagnostic> updateVersionDiagnostic = params.getContext().getDiagnostics().stream()
+            .filter(diagnosticCodePredicate(SmithyCodeActions.SMITHY_UPDATE_VERSION)).findFirst();
         if (updateVersionDiagnostic.isPresent()) {
-            actions.add(Either.forRight(UpdateVersionCodeAction.build(fileUri, updateVersionDiagnostic.get().getRange())));
+            actions.add(Either.forRight(
+                    UpdateVersionCodeAction.build(fileUri, updateVersionDiagnostic.get().getRange()))
+            );
         }
 
         return Utils.completableFuture(actions);
@@ -705,12 +709,16 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 String editedContent = temporaryContents.get(f);
                 List<Utils.NumberedLine> lines =
                     editedContent == null ? Utils.readFirstNLines(f, n) : Utils.contentFirstNLines(editedContent, n);
-                Optional<Utils.NumberedLine> $version = lines.stream().filter(nl -> nl.getContent().startsWith("$version")).findFirst();
-                Stream<Diagnostic> diagStream = $version.map(nl -> {
+                Optional<Utils.NumberedLine> version =
+                        lines.stream().filter(nl -> nl.getContent().startsWith("$version")).findFirst();
+                Stream<Diagnostic> diagStream = version.map(nl -> {
                     // version is set, its 1
                     if (nl.getContent().contains("\"1\"")) {
                         return Stream.of(new Diagnostic(
-                                new Range(new Position(nl.getLineNumber(), 0), new Position(nl.getLineNumber(), nl.getContent().length())),
+                                new Range(
+                                    new Position(nl.getLineNumber(), 0),
+                                    new Position(nl.getLineNumber(), nl.getContent().length())
+                                ),
                                 "You can upgrade to version 2.",
                                 DiagnosticSeverity.Warning,
                                 "Smithy LSP",
@@ -724,8 +732,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
                     // we use the first line to show the diagnostic, as the $version is at the top of the file
                     // if 0 is used, only the first _word_ is highlighted by the IDE(vscode). It also means that
                     // you can only apply the code action if you position your cursor at the very start of the file.
-                    Integer firstLineLength = lines.stream().findFirst().map(nl -> nl.getContent().length()).orElse(0);
-                    return Stream.of( // version is not set
+                    Integer firstLineLength = lines.stream()
+                            .findFirst().map(nl -> nl.getContent().length())
+                            .orElse(0);
+                    return Stream.of(// version is not set
                         new Diagnostic(
                                 new Range(new Position(0, 0), new Position(0, firstLineLength)),
                                 "You should define a version for your Smithy file.",
@@ -735,7 +745,9 @@ public class SmithyTextDocumentService implements TextDocumentService {
                         )
                     );
                 });
-                return diagStream.map(diag -> new PublishDiagnosticsParams(f.toURI().toString(), Collections.singletonList(diag)));
+                return diagStream.map(diag ->
+                        new PublishDiagnosticsParams(f.toURI().toString(), Collections.singletonList(diag))
+                );
             } catch (IOException e) {
                 return Stream.empty();
             }
@@ -746,7 +758,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
         return "codeAction/" + codeAction;
     }
 
-    public void clearAllDiagnostics() {
+    private void clearAllDiagnostics() {
         List<File> smithyFiles = this.project.getSmithyFiles();
         List<PublishDiagnosticsParams> all = Stream.concat(
             createPerFileDiagnostics(this.project.getModel().getValidationEvents(), smithyFiles).stream(),
