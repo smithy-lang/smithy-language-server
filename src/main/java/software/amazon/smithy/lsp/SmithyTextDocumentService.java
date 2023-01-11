@@ -34,8 +34,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.eclipse.lsp4j.Command;
+import org.eclipse.lsp4j.CodeAction;
+import org.eclipse.lsp4j.CodeActionParams;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
@@ -61,6 +65,9 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
+import software.amazon.smithy.lsp.codeactions.DefineVersionCodeAction;
+import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
+import software.amazon.smithy.lsp.codeactions.UpdateVersionCodeAction;
 import software.amazon.smithy.lsp.ext.Completions;
 import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.Document;
@@ -511,6 +518,27 @@ public class SmithyTextDocumentService implements TextDocumentService {
         return project.getModel().getValidationEvents().stream()
                 .filter(validationEvent -> shape.getId().equals(validationEvent.getShapeId().orElse(null)))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public CompletableFuture<List<Either<Command, CodeAction>>> codeAction(CodeActionParams params) {
+        ArrayList<Either<Command, CodeAction>> actions = new ArrayList<>();
+
+        String fileUri = params.getTextDocument().getUri();
+        boolean defineVersion = params.getContext().getDiagnostics().stream().anyMatch(diagnosticCodePredicate(SmithyCodeActions.SMITHY_DEFINE_VERSION));
+        if (defineVersion) {
+            actions.add(Either.forRight(DefineVersionCodeAction.build(fileUri)));
+        }
+        Optional<Diagnostic> updateVersionDiagnostic = params.getContext().getDiagnostics().stream().filter(diagnosticCodePredicate(SmithyCodeActions.SMITHY_UPDATE_VERSION)).findFirst();
+        if (updateVersionDiagnostic.isPresent()) {
+            actions.add(Either.forRight(UpdateVersionCodeAction.build(fileUri, updateVersionDiagnostic.get().getRange())));
+        }
+
+        return Utils.completableFuture(actions);
+    }
+
+    private Predicate<Diagnostic> diagnosticCodePredicate(String code) {
+        return d -> d.getCode().isLeft() && d.getCode().getLeft().equals(codeActionCode(code));
     }
 
     @Override
