@@ -75,8 +75,8 @@ public class SmithyTextDocumentServiceTest {
         String goodFileName = "good.smithy";
 
         Map<String, String> files = MapUtils.ofEntries(
-                MapUtils.entry(brokenFileName, "namespace testFoo\n string_ MyId"),
-                MapUtils.entry(goodFileName, "namespace testBla"));
+                MapUtils.entry(brokenFileName, "$version: \"2\"\nnamespace testFoo\n string_ MyId"),
+                MapUtils.entry(goodFileName, "$version: \"2\"\nnamespace testBla"));
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
@@ -107,8 +107,8 @@ public class SmithyTextDocumentServiceTest {
         String goodFileName = "good.smithy";
 
         Map<String, String> files = MapUtils.ofEntries(
-                MapUtils.entry(brokenFileName, "namespace testFoo; string_ MyId"),
-                MapUtils.entry(goodFileName, "namespace testBla"));
+                MapUtils.entry(brokenFileName, "$version: \"2\"\nnamespace testFoo; string_ MyId"),
+                MapUtils.entry(goodFileName, "$version: \"2\"\nnamespace testBla"));
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
