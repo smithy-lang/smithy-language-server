@@ -40,6 +40,8 @@ import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DefinitionParams;
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
@@ -53,6 +55,7 @@ import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
@@ -654,10 +657,67 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     }
 
-    public void clearAllDiagnostics() {
-        report(Either.forRight(createPerFileDiagnostics(this.project.getModel().getValidationEvents(),
-                this.project.getSmithyFiles())));
+    /**
+     * Produces a diagnostic for each file which w/o a `$version` control statement or
+     * file which have a `$version` control statement, but it is out dated.
+     *
+     * @param allFiles smithy files of the workplace
+     * @return a list of PublishDiagnosticsParams
+     */
+    public List<PublishDiagnosticsParams> createVersionDiagnostics(List<File> allFiles) {
+        return allFiles.stream().flatMap(f -> {
+            try {
+                List<Utils.NumberedLine> lines = Utils.readFirstNLines(f, 5);
+                Optional<Utils.NumberedLine> $version = lines.stream().filter(nl -> nl.getContent().startsWith("$version")).findFirst();
+                Stream<Diagnostic> diagStream = $version.map(nl -> {
+                    // version is set, its 1
+                    if (nl.getContent().contains("\"1\"")) {
+                        return Stream.of(new Diagnostic(
+                                new Range(new Position(nl.getLineNumber(), 0), new Position(nl.getLineNumber(), nl.getContent().length())),
+                                "You can upgrade to version 2.",
+                                DiagnosticSeverity.Warning,
+                                "Smithy LSP",
+                                codeActionCode(SmithyCodeActions.SMITHY_UPDATE_VERSION)
+                        ));
+                    } else {
+                        // version is set, it is not 1
+                        return Stream.<Diagnostic>empty();
+                    }
+                }).orElseGet(() -> {
+                    // we use the first line to show the diagnostic, as the $version is at the top of the file
+                    // if 0 is used, only the first _word_ is highlighted by the IDE(vscode). It also means that
+                    // you can only apply the code action if you position your cursor at the very start of the file.
+                    Integer firstLineLength = lines.stream().findFirst().map(nl -> nl.getContent().length()).orElse(0);
+                    return Stream.of( // version is not set
+                        new Diagnostic(
+                                new Range(new Position(0, 0), new Position(0, firstLineLength)),
+                                "You should define a version for your Smithy file.",
+                                DiagnosticSeverity.Warning,
+                                "Smithy LSP",
+                                codeActionCode(SmithyCodeActions.SMITHY_DEFINE_VERSION)
+                        )
+                    );
+                });
+                return diagStream.map(diag -> new PublishDiagnosticsParams(f.toURI().toString(), Collections.singletonList(diag)));
+            } catch (IOException e) {
+                return Stream.empty();
+            }
+        }).collect(Collectors.toList());
     }
+
+    private String codeActionCode(String codeAction) {
+        return "codeAction/" + codeAction;
+    }
+
+    public void clearAllDiagnostics() {
+        List<File> smithyFiles = this.project.getSmithyFiles();
+        List<PublishDiagnosticsParams> all = Stream.concat(
+            createPerFileDiagnostics(this.project.getModel().getValidationEvents(), smithyFiles).stream(),
+            createVersionDiagnostics(smithyFiles).stream()
+        ).collect(Collectors.toList());
+        report(Either.forRight(all));
+    }
+
 
     /**
      * Main recompilation method, responsible for reloading the model, persisting it
@@ -721,7 +781,11 @@ public class SmithyTextDocumentService implements TextDocumentService {
             LspLog.println(
                     "Recompiling " + path + " (with temporary content " + temporary + ") raised " + events.size()
                             + "  diagnostics");
-            return Either.forRight(createPerFileDiagnostics(events, allFiles));
+            List<PublishDiagnosticsParams> all = Stream.concat(
+                    createPerFileDiagnostics(events, allFiles).stream(),
+                    createVersionDiagnostics(allFiles).stream()
+            ).collect(Collectors.toList());
+            return Either.forRight(all);
         }
 
     }
