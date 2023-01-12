@@ -45,7 +45,6 @@ import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Diagnostic;
-import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
@@ -66,8 +65,8 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import software.amazon.smithy.lsp.codeactions.DefineVersionCodeAction;
-import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
 import software.amazon.smithy.lsp.codeactions.UpdateVersionCodeAction;
+import software.amazon.smithy.lsp.diagnostics.VersionDiagnostics;
 import software.amazon.smithy.lsp.ext.Completions;
 import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.Document;
@@ -526,12 +525,12 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
         String fileUri = params.getTextDocument().getUri();
         boolean defineVersion = params.getContext().getDiagnostics().stream()
-            .anyMatch(diagnosticCodePredicate(SmithyCodeActions.SMITHY_DEFINE_VERSION));
+            .anyMatch(diagnosticCodePredicate(VersionDiagnostics.SMITHY_DEFINE_VERSION));
         if (defineVersion) {
             actions.add(Either.forRight(DefineVersionCodeAction.build(fileUri)));
         }
         Optional<Diagnostic> updateVersionDiagnostic = params.getContext().getDiagnostics().stream()
-            .filter(diagnosticCodePredicate(SmithyCodeActions.SMITHY_UPDATE_VERSION)).findFirst();
+            .filter(diagnosticCodePredicate(VersionDiagnostics.SMITHY_UPDATE_VERSION)).findFirst();
         if (updateVersionDiagnostic.isPresent()) {
             actions.add(Either.forRight(
                     UpdateVersionCodeAction.build(fileUri, updateVersionDiagnostic.get().getRange()))
@@ -542,7 +541,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     private Predicate<Diagnostic> diagnosticCodePredicate(String code) {
-        return d -> d.getCode().isLeft() && d.getCode().getLeft().equals(codeActionCode(code));
+        return d ->
+            d.getCode() != null
+            && d.getCode().isLeft()
+            && d.getCode().getLeft().equals(code);
     }
 
     @Override
@@ -714,16 +716,14 @@ public class SmithyTextDocumentService implements TextDocumentService {
         Stream<Diagnostic> diagStream = version.map(nl -> {
             // version is set, its 1
             if (nl.getContent().contains("\"1\"")) {
-                return Stream.of(new Diagnostic(
-                    new Range(
-                        new Position(nl.getLineNumber(), 0),
-                        new Position(nl.getLineNumber(), nl.getContent().length())
-                    ),
-                    "You can upgrade to version 2.",
-                    DiagnosticSeverity.Warning,
-                    "Smithy LSP",
-                    codeActionCode(SmithyCodeActions.SMITHY_UPDATE_VERSION)
-                ));
+                return Stream.of(
+                    VersionDiagnostics.updateVersion(
+                        new Range(
+                            new Position(nl.getLineNumber(), 0),
+                            new Position(nl.getLineNumber(), nl.getContent().length())
+                        )
+                    )
+                );
             } else {
                 // version is set, it is not 1
                 return Stream.<Diagnostic>empty();
@@ -736,20 +736,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 .findFirst().map(nl -> nl.getContent().length())
                 .orElse(0);
             return Stream.of(// version is not set
-                new Diagnostic(
-                    new Range(new Position(0, 0), new Position(0, firstLineLength)),
-                    "You should define a version for your Smithy file.",
-                    DiagnosticSeverity.Warning,
-                    "Smithy LSP",
-                    codeActionCode(SmithyCodeActions.SMITHY_DEFINE_VERSION)
-                )
+                VersionDiagnostics.defineVersion(new Range(new Position(0, 0), new Position(0, firstLineLength)))
             );
         });
         return diagStream.collect(Collectors.toList());
-    }
-
-    private String codeActionCode(String codeAction) {
-        return "codeAction/" + codeAction;
     }
 
     private void clearAllDiagnostics() {
