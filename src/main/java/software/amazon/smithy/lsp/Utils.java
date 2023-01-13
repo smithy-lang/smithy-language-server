@@ -195,7 +195,7 @@ public final class Utils {
                  .collect(Collectors.toList());
     }
 
-    static class NumberedLine {
+    public static class NumberedLine {
         private final String content;
         private final int lineNumber;
 

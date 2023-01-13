@@ -15,10 +15,20 @@
 
 package software.amazon.smithy.lsp.diagnostics;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticCodeDescription;
 import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
+import software.amazon.smithy.lsp.Utils;
 
 public final class VersionDiagnostics {
     public static final String SMITHY_UPDATE_VERSION = "migrating-idl-1-to-2";
@@ -67,5 +77,62 @@ public final class VersionDiagnostics {
             SMITHY_DEFINE_VERSION,
             range
         );
+    }
+
+
+    /**
+     * Produces a diagnostic for each file which w/o a `$version` control statement or
+     * file which have a `$version` control statement, but it is out dated.
+     *
+     * Before looking into a file, we look into `temporaryContents` to make sure
+     * it's not an open buffer currently being modified. If it is, we should use this content
+     * rather than what's on disk for this specific file. This avoids showing diagnostic for
+     * content that's on disk but different from what's in the buffer.
+     *
+     * @param f a smithy file to inspect
+     * @param temporaryContents a map of file to content (represent opened file that are not saved)
+     * @return a list of PublishDiagnosticsParams
+     */
+    public static List<Diagnostic> createVersionDiagnostics(File f, Map<File, String> temporaryContents) {
+        // number of line to read in which we expect the $version statement
+        int n = 5;
+        String editedContent = temporaryContents.get(f);
+
+        List<Utils.NumberedLine> lines;
+        try {
+            lines = editedContent == null ? Utils.readFirstNLines(f, n) : Utils.contentFirstNLines(editedContent, n);
+        } catch (IOException e) {
+            return Collections.emptyList();
+        }
+
+        Optional<Utils.NumberedLine> version =
+            lines.stream().filter(nl -> nl.getContent().startsWith("$version")).findFirst();
+        Stream<Diagnostic> diagStream = version.map(nl -> {
+            // version is set, its 1
+            if (nl.getContent().contains("\"1\"")) {
+                return Stream.of(
+                    VersionDiagnostics.updateVersion(
+                        new Range(
+                            new Position(nl.getLineNumber(), 0),
+                            new Position(nl.getLineNumber(), nl.getContent().length())
+                        )
+                    )
+                );
+            } else {
+                // version is set, it is not 1
+                return Stream.<Diagnostic>empty();
+            }
+        }).orElseGet(() -> {
+            // we use the first line to show the diagnostic, as the $version is at the top of the file
+            // if 0 is used, only the first _word_ is highlighted by the IDE(vscode). It also means that
+            // you can only apply the code action if you position your cursor at the very start of the file.
+            Integer firstLineLength = lines.stream()
+                .findFirst().map(nl -> nl.getContent().length())
+                .orElse(0);
+            return Stream.of(// version is not set
+                VersionDiagnostics.defineVersion(new Range(new Position(0, 0), new Position(0, firstLineLength)))
+            );
+        });
+        return diagStream.collect(Collectors.toList());
     }
 }
