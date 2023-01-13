@@ -34,7 +34,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.CodeAction;
@@ -64,8 +63,7 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
-import software.amazon.smithy.lsp.codeactions.DefineVersionCodeAction;
-import software.amazon.smithy.lsp.codeactions.UpdateVersionCodeAction;
+import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
 import software.amazon.smithy.lsp.diagnostics.VersionDiagnostics;
 import software.amazon.smithy.lsp.ext.Completions;
 import software.amazon.smithy.lsp.ext.Constants;
@@ -521,30 +519,12 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     @Override
     public CompletableFuture<List<Either<Command, CodeAction>>> codeAction(CodeActionParams params) {
-        ArrayList<Either<Command, CodeAction>> actions = new ArrayList<>();
+        List<Either<Command, CodeAction>> versionCodeActions =
+                SmithyCodeActions.versionCodeActions(params).stream()
+                        .map(Either::<Command, CodeAction>forRight)
+                        .collect(Collectors.toList());
 
-        String fileUri = params.getTextDocument().getUri();
-        boolean defineVersion = params.getContext().getDiagnostics().stream()
-            .anyMatch(diagnosticCodePredicate(VersionDiagnostics.SMITHY_DEFINE_VERSION));
-        if (defineVersion) {
-            actions.add(Either.forRight(DefineVersionCodeAction.build(fileUri)));
-        }
-        Optional<Diagnostic> updateVersionDiagnostic = params.getContext().getDiagnostics().stream()
-            .filter(diagnosticCodePredicate(VersionDiagnostics.SMITHY_UPDATE_VERSION)).findFirst();
-        if (updateVersionDiagnostic.isPresent()) {
-            actions.add(Either.forRight(
-                    UpdateVersionCodeAction.build(fileUri, updateVersionDiagnostic.get().getRange()))
-            );
-        }
-
-        return Utils.completableFuture(actions);
-    }
-
-    private Predicate<Diagnostic> diagnosticCodePredicate(String code) {
-        return d ->
-            d.getCode() != null
-            && d.getCode().isLeft()
-            && d.getCode().getLeft().equals(code);
+        return Utils.completableFuture(versionCodeActions);
     }
 
     @Override
