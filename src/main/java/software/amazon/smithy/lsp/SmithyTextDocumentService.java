@@ -666,13 +666,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     }
 
-    private void clearAllDiagnostics() {
-        List<File> smithyFiles = this.project.getSmithyFiles();
-        report(Either.forRight(
-            createPerFileDiagnostics(this.project.getModel().getValidationEvents(), smithyFiles)
-        ));
+    public void clearAllDiagnostics() {
+        report(Either.forRight(createPerFileDiagnostics(this.project.getModel().getValidationEvents(),
+                this.project.getSmithyFiles())));
     }
-
 
     /**
      * Main recompilation method, responsible for reloading the model, persisting it
