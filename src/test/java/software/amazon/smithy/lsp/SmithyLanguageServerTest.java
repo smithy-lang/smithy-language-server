@@ -8,6 +8,8 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.nio.file.Files;
+
+import org.eclipse.lsp4j.CodeActionOptions;
 import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
@@ -17,6 +19,7 @@ import org.eclipse.lsp4j.WorkspaceFolder;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
+import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
 import software.amazon.smithy.utils.ListUtils;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -33,7 +36,7 @@ public class SmithyLanguageServerTest {
 
         assertNull(languageServer.tempWorkspaceRoot);
         assertEquals(TextDocumentSyncKind.Full, capabilities.getTextDocumentSync().getLeft());
-        assertFalse(capabilities.getCodeActionProvider().getLeft());
+        assertEquals(new CodeActionOptions(SmithyCodeActions.all()), capabilities.getCodeActionProvider().getRight());
         assertTrue(capabilities.getDefinitionProvider().getLeft());
         assertTrue(capabilities.getDeclarationProvider().getLeft());
         assertEquals(new CompletionOptions(true, null), capabilities.getCompletionProvider());

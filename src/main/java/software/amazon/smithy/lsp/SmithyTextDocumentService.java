@@ -36,10 +36,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.eclipse.lsp4j.CodeAction;
+import org.eclipse.lsp4j.CodeActionParams;
+import org.eclipse.lsp4j.Command;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DefinitionParams;
+import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
@@ -58,6 +62,8 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
+import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
+import software.amazon.smithy.lsp.diagnostics.VersionDiagnostics;
 import software.amazon.smithy.lsp.ext.Completions;
 import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.Document;
@@ -511,6 +517,16 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     @Override
+    public CompletableFuture<List<Either<Command, CodeAction>>> codeAction(CodeActionParams params) {
+        List<Either<Command, CodeAction>> versionCodeActions =
+                SmithyCodeActions.versionCodeActions(params).stream()
+                        .map(Either::<Command, CodeAction>forRight)
+                        .collect(Collectors.toList());
+
+        return Utils.completableFuture(versionCodeActions);
+    }
+
+    @Override
     public void didChange(DidChangeTextDocumentParams params) {
         File original = fileUri(params.getTextDocument());
         File tempFile = null;
@@ -606,7 +622,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
      */
     public List<PublishDiagnosticsParams> createPerFileDiagnostics(List<ValidationEvent> events, List<File> allFiles) {
         // URI is used because conversion toString deals with platform specific path separator
-        Map<URI, List<ValidationEvent>> byUri = new HashMap<>();
+        Map<URI, List<Diagnostic>> byUri = new HashMap<>();
 
         for (ValidationEvent ev : events) {
             URI finalUri;
@@ -627,29 +643,25 @@ public class SmithyTextDocumentService implements TextDocumentService {
             }
 
             if (byUri.containsKey(finalUri)) {
-                byUri.get(finalUri).add(ev);
+                byUri.get(finalUri).add(ProtocolAdapter.toDiagnostic(ev));
             } else {
-                List<ValidationEvent> l = new ArrayList<>();
-                l.add(ev);
+                List<Diagnostic> l = new ArrayList<>();
+                l.add(ProtocolAdapter.toDiagnostic(ev));
                 byUri.put(finalUri, l);
             }
         }
 
         allFiles.forEach(f -> {
+            List<Diagnostic> versionDiagnostics = VersionDiagnostics.createVersionDiagnostics(f, temporaryContents);
             if (!byUri.containsKey(f.toURI())) {
-                byUri.put(f.toURI(), Collections.emptyList());
+                byUri.put(f.toURI(), versionDiagnostics);
+            } else {
+                byUri.get(f.toURI()).addAll(versionDiagnostics);
             }
         });
 
         List<PublishDiagnosticsParams> diagnostics = new ArrayList<>();
-
-        byUri.forEach((key, value) -> diagnostics.add(
-            new PublishDiagnosticsParams(
-                key.toString(),
-                value.stream().map(ProtocolAdapter::toDiagnostic).collect(Collectors.toList())
-            )
-        ));
-
+        byUri.forEach((key, value) -> diagnostics.add(new PublishDiagnosticsParams(key.toString(), value)));
         return diagnostics;
 
     }

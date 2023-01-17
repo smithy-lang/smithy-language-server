@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -78,19 +79,19 @@ public final class SmithyProject {
      * @return either an error, or a loaded project.
      */
     public Either<Exception, SmithyProject> recompile(File changed, File exclude) {
-        List<File> newFiles = new ArrayList<>();
+        HashSet<File> fileSet = new HashSet<>();
 
         for (File existing : onlyExistingFiles(this.smithyFiles)) {
             if (exclude != null && !existing.equals(exclude)) {
-                newFiles.add(existing);
+                fileSet.add(existing);
             }
         }
 
         if (changed.isFile()) {
-            newFiles.add(changed);
+            fileSet.add(changed);
         }
 
-        return load(this.imports, newFiles, this.externalJars, this.root);
+        return load(this.imports, new ArrayList<>(fileSet), this.externalJars, this.root);
     }
 
     public ValidatedResult<Model> getModel() {

@@ -75,8 +75,8 @@ public class SmithyTextDocumentServiceTest {
         String goodFileName = "good.smithy";
 
         Map<String, String> files = MapUtils.ofEntries(
-                MapUtils.entry(brokenFileName, "namespace testFoo\n string_ MyId"),
-                MapUtils.entry(goodFileName, "namespace testBla"));
+                MapUtils.entry(brokenFileName, "$version: \"2\"\nnamespace testFoo\n string_ MyId"),
+                MapUtils.entry(goodFileName, "$version: \"2\"\nnamespace testBla"));
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
@@ -107,8 +107,8 @@ public class SmithyTextDocumentServiceTest {
         String goodFileName = "good.smithy";
 
         Map<String, String> files = MapUtils.ofEntries(
-                MapUtils.entry(brokenFileName, "namespace testFoo; string_ MyId"),
-                MapUtils.entry(goodFileName, "namespace testBla"));
+                MapUtils.entry(brokenFileName, "$version: \"2\"\nnamespace testFoo; string_ MyId"),
+                MapUtils.entry(goodFileName, "$version: \"2\"\nnamespace testBla"));
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
@@ -124,13 +124,13 @@ public class SmithyTextDocumentServiceTest {
             tds.didOpen(new DidOpenTextDocumentParams(textDocumentItem(broken, files.get(brokenFileName))));
 
             // broken file has a diagnostic published against it
-            assertEquals(1, fileDiagnostics(broken, client.diagnostics).size());
+            assertEquals(1, filePublishedDiagnostics(broken, client.diagnostics).size());
             assertEquals(ListUtils.of(DiagnosticSeverity.Error), getSeverities(broken, client.diagnostics));
             // To clear diagnostics correctly, we must *explicitly* publish an empty
             // list of diagnostics against files with no errors
 
-            assertEquals(1, fileDiagnostics(good, client.diagnostics).size());
-            assertEquals(ListUtils.of(), fileDiagnostics(good, client.diagnostics).get(0).getDiagnostics());
+            assertEquals(1, filePublishedDiagnostics(good, client.diagnostics).size());
+            assertEquals(ListUtils.of(), filePublishedDiagnostics(good, client.diagnostics).get(0).getDiagnostics());
 
             client.clear();
 
@@ -139,12 +139,12 @@ public class SmithyTextDocumentServiceTest {
             tds.didSave(new DidSaveTextDocumentParams(new TextDocumentIdentifier(uri(broken))));
 
             // broken file has a diagnostic published against it
-            assertEquals(1, fileDiagnostics(broken, client.diagnostics).size());
+            assertEquals(1, filePublishedDiagnostics(broken, client.diagnostics).size());
             assertEquals(ListUtils.of(DiagnosticSeverity.Error), getSeverities(broken, client.diagnostics));
             // To clear diagnostics correctly, we must *explicitly* publish an empty
             // list of diagnostics against files with no errors
-            assertEquals(1, fileDiagnostics(good, client.diagnostics).size());
-            assertEquals(ListUtils.of(), fileDiagnostics(good, client.diagnostics).get(0).getDiagnostics());
+            assertEquals(1, filePublishedDiagnostics(good, client.diagnostics).size());
+            assertEquals(ListUtils.of(), filePublishedDiagnostics(good, client.diagnostics).get(0).getDiagnostics());
 
         }
 
@@ -829,6 +829,40 @@ public class SmithyTextDocumentServiceTest {
         }
     }
 
+    @Test
+    public void ensureVersionDiagnostic() throws Exception {
+        String fileName1 = "no-version.smithy";
+        String fileName2 = "old-version.smithy";
+        String fileName3 = "good-version.smithy";
+
+        Map<String, String> files = MapUtils.ofEntries(
+                MapUtils.entry(fileName1, "namespace test"),
+                MapUtils.entry(fileName2, "$version: \"1\"\nnamespace test2"),
+                MapUtils.entry(fileName3, "$version: \"2\"\nnamespace test3")
+        );
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            StubClient client = new StubClient();
+            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setClient(client);
+
+            tds.didOpen(new DidOpenTextDocumentParams(textDocumentItem(hs.file(fileName1), files.get(fileName1))));
+            assertEquals(1, fileDiagnostics(hs.file(fileName1), client.diagnostics).size());
+
+            client.clear();
+
+            tds.didOpen(new DidOpenTextDocumentParams(textDocumentItem(hs.file(fileName2), files.get(fileName2))));
+            assertEquals(1, fileDiagnostics(hs.file(fileName2), client.diagnostics).size());
+
+            client.clear();
+
+            tds.didOpen(new DidOpenTextDocumentParams(textDocumentItem(hs.file(fileName3), files.get(fileName3))));
+            assertEquals(0, fileDiagnostics(hs.file(fileName3), client.diagnostics).size());
+        }
+
+    }
+
     private static class StubClient implements LanguageClient {
         public List<PublishDiagnosticsParams> diagnostics = new ArrayList<>();
         public List<MessageParams> shown = new ArrayList<>();
@@ -875,12 +909,17 @@ public class SmithyTextDocumentServiceTest {
         return diagnostics.stream().map(PublishDiagnosticsParams::getUri).collect(Collectors.toSet());
     }
 
-    private List<PublishDiagnosticsParams> fileDiagnostics(File f, List<PublishDiagnosticsParams> diags) {
+    private List<PublishDiagnosticsParams> filePublishedDiagnostics(File f, List<PublishDiagnosticsParams> diags) {
         return diags.stream().filter(pds -> pds.getUri().equals(uri(f))).collect(Collectors.toList());
     }
 
+    private List<Diagnostic> fileDiagnostics(File f, List<PublishDiagnosticsParams> diags) {
+        return diags.stream().filter(pds -> pds.getUri().equals(uri(f))).flatMap(pd -> pd.getDiagnostics().stream())
+                .collect(Collectors.toList());
+    }
+
     private List<DiagnosticSeverity> getSeverities(File f, List<PublishDiagnosticsParams> diags) {
-        return fileDiagnostics(f, diags).stream()
+        return filePublishedDiagnostics(f, diags).stream()
                 .flatMap(pds -> pds.getDiagnostics().stream().map(Diagnostic::getSeverity)).collect(Collectors.toList());
     }
 

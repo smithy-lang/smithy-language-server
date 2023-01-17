@@ -22,11 +22,16 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.zip.ZipEntry;
 
 public final class Utils {
@@ -106,7 +111,7 @@ public final class Utils {
 
     /**
      * @param rawUri the uri to a file in a jar.
-     * @return the lines of of the file in a jar
+     * @return the lines of the file in a jar
      * @throws IOException when rawUri cannot be URI-decoded.
      */
     public static List<String> jarFileContents(String rawUri) throws IOException {
@@ -138,4 +143,73 @@ public final class Utils {
         return pathArray[0];
     }
 
+
+    /**
+     * Read only the first N lines of a file.
+     * @param file file to read
+     * @param n number of lines to read, must be >= 0. if n is 3, we'll return lines 0, 1, 2
+     * @return list of numbered lines, empty if the file does not exist or
+     * is empty.
+     */
+    public static List<NumberedLine> readFirstNLines(File file, int n) throws IOException {
+        if (n < 0) {
+            throw new IllegalArgumentException("n must be greater or equal to 0");
+        }
+
+        Path filePath = file.toPath();
+        if (!Files.exists(filePath)) {
+            return Collections.emptyList();
+        }
+
+        final ArrayList<NumberedLine> list = new ArrayList<>();
+        try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
+            reader.lines().limit(n).forEach(s -> list.add(new NumberedLine(s, list.size())));
+        }
+        return list;
+
+    }
+
+    /**
+     * Given a content, split it on new line and extract the first n lines.
+     * @param content content to look at
+     * @param n number of lines to extract
+     * @return list of numbered lines, empty if the content has no newline in it.
+     */
+    public static List<NumberedLine> contentFirstNLines(String content, int n) {
+        if (n < 0) {
+            throw new IllegalArgumentException("n must be greater or equal to 0");
+        }
+
+        if (content == null) {
+            throw new IllegalArgumentException("content must not be null");
+        }
+
+        String[] contentLines = content.split("\n");
+
+        if (contentLines.length == 0) {
+            return Collections.emptyList();
+        }
+
+        return IntStream.range(0, Math.min(n, contentLines.length))
+                 .mapToObj(i -> new NumberedLine(contentLines[i], i))
+                 .collect(Collectors.toList());
+    }
+
+    public static class NumberedLine {
+        private final String content;
+        private final int lineNumber;
+
+        NumberedLine(String content, int lineNumber) {
+            this.content = content;
+            this.lineNumber = lineNumber;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public int getLineNumber() {
+            return lineNumber;
+        }
+    }
 }
