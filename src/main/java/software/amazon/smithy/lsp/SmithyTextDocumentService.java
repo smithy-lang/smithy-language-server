@@ -598,13 +598,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
         );
         if (content.isPresent()) {
             SmartInput input = content.get();
-            // if last character is not a new line, make it so
-            // work around an issue where the grammar requires a BR after
-            // each shape statement
-            final String finalContent = input.getInput().charAt(input.getInput().length() - 1) == '\n'
-                ? input.getInput()
-                : input.getInput() + "\n";
-            final Result result = Formatter.format(finalContent);
+            final Result result = Formatter.format(input.getInput());
             final Range fullRange = input.getRange();
             if (result.isSuccess() && !result.getValue().equals(input.getInput())) {
                 return Utils.completableFuture(Collections.singletonList(new TextEdit(
