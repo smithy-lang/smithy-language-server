@@ -217,6 +217,7 @@ jar {
         exclude "META-INF/*.SF"
         exclude "META-INF/*.DSA"
         exclude "META-INF/*.RSA"
+        exclude "reflect.properties"
     }
     manifest {
         attributes("Main-Class": "software.amazon.smithy.lsp.Main")
