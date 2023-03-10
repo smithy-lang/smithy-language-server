@@ -48,6 +48,7 @@ import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.DocumentFormattingParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.Location;
@@ -57,13 +58,18 @@ import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
+import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
+import smithyfmt.Formatter;
+import smithyfmt.Result;
 import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
 import software.amazon.smithy.lsp.diagnostics.VersionDiagnostics;
+import software.amazon.smithy.lsp.editor.SmartInput;
 import software.amazon.smithy.lsp.ext.Completions;
 import software.amazon.smithy.lsp.ext.Constants;
 import software.amazon.smithy.lsp.ext.Document;
@@ -578,6 +584,37 @@ public class SmithyTextDocumentService implements TextDocumentService {
         File file = fileUri(params.getTextDocument());
         stableContents(file);
         report(recompile(file, Optional.empty()));
+    }
+
+    @Override
+    public CompletableFuture<List<? extends TextEdit>> formatting(DocumentFormattingParams params) {
+        File file = fileUri(params.getTextDocument());
+        final CompletableFuture<List<? extends TextEdit>> emptyResult =
+            Utils.completableFuture(Collections.emptyList());
+
+        final Optional<SmartInput> content = Utils.optOr(
+                Optional.ofNullable(temporaryContents.get(file)).map(SmartInput::fromInput),
+                () -> SmartInput.fromPathSafe(file.toPath())
+        );
+        if (content.isPresent()) {
+            SmartInput input = content.get();
+            final Result result = Formatter.format(input.getInput());
+            final Range fullRange = input.getRange();
+            if (result.isSuccess() && !result.getValue().equals(input.getInput())) {
+                return Utils.completableFuture(Collections.singletonList(new TextEdit(
+                        fullRange,
+                        result.getValue()
+                )));
+            } else if (!result.isSuccess()) {
+                LspLog.println("Failed to format: " + result.getError());
+                return emptyResult;
+            } else {
+                return emptyResult;
+            }
+        } else {
+            LspLog.println("Content is unavailable, not formatting.");
+            return emptyResult;
+        }
     }
 
     private File fileUri(TextDocumentIdentifier tdi) {

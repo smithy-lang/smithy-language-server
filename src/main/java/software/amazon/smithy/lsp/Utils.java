@@ -27,6 +27,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.jar.JarFile;
@@ -210,6 +211,20 @@ public final class Utils {
 
         public int getLineNumber() {
             return lineNumber;
+        }
+    }
+
+    /**
+     * Helper to provide an alternative Optional if the first is empty.
+     * @param o1 first optional
+     * @param o2get supplier to retrieve the second optional
+     * @return the first optional if not empty, otherwise get the second optional
+     */
+    public static <T> Optional<T> optOr(Optional<T> o1, Supplier<Optional<T>> o2get) {
+        if (o1.isPresent()) {
+            return o1;
+        } else {
+            return o2get.get();
         }
     }
 }
