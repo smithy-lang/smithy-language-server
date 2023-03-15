@@ -1,6 +1,6 @@
 # Smithy Language Server Changelog
 
-## 0.2.3 (2022-03-15)
+## 0.2.3 (2023-03-15)
 
 ### Features
 * Added formatter to apply style guide to model files ([#89](https://github.com/awslabs/smithy-language-server/pull/89))
