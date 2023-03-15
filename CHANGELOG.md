@@ -1,5 +1,11 @@
 # Smithy Language Server Changelog
 
+## 0.2.3 (2022-03-15)
+
+### Features
+* Added formatter to apply style guide to model files ([#89](https://github.com/awslabs/smithy-language-server/pull/89))
+* Added diagnostic and code action to define or update to IDL 2 ([#86](https://github.com/awslabs/smithy-language-server/pull/86))
+
 ## 0.2.2 (2022-12-27)
 
 ### Bug fixes
