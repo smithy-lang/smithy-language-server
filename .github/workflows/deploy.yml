@@ -1,0 +1,36 @@
+---
+
+name: deploy
+on:
+  push:
+    tags:
+      - "0*"
+
+jobs:
+  deploy:
+    permissions:
+      contents: write # needed for the release script
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set variables
+        run: |
+          VER=$(cat VERSION)
+          echo "VERSION=$VER" >> $GITHUB_ENV
+          echo "Version is $VER"
+
+      - name: Setup JDK
+        uses: actions/setup-java@v1
+        with:
+          java-version: "11"
+
+      - name: Clean and build
+        run: ./gradlew clean build distZip
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./build/distributions/smithy-language-server-${{ env.VERSION }}.zip
