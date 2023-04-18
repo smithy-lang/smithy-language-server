@@ -68,7 +68,7 @@ final class FileCachingCollector implements ShapeLocationCollector {
 
         operationsWithInlineInputOutputMap.forEach((this::collectInlineInputOutputLocations));
         containerMembersMap.forEach(this::collectMemberLocations);
-        // Make final pass to set locations for mixed-in member locations that weren't available on first past.
+        // Make final pass to set locations for mixed-in member locations that weren't available on first pass.
         membersToUpdateMap.forEach(this::updateElidedMemberLocation);
         return this.locations;
     }
