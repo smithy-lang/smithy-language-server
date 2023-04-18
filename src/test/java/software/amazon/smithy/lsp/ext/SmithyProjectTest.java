@@ -107,8 +107,8 @@ public class SmithyProjectTest {
             // Member is unchanged by apply
             correctLocation(locationMap, "com.main#SomeOpInput$body", 14, 4, 14, 16);
 
-            // The mixed in member should have an empty position
-            correctLocation(locationMap, "com.main#SomeOpInput$isTest", 12, 0, 12, 0);
+            // The mixed in member should have the source location from the mixin.
+            correctLocation(locationMap, "com.main#SomeOpInput$isTest", 8, 4, 8, 19);
 
             // Structure shape unchanged by apply
             correctLocation(locationMap, "com.main#ArbitraryStructure", 25, 0, 27, 1);
@@ -199,12 +199,12 @@ public class SmithyProjectTest {
             correctLocation(locationMap, "com.foo#FalseInlinedReversedFooInput", 193, 0, 195, 1);
             correctLocation(locationMap, "com.foo#FalseInlinedReversedBarOutput", 197, 0, 199, 1);
 
-            // Elided members with empty ranges.
-            correctLocation(locationMap, "com.foo#ElidedUserInfo$id", 134, 0, 134, 0);
-            correctLocation(locationMap, "com.foo#ElidedGetUserFooInput$email", 143, 13, 143, 13);
-            correctLocation(locationMap, "com.foo#ElidedGetUserFooInput$status", 143, 13, 143, 13);
-            correctLocation(locationMap, "com.foo#ElidedGetUserBarOutput$email", 149, 14, 149, 14);
-            correctLocation(locationMap, "com.foo#ElidedGetUserBarOutput$id", 149, 14, 149, 14);
+            // Elided members from source mixin structure.
+            correctLocation(locationMap, "com.foo#ElidedUserInfo$id", 117, 4, 117, 14);
+            correctLocation(locationMap, "com.foo#ElidedGetUserFooInput$email", 114, 4, 114, 17);
+            correctLocation(locationMap, "com.foo#ElidedGetUserFooInput$status",  122, 4, 122, 18);
+            correctLocation(locationMap, "com.foo#ElidedGetUserBarOutput$email",  114, 4, 114, 17);
+            correctLocation(locationMap, "com.foo#ElidedGetUserBarOutput$id", 117, 4, 117, 14);
         }
     }
 
@@ -358,8 +358,6 @@ public class SmithyProjectTest {
                     new Position(14,18)).get());
             assertEquals(ShapeId.from("com.foo#GetUser"), project.getShapeIdFromLocation(uri,
                     new Position(125,13)).get());
-            assertEquals(ShapeId.from("com.foo#GetUserFooInput$email"), project.getShapeIdFromLocation(uri,
-                    new Position(126,13)).get());
             assertEquals(ShapeId.from("com.foo#GetUserFooInput$optional"), project.getShapeIdFromLocation(uri,
                     new Position(127,14)).get());
             assertEquals(ShapeId.from("com.foo#GetUserBarOutput"), project.getShapeIdFromLocation(uri,

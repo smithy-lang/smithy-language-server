@@ -51,6 +51,7 @@ final class FileCachingCollector implements ShapeLocationCollector {
     private Map<String, ModelFile> fileCache;
     private Map<OperationShape, List<Shape>> operationsWithInlineInputOutputMap;
     private Map<ShapeId, List<MemberShape>> containerMembersMap;
+    private Map<ShapeId, ShapeId> membersToUpdateMap;
 
     @Override
     public Map<ShapeId, Location> collectDefinitionLocations(Model model) {
@@ -59,6 +60,7 @@ final class FileCachingCollector implements ShapeLocationCollector {
         this.fileCache = createModelFileCache(model);
         this.operationsWithInlineInputOutputMap = new HashMap<>();
         this.containerMembersMap = new HashMap<>();
+        this.membersToUpdateMap = new HashMap<>();
 
         for (ModelFile modelFile : this.fileCache.values()) {
             collectContainerShapeLocationsInModelFile(modelFile);
@@ -66,6 +68,8 @@ final class FileCachingCollector implements ShapeLocationCollector {
 
         operationsWithInlineInputOutputMap.forEach((this::collectInlineInputOutputLocations));
         containerMembersMap.forEach(this::collectMemberLocations);
+        // Make final pass to set locations for mixed-in member locations that weren't available on first pass.
+        membersToUpdateMap.forEach(this::updateElidedMemberLocation);
         return this.locations;
     }
 
@@ -146,11 +150,23 @@ final class FileCachingCollector implements ShapeLocationCollector {
             int memberShapeSourceLocationLine = memberShape.getSourceLocation().getLine();
 
             boolean isContainerInAnotherFile = !containerLocation.getUri().equals(getUri(modelFile.filename));
-            // If the member's source location matches the container location's starting line (with offset),
-            // the member is inherited from a mixin and not present in the model file.
-            boolean isMemberMixedIn = memberShapeSourceLocationLine == containerLocationRange.getStart().getLine() + 1;
+            // If the member's source location is within the container location range, it is being defined
+            // or re-defined there.
+            boolean isMemberDefinedInContainer =
+                    memberShapeSourceLocationLine >= containerLocationRange.getStart().getLine()
+                    && memberShapeSourceLocationLine <= containerLocationRange.getEnd().getLine();
 
-            if (isContainerInAnotherFile || isMemberMixedIn) {
+            // If the member has mixins, and was not defined within the container, use the mixin source location.
+            if (memberShape.getMixins().size() > 0 && !isMemberDefinedInContainer) {
+                ShapeId mixinSource = memberShape.getMixins().iterator().next();
+                // If the mixin source location has been determined, use its location now.
+                if (locations.containsKey(mixinSource)) {
+                    locations.put(memberShape.getId(), locations.get(mixinSource));
+                // If the mixin source location has not yet been determined, save to re-visit later.
+                } else {
+                    membersToUpdateMap.put(memberShape.getId(), mixinSource);
+                }
+            } else if (isContainerInAnotherFile) {
                 locations.put(memberShape.getId(), createInheritedMemberLocation(containerLocation));
                 // Otherwise, determine the correct location by trimming comments, empty lines and applied traits.
             } else {
@@ -184,6 +200,13 @@ final class FileCachingCollector implements ShapeLocationCollector {
                 locations.put(memberShape.getId(), createLocation(modelFile.filename, startPosition, endPosition));
                 previousLine = currentLine;
             }
+        }
+    }
+
+    // If a mixed-in member is not redefined within its containing structure, set its location to the mixin member.
+    private void updateElidedMemberLocation(ShapeId member, ShapeId sourceMember) {
+        if (locations.containsKey(sourceMember)) {
+            locations.put(member, locations.get(sourceMember));
         }
     }
 
