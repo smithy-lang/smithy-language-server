@@ -59,7 +59,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     return Utils.completableFuture(new Object());
   }
 
-  private void loadSmithyBuild(File root) throws ValidationException, FileNotFoundException {
+  private void loadSmithyBuild(File root) {
     this.tds.ifPresent(tds -> tds.createProject(root));
   }
 
@@ -108,6 +108,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     capabilities.setCompletionProvider(new CompletionOptions(true, null));
     capabilities.setHoverProvider(true);
     capabilities.setDocumentFormattingProvider(true);
+    capabilities.setDocumentSymbolProvider(true);
 
     return Utils.completableFuture(new InitializeResult(capabilities));
   }

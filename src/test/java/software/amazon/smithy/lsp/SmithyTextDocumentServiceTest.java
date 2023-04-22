@@ -31,28 +31,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-import org.eclipse.lsp4j.CompletionItem;
-import org.eclipse.lsp4j.CompletionParams;
-import org.eclipse.lsp4j.DefinitionParams;
-import org.eclipse.lsp4j.Diagnostic;
-import org.eclipse.lsp4j.DiagnosticSeverity;
-import org.eclipse.lsp4j.DidChangeTextDocumentParams;
-import org.eclipse.lsp4j.DidOpenTextDocumentParams;
-import org.eclipse.lsp4j.DidSaveTextDocumentParams;
-import org.eclipse.lsp4j.Hover;
-import org.eclipse.lsp4j.HoverParams;
-import org.eclipse.lsp4j.Location;
-import org.eclipse.lsp4j.MarkupContent;
-import org.eclipse.lsp4j.MessageActionItem;
-import org.eclipse.lsp4j.MessageParams;
-import org.eclipse.lsp4j.Position;
-import org.eclipse.lsp4j.PublishDiagnosticsParams;
-import org.eclipse.lsp4j.Range;
-import org.eclipse.lsp4j.ShowMessageRequestParams;
-import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
-import org.eclipse.lsp4j.TextDocumentIdentifier;
-import org.eclipse.lsp4j.TextDocumentItem;
-import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
+
+import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.junit.Test;
@@ -859,6 +839,40 @@ public class SmithyTextDocumentServiceTest {
 
             tds.didOpen(new DidOpenTextDocumentParams(textDocumentItem(hs.file(fileName3), files.get(fileName3))));
             assertEquals(0, fileDiagnostics(hs.file(fileName3), client.diagnostics).size());
+        }
+
+    }
+
+    @Test
+    public void documentSymbols() throws Exception {
+        String currentFile = "current.smithy";
+        String anotherFile = "another.smithy";
+
+        Map<String, String> files = MapUtils.ofEntries(
+                MapUtils.entry(currentFile, "$version: \"2\"\nnamespace test\n" +
+                        "structure Weather {\n" +
+                        "  @required city: City \n" +
+                        "}\n"),
+                MapUtils.entry(anotherFile, "$version: \"2\"\nnamespace test\n" +
+                        "structure City { }\n")
+        );
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            tds.createProject(hs.getConfig(), hs.getRoot());
+
+            TextDocumentIdentifier currentDocumentIdent = new TextDocumentIdentifier(uri(hs.file(currentFile)));
+
+            List<Either<SymbolInformation, DocumentSymbol>> symbols =
+                    tds.documentSymbol(new DocumentSymbolParams(currentDocumentIdent)).get();
+
+            assertEquals(2, symbols.size());
+
+            assertEquals("city", symbols.get(0).getRight().getName());
+            assertEquals(SymbolKind.Field, symbols.get(0).getRight().getKind());
+
+            assertEquals("Weather", symbols.get(1).getRight().getName());
+            assertEquals(SymbolKind.Struct, symbols.get(1).getRight().getKind());
         }
 
     }
