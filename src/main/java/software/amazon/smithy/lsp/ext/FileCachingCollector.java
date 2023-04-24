@@ -274,7 +274,9 @@ final class FileCachingCollector implements ShapeLocationCollector {
         }
         int boundary = Math.max(priorShapeLine, operation.getSourceLocation().getLine());
         while (shapeStartLine >= boundary) {
-            String line = modelFile.lines.get(shapeStartLine);
+            String line = modelFile.lines.get(shapeStartLine - 1);
+
+            // note: this doesn't take code inside comments into account
             if (line.contains(":=")) {
                 return true;
             }

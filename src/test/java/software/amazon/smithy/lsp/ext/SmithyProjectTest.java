@@ -15,9 +15,6 @@
 
 package software.amazon.smithy.lsp.ext;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,6 +39,8 @@ import software.amazon.smithy.model.traits.SinceTrait;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.MapUtils;
+
+import static org.junit.Assert.*;
 
 public class SmithyProjectTest {
 
@@ -121,6 +120,15 @@ public class SmithyProjectTest {
 
             // Structure in another namespace unchanged by apply
             correctLocation(locationMap, "com.imports#HasIsTestParam", 7, 0, 9, 1);
+        }
+    }
+
+    @Test
+    public void allowsEmptyStructsWithMixins() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/mixins").toURI());
+        Path main = baseDir.resolve("main.smithy");
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), Collections.singletonList(main))) {
+            assertNotNull(hs.getProject());
         }
     }
 
