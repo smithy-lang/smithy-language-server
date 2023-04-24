@@ -126,9 +126,20 @@ public class SmithyProjectTest {
     // https://github.com/awslabs/smithy-language-server/issues/100
     @Test
     public void allowsEmptyStructsWithMixins() throws Exception {
-        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/mixins").toURI());
-        Path main = baseDir.resolve("main.smithy");
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), Collections.singletonList(main))) {
+        String fileText = "$version: \"2\"\n" +
+                "\n" +
+                "namespace demo\n" +
+                "\n" +
+                "operation MyOp {\n" +
+                "    output: MyOpOutput\n" +
+                "}\n" +
+                "\n" +
+                "@output\n" +
+                "structure MyOpOutput {}\n";
+
+        Map<String, String> files = MapUtils.of("main.smithy", fileText);
+        
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
             assertNotNull(hs.getProject());
             Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
 
