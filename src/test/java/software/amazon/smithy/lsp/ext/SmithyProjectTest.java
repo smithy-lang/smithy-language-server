@@ -138,7 +138,7 @@ public class SmithyProjectTest {
                 "structure MyOpOutput {}\n";
 
         Map<String, String> files = MapUtils.of("main.smithy", fileText);
-        
+
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
             assertNotNull(hs.getProject());
             Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
