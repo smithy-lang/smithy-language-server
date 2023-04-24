@@ -123,12 +123,16 @@ public class SmithyProjectTest {
         }
     }
 
+    // https://github.com/awslabs/smithy-language-server/issues/100
     @Test
     public void allowsEmptyStructsWithMixins() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/mixins").toURI());
         Path main = baseDir.resolve("main.smithy");
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), Collections.singletonList(main))) {
             assertNotNull(hs.getProject());
+            Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
+
+            correctLocation(locationMap, "demo#MyOpOutput", 9, 0, 9, 23);
         }
     }
 
