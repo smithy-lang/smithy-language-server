@@ -411,7 +411,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
             URI documentUri = documentIdentifierToUri(params.getTextDocument());
 
             locations.forEach((shapeId, loc) -> {
-                boolean matchesDocument = URI.create(loc.getUri()).equals(documentUri);
+                String[] locSegments = loc.getUri().replace("\\", "/").split(":");
+                boolean matchesDocument = documentUri.toString().endsWith(locSegments[locSegments.length - 1]);
 
                 if (!matchesDocument) {
                     return;
