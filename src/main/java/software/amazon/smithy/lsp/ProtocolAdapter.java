@@ -15,12 +15,15 @@
 
 package software.amazon.smithy.lsp;
 
-import org.eclipse.lsp4j.*;
+import java.util.Optional;
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.SymbolKind;
 import software.amazon.smithy.model.shapes.ShapeType;
 import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidationEvent;
-
-import java.util.Optional;
 
 public final class ProtocolAdapter {
   private ProtocolAdapter() {
@@ -62,8 +65,13 @@ public final class ProtocolAdapter {
     }
   }
 
+  /**
+   * @param shapeType The type to be converted to a SymbolKind
+   * @param parentType An optional type of the shape's enclosing definition
+   * @return An lsp4j SymbolKind
+   */
   public static SymbolKind toSymbolKind(ShapeType shapeType, Optional<ShapeType> parentType) {
-    switch(shapeType) {
+    switch (shapeType) {
       case BYTE:
       case BIG_INTEGER:
       case DOUBLE:
@@ -96,7 +104,9 @@ public final class ProtocolAdapter {
       case STRUCTURE:
         return SymbolKind.Struct;
       case MEMBER:
-          if (!parentType.isPresent()) return SymbolKind.Field;
+          if (!parentType.isPresent()) {
+            return SymbolKind.Field;
+          }
           switch (parentType.get()) {
               case ENUM:
                   return SymbolKind.EnumMember;

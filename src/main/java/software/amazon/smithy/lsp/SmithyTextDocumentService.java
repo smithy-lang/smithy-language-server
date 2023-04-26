@@ -38,8 +38,36 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import org.eclipse.lsp4j.*;
+import org.eclipse.lsp4j.CodeAction;
+import org.eclipse.lsp4j.CodeActionParams;
+import org.eclipse.lsp4j.Command;
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.CompletionList;
+import org.eclipse.lsp4j.CompletionParams;
+import org.eclipse.lsp4j.DefinitionParams;
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DidChangeTextDocumentParams;
+import org.eclipse.lsp4j.DidCloseTextDocumentParams;
+import org.eclipse.lsp4j.DidOpenTextDocumentParams;
+import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.DocumentFormattingParams;
+import org.eclipse.lsp4j.DocumentSymbol;
+import org.eclipse.lsp4j.DocumentSymbolParams;
+import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.HoverParams;
+import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.LocationLink;
+import org.eclipse.lsp4j.MarkupContent;
+import org.eclipse.lsp4j.MessageParams;
+import org.eclipse.lsp4j.MessageType;
+import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.SymbolInformation;
+import org.eclipse.lsp4j.SymbolKind;
+import org.eclipse.lsp4j.TextDocumentIdentifier;
+import org.eclipse.lsp4j.TextDocumentItem;
+import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
@@ -371,7 +399,9 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     @Override
-    public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> documentSymbol(DocumentSymbolParams params) {
+    public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> documentSymbol(
+        DocumentSymbolParams params
+    ) {
         try {
             Map<ShapeId, Location> locations = project.getLocations();
             Model model = project.getModel().unwrap();
@@ -383,13 +413,15 @@ public class SmithyTextDocumentService implements TextDocumentService {
             locations.forEach((shapeId, loc) -> {
                 boolean matchesDocument = URI.create(loc.getUri()).equals(documentUri);
 
-                if (!matchesDocument) return;
+                if (!matchesDocument) {
+                    return;
+                }
 
                 Shape shape = model.expectShape(shapeId);
 
-                Optional<ShapeType> parentType = shape.isMemberShape() ?
-                            Optional.of(model.expectShape(shapeId.withoutMember()).getType()) :
-                            Optional.empty();
+                Optional<ShapeType> parentType = shape.isMemberShape()
+                    ? Optional.of(model.expectShape(shapeId.withoutMember()).getType())
+                    : Optional.empty();
 
                 SymbolKind kind = ProtocolAdapter.toSymbolKind(shape.getType(), parentType);
 
@@ -398,7 +430,12 @@ public class SmithyTextDocumentService implements TextDocumentService {
                 symbols.add(new DocumentSymbol(symbolName, kind, loc.getRange(), loc.getRange()));
             });
 
-            return Utils.completableFuture(symbols.stream().map(Either::<SymbolInformation, DocumentSymbol>forRight).collect(Collectors.toList()));
+            return Utils.completableFuture(
+                symbols
+                    .stream()
+                    .map(Either::<SymbolInformation, DocumentSymbol>forRight)
+                    .collect(Collectors.toList())
+            );
         } catch (Exception e) {
             e.printStackTrace(System.err);
 
@@ -407,9 +444,9 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     private URI documentIdentifierToUri(TextDocumentIdentifier ident) throws UnsupportedEncodingException {
-        return Utils.isSmithyJarFile(ident.getUri()) ?
-                URI.create(URLDecoder.decode(ident.getUri(), StandardCharsets.UTF_8.name())) :
-                this.fileUri(ident).toURI();
+        return Utils.isSmithyJarFile(ident.getUri())
+            ? URI.create(URLDecoder.decode(ident.getUri(), StandardCharsets.UTF_8.name()))
+            : this.fileUri(ident).toURI();
     }
 
     @Override
