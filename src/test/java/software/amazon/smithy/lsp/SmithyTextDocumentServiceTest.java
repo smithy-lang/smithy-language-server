@@ -869,17 +869,12 @@ public class SmithyTextDocumentServiceTest {
 
     @Test
     public void documentSymbols() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/document-symbols").toURI());
+
         String currentFile = "current.smithy";
         String anotherFile = "another.smithy";
 
-        Map<String, String> files = MapUtils.ofEntries(
-                MapUtils.entry(currentFile, "$version: \"2\"\nnamespace test\n" +
-                        "structure Weather {\n" +
-                        "  @required city: City \n" +
-                        "}\n"),
-                MapUtils.entry(anotherFile, "$version: \"2\"\nnamespace test\n" +
-                        "structure City { }\n")
-        );
+        List<Path> files = ListUtils.of(baseDir.resolve(currentFile),baseDir.resolve(anotherFile));
 
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
             SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
