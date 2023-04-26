@@ -15,9 +15,6 @@
 
 package software.amazon.smithy.lsp.ext;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,6 +39,10 @@ import software.amazon.smithy.model.traits.SinceTrait;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.MapUtils;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 
 public class SmithyProjectTest {
 
@@ -121,6 +122,30 @@ public class SmithyProjectTest {
 
             // Structure in another namespace unchanged by apply
             correctLocation(locationMap, "com.imports#HasIsTestParam", 7, 0, 9, 1);
+        }
+    }
+
+    // https://github.com/awslabs/smithy-language-server/issues/100
+    @Test
+    public void allowsEmptyStructsWithMixins() throws Exception {
+        String fileText = "$version: \"2\"\n" +
+                "\n" +
+                "namespace demo\n" +
+                "\n" +
+                "operation MyOp {\n" +
+                "    output: MyOpOutput\n" +
+                "}\n" +
+                "\n" +
+                "@output\n" +
+                "structure MyOpOutput {}\n";
+
+        Map<String, String> files = MapUtils.of("main.smithy", fileText);
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+            assertNotNull(hs.getProject());
+            Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
+
+            correctLocation(locationMap, "demo#MyOpOutput", 9, 0, 9, 23);
         }
     }
 
