@@ -551,21 +551,21 @@ public class SmithyTextDocumentService implements TextDocumentService {
     }
 
     private String getHoverContentsForShape(Shape shape, Model model) {
-        try {
-            String serializedShape = serializeShape(shape, model);
+        List<ValidationEvent> validationEvents = getValidationEventsForShape(shape);
+        String serializedShape = serializeShape(shape, model);
+        if (validationEvents.isEmpty()) {
             return "```smithy\n" + serializedShape + "\n```";
-        } catch (Exception e) {
-            List<ValidationEvent> validationEvents = getValidationEventsForShape(shape);
-            StringBuilder contents = new StringBuilder();
-            contents.append("Can't display shape ").append("`").append(shape.getId().toString()).append("`:");
-            for (ValidationEvent event : validationEvents) {
-                contents.append(System.lineSeparator()).append(event.getMessage());
-            }
-            if (validationEvents.isEmpty()) {
-                contents.append(System.lineSeparator()).append(e);
-            }
-            return contents.toString();
         }
+        StringBuilder contents = new StringBuilder();
+        contents.append("```smithy\n");
+        contents.append(serializedShape);
+        contents.append("\n");
+        contents.append("---\n");
+        for (ValidationEvent event : validationEvents) {
+            contents.append(event.getSeverity() + ": " + event.getMessage() + "\n");
+        }
+        contents.append("```");
+        return contents.toString();
     }
 
     private String serializeShape(Shape shape, Model model) {
