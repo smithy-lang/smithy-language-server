@@ -39,6 +39,8 @@ import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.DocumentSymbol;
+import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.Location;
@@ -49,6 +51,8 @@ import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.ShowMessageRequestParams;
+import org.eclipse.lsp4j.SymbolInformation;
+import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
@@ -859,6 +863,35 @@ public class SmithyTextDocumentServiceTest {
 
             tds.didOpen(new DidOpenTextDocumentParams(textDocumentItem(hs.file(fileName3), files.get(fileName3))));
             assertEquals(0, fileDiagnostics(hs.file(fileName3), client.diagnostics).size());
+        }
+
+    }
+
+    @Test
+    public void documentSymbols() throws Exception {
+        Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/document-symbols").toURI());
+
+        String currentFile = "current.smithy";
+        String anotherFile = "another.smithy";
+
+        List<Path> files = ListUtils.of(baseDir.resolve(currentFile),baseDir.resolve(anotherFile));
+
+        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            tds.createProject(hs.getConfig(), hs.getRoot());
+
+            TextDocumentIdentifier currentDocumentIdent = new TextDocumentIdentifier(uri(hs.file(currentFile)));
+
+            List<Either<SymbolInformation, DocumentSymbol>> symbols =
+                    tds.documentSymbol(new DocumentSymbolParams(currentDocumentIdent)).get();
+
+            assertEquals(2, symbols.size());
+
+            assertEquals("city", symbols.get(0).getRight().getName());
+            assertEquals(SymbolKind.Field, symbols.get(0).getRight().getKind());
+
+            assertEquals("Weather", symbols.get(1).getRight().getName());
+            assertEquals(SymbolKind.Struct, symbols.get(1).getRight().getKind());
         }
 
     }

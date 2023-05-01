@@ -15,10 +15,13 @@
 
 package software.amazon.smithy.lsp;
 
+import java.util.Optional;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.SymbolKind;
+import software.amazon.smithy.model.shapes.ShapeType;
 import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
@@ -59,6 +62,66 @@ public final class ProtocolAdapter {
       return DiagnosticSeverity.Information;
     } else {
       return DiagnosticSeverity.Hint;
+    }
+  }
+
+  /**
+   * @param shapeType The type to be converted to a SymbolKind
+   * @param parentType An optional type of the shape's enclosing definition
+   * @return An lsp4j SymbolKind
+   */
+  public static SymbolKind toSymbolKind(ShapeType shapeType, Optional<ShapeType> parentType) {
+    switch (shapeType) {
+      case BYTE:
+      case BIG_INTEGER:
+      case DOUBLE:
+      case BIG_DECIMAL:
+      case FLOAT:
+      case LONG:
+      case INTEGER:
+      case SHORT:
+        return SymbolKind.Number;
+      case BLOB:
+          // technically a sequence of bytes, so due to the lack of a better alternative, an array
+      case LIST:
+      case SET:
+        return SymbolKind.Array;
+      case BOOLEAN:
+        return SymbolKind.Boolean;
+      case STRING:
+        return SymbolKind.String;
+      case TIMESTAMP:
+      case UNION:
+        return SymbolKind.Interface;
+
+      case DOCUMENT:
+        return SymbolKind.Class;
+      case ENUM:
+      case INT_ENUM:
+        return SymbolKind.Enum;
+      case MAP:
+        return SymbolKind.Object;
+      case STRUCTURE:
+        return SymbolKind.Struct;
+      case MEMBER:
+          if (!parentType.isPresent()) {
+            return SymbolKind.Field;
+          }
+          switch (parentType.get()) {
+              case ENUM:
+                  return SymbolKind.EnumMember;
+              case UNION:
+                  return SymbolKind.Class;
+              default: return SymbolKind.Field;
+          }
+      case SERVICE:
+      case RESOURCE:
+        return SymbolKind.Module;
+      case OPERATION:
+        return SymbolKind.Method;
+      default:
+        // This case shouldn't be reachable
+        return SymbolKind.Key;
     }
   }
 }

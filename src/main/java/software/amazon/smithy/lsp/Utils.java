@@ -56,7 +56,7 @@ public final class Utils {
      * @return Returns whether the uri points to a file in jar.
      * @throws IOException when rawUri cannot be URL-decoded
      */
-    public static boolean isSmithyJarFile(String rawUri) throws IOException {
+    public static boolean isSmithyJarFile(String rawUri) {
         try {
             String uri = java.net.URLDecoder.decode(rawUri, StandardCharsets.UTF_8.name());
             return uri.startsWith("smithyjar:");

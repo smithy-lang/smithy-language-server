@@ -19,8 +19,10 @@ import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import java.io.File;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -49,6 +51,8 @@ import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.DocumentFormattingParams;
+import org.eclipse.lsp4j.DocumentSymbol;
+import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.Location;
@@ -59,6 +63,8 @@ import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.SymbolInformation;
+import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.TextEdit;
@@ -85,6 +91,7 @@ import software.amazon.smithy.model.loader.ParserUtils;
 import software.amazon.smithy.model.neighbor.Walker;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.ShapeType;
 import software.amazon.smithy.model.shapes.SmithyIdlModelSerializer;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
@@ -322,6 +329,9 @@ public class SmithyTextDocumentService implements TextDocumentService {
         return new File(this.temporaryFolder, hashed + Constants.SMITHY_EXTENSION);
     }
 
+    /**
+     * @return lines in the file or buffer
+     */
     private List<String> textBufferContents(String path) throws IOException {
         List<String> contents;
         if (Utils.isSmithyJarFile(path)) {
@@ -386,6 +396,58 @@ public class SmithyTextDocumentService implements TextDocumentService {
 
     private String getLine(List<String> lines, Position position) {
         return lines.get(position.getLine());
+    }
+
+    @Override
+    public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> documentSymbol(
+        DocumentSymbolParams params
+    ) {
+        try {
+            Map<ShapeId, Location> locations = project.getLocations();
+            Model model = project.getModel().unwrap();
+
+            List<DocumentSymbol> symbols = new ArrayList<>();
+
+            URI documentUri = documentIdentifierToUri(params.getTextDocument());
+
+            locations.forEach((shapeId, loc) -> {
+                String[] locSegments = loc.getUri().replace("\\", "/").split(":");
+                boolean matchesDocument = documentUri.toString().endsWith(locSegments[locSegments.length - 1]);
+
+                if (!matchesDocument) {
+                    return;
+                }
+
+                Shape shape = model.expectShape(shapeId);
+
+                Optional<ShapeType> parentType = shape.isMemberShape()
+                    ? Optional.of(model.expectShape(shapeId.withoutMember()).getType())
+                    : Optional.empty();
+
+                SymbolKind kind = ProtocolAdapter.toSymbolKind(shape.getType(), parentType);
+
+                String symbolName = shapeId.getMember().orElse(shapeId.getName());
+
+                symbols.add(new DocumentSymbol(symbolName, kind, loc.getRange(), loc.getRange()));
+            });
+
+            return Utils.completableFuture(
+                symbols
+                    .stream()
+                    .map(Either::<SymbolInformation, DocumentSymbol>forRight)
+                    .collect(Collectors.toList())
+            );
+        } catch (Exception e) {
+            e.printStackTrace(System.err);
+
+            return Utils.completableFuture(Collections.emptyList());
+        }
+    }
+
+    private URI documentIdentifierToUri(TextDocumentIdentifier ident) throws UnsupportedEncodingException {
+        return Utils.isSmithyJarFile(ident.getUri())
+            ? URI.create(URLDecoder.decode(ident.getUri(), StandardCharsets.UTF_8.name()))
+            : this.fileUri(ident).toURI();
     }
 
     @Override
