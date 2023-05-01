@@ -214,7 +214,7 @@ public class SmithyTextDocumentServiceTest {
     }
 
     @Test
-    public void hoverOnBrokenShapeShowsErrorMessage() throws Exception {
+    public void hoverOnBrokenShapeAppendsValidations() throws Exception {
         Path baseDir = Paths.get(getClass().getResource("ext/models").toURI());
         String modelFilename = "unknown-trait.smithy";
         Path modelFilePath = baseDir.resolve(modelFilename);
@@ -227,7 +227,10 @@ public class SmithyTextDocumentServiceTest {
             TextDocumentIdentifier tdi = new TextDocumentIdentifier(hs.file(modelFilename).toString());
             Hover hover = tds.hover(hoverParams(tdi, 10, 13)).get();
             MarkupContent hoverContent = hover.getContents().getRight();
-            assertTrue(hoverContent.getValue().startsWith("Can't display shape"));
+            assertEquals(hoverContent.getKind(),"markdown");
+            assertTrue(hoverContent.getValue().startsWith("```smithy"));
+            assertTrue(hoverContent.getValue().contains("structure Foo {}"));
+            assertTrue(hoverContent.getValue().contains("WARNING: Unable to resolve trait `com.external#unknownTrait`"));
         }
     }
 
@@ -553,9 +556,9 @@ public class SmithyTextDocumentServiceTest {
 
             // Resolves via resource read.
             Hover readHover = tds.hover(hoverParams(mainTdi, 76, 12)).get();
-            correctHover(mainHoverPrefix, "@http(\n    method: \"PUT\"\n    uri: \"/bar\"\n    code: 200\n)\n@readonly\n"
-                    + "operation MyOperation {\n    input: MyOperationInput\n    output: MyOperationOutput\n"
-                    + "    errors: [\n        MyError\n    ]\n}", readHover);
+            assertTrue(readHover.getContents().getRight().getValue().contains("@http(\n    method: \"PUT\"\n    "
+                    + "uri: \"/bar\"\n    code: 200\n)\n@readonly\noperation MyOperation {\n    input: "
+                    + "MyOperationInput\n    output: MyOperationOutput\n    errors: [\n        MyError\n    ]\n}"));
 
             // Does not correspond to shape.
             Hover noMatchHover = tds.hover(hoverParams(mainTdi, 0, 0)).get();
@@ -666,9 +669,9 @@ public class SmithyTextDocumentServiceTest {
 
             // Resolves via resource read.
             Hover readHover = tds.hover(hoverParams(mainTdi, 78, 12)).get();
-            correctHover(mainHoverPrefix, "@http(\n    method: \"PUT\"\n    uri: \"/bar\"\n    code: 200\n)\n@readonly\n"
-                    + "operation MyOperation {\n    input: MyOperationInput\n    output: MyOperationOutput\n"
-                    + "    errors: [\n        MyError\n    ]\n}", readHover);
+            assertTrue(readHover.getContents().getRight().getValue().contains("@http(\n    method: \"PUT\"\n    "
+                    + "uri: \"/bar\"\n    code: 200\n)\n@readonly\noperation MyOperation {\n    input: "
+                    + "MyOperationInput\n    output: MyOperationOutput\n    errors: [\n        MyError\n    ]\n}"));
 
             // Does not correspond to shape.
             Hover noMatchHover = tds.hover(hoverParams(mainTdi, 0, 0)).get();
