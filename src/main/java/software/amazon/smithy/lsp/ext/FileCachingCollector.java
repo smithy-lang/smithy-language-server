@@ -63,7 +63,12 @@ final class FileCachingCollector implements ShapeLocationCollector {
         this.membersToUpdateMap = new HashMap<>();
 
         for (ModelFile modelFile : this.fileCache.values()) {
-            collectContainerShapeLocationsInModelFile(modelFile);
+            try {
+                collectContainerShapeLocationsInModelFile(modelFile);
+            } catch (Exception e) {
+                throw new RuntimeException("Exception while collecting container shape locations in model file: "
+                        + modelFile.filename, e);
+            }
         }
 
         operationsWithInlineInputOutputMap.forEach((this::collectInlineInputOutputLocations));
