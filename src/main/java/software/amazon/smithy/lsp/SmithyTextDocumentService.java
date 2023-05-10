@@ -38,6 +38,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.annotation.Nullable;
 import org.eclipse.lsp4j.CodeAction;
 import org.eclipse.lsp4j.CodeActionParams;
 import org.eclipse.lsp4j.Command;
@@ -102,6 +103,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
     private final List<CompletionItem> baseCompletions = new ArrayList<>();
     private Optional<LanguageClient> client;
     private final List<Location> noLocations = Collections.emptyList();
+    @Nullable
     private SmithyProject project;
     private final File temporaryFolder;
 
@@ -142,12 +144,17 @@ public class SmithyTextDocumentService implements TextDocumentService {
     public void createProject(SmithyBuildExtensions ext, File root) {
         Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, root);
         if (loaded.isRight()) {
-            this.project = loaded.getRight();
+            SmithyProject project = loaded.getRight();
+            this.project = project;
             clearAllDiagnostics();
-            sendInfo("Project loaded with " + this.project.getExternalJars().size() + " external jars and "
-                    + this.project.getSmithyFiles().size() + " discovered smithy files");
+            sendInfo("Project loaded with " + project.getExternalJars().size() + " external jars and "
+                    + project.getSmithyFiles().size() + " discovered smithy files");
         } else {
-            sendError("Failed to create Smithy project: " + loaded.getLeft().toString());
+            sendError(
+                "Failed to create Smithy project. See output panel for details. Uncaught exception: "
+                    + loaded.getLeft().toString()
+            );
+            loaded.getLeft().printStackTrace();
         }
     }
 
@@ -170,6 +177,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
                     LspLog.println("Loaded build extensions " + local + " from " + smithyBuild.getAbsolutePath());
                 } catch (Exception e) {
                     LspLog.println("Failed to load config from" + smithyBuild + ": " + e);
+                    e.printStackTrace();
                     brokenFiles.add(smithyBuild.toString());
                 }
             }
@@ -178,7 +186,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
         if (brokenFiles.isEmpty()) {
             createProject(result.build(), root);
         } else {
-            sendError("Failed to load the build, following files have problems: \n" + String.join("\n", brokenFiles));
+            sendError(
+                "Failed to load the build, the following build files have problems: \n"
+                    + String.join("\n", brokenFiles)
+            );
         }
     }
 
@@ -210,6 +221,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
         } catch (Exception e) {
             LspLog.println(
                     "Failed to identify token for completion in " + params.getTextDocument().getUri() + ": " + e);
+            e.printStackTrace();
         }
         return Utils.completableFuture(Either.forLeft(baseCompletions));
     }
@@ -438,7 +450,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
                     .collect(Collectors.toList())
             );
         } catch (Exception e) {
-            e.printStackTrace(System.err);
+            e.printStackTrace();
 
             return Utils.completableFuture(Collections.emptyList());
         }
@@ -526,6 +538,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
             }
         } catch (Exception e) {
             LspLog.println("Failed to determine hover content: " + e);
+            e.printStackTrace();
         }
 
         hover.setContents(content);
@@ -612,6 +625,7 @@ public class SmithyTextDocumentService implements TextDocumentService {
         } catch (Exception e) {
             LspLog.println("Failed to write temporary contents for file " + original + " into temporary file "
                     + tempFile + " : " + e);
+            e.printStackTrace();
         }
 
         report(recompile(original, Optional.ofNullable(tempFile)));
