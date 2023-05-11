@@ -82,7 +82,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
         tempWorkspaceRoot.deleteOnExit();
         WorkspaceFolder workspaceFolder = new WorkspaceFolder(tempWorkspaceRoot.toURI().toString());
         params.setWorkspaceFolders(ListUtils.of(workspaceFolder));
-      } catch (Exception e) {
+      } catch (IOException e) {
         e.printStackTrace();
       }
     }
