@@ -172,7 +172,13 @@ public final class SmithyProject {
             return Either.forLeft(model.getLeft());
         } else {
             model.getRight().getValidationEvents().forEach(LspLog::println);
-            return Either.forRight(new SmithyProject(imports, smithyFiles, externalJars, root, model.getRight()));
+
+            try {
+                SmithyProject p = new SmithyProject(imports, smithyFiles, externalJars, root, model.getRight());
+                return Either.forRight(p);
+            } catch (Exception e) {
+                return Either.forLeft(e);
+            }
         }
     }
 

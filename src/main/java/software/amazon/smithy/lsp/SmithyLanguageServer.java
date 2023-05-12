@@ -69,7 +69,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
         loadSmithyBuild(workspaceRoot);
       } catch (Exception e) {
         LspLog.println("Failure trying to load extensions from workspace root: " + workspaceRoot.getAbsolutePath());
-        LspLog.println(e.toString());
+        e.printStackTrace();
       }
     } else {
       LspLog.println("Workspace root was null");
@@ -78,7 +78,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
     if (params.getWorkspaceFolders() == null) {
       try {
         tempWorkspaceRoot = Files.createTempDirectory("smithy-lsp-workspace").toFile();
-        System.out.println("Created temporary workspace root: " + tempWorkspaceRoot);
+        LspLog.println("Created temporary workspace root: " + tempWorkspaceRoot);
         tempWorkspaceRoot.deleteOnExit();
         WorkspaceFolder workspaceFolder = new WorkspaceFolder(tempWorkspaceRoot.toURI().toString());
         params.setWorkspaceFolders(ListUtils.of(workspaceFolder));
@@ -95,6 +95,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
         loadSmithyBuild(root);
       } catch (Exception e) {
         LspLog.println("Error when loading workspace folder " + ws.toString() + ": " + e);
+        e.printStackTrace();
       }
     }
 
