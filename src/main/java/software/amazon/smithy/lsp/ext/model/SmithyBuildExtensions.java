@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
+import software.amazon.smithy.build.model.MavenConfig;
+import software.amazon.smithy.build.model.MavenRepository;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.SmithyBuilder;
@@ -29,12 +31,14 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
     private final List<String> mavenRepositories;
     private final List<String> mavenDependencies;
     private final MavenConfig maven;
+    private final long lastModifiedInMillis;
 
     private SmithyBuildExtensions(Builder b) {
         this.mavenDependencies = ListUtils.copyOf(b.mavenDependencies);
         this.mavenRepositories = ListUtils.copyOf(b.mavenRepositories);
         this.imports = ListUtils.copyOf(b.imports);
         this.maven = b.maven;
+        lastModifiedInMillis = b.lastModifiedInMillis;
     }
 
     public List<String> getImports() {
@@ -57,11 +61,16 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
                 .maven(maven);
     }
 
+    public long getLastModifiedInMillis() {
+        return lastModifiedInMillis;
+    }
+
     public static final class Builder implements SmithyBuilder<SmithyBuildExtensions> {
         private final List<String> mavenRepositories = new ArrayList<>();
         private final List<String> mavenDependencies = new ArrayList<>();
         private final List<String> imports = new ArrayList<>();
         private MavenConfig maven = MavenConfig.builder().build();
+        private long lastModifiedInMillis = 0;
 
         @Override
         public SmithyBuildExtensions build() {
@@ -186,6 +195,11 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
          */
         public Builder addImport(String imp) {
             this.imports.add(imp);
+            return this;
+        }
+
+        public Builder lastModifiedInMillis(long lastModifiedInMillis) {
+            this.lastModifiedInMillis = lastModifiedInMillis;
             return this;
         }
     }

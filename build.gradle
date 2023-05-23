@@ -157,8 +157,9 @@ publishing {
 
 dependencies {
     implementation "org.eclipse.lsp4j:org.eclipse.lsp4j:0.14.0"
+    implementation "software.amazon.smithy:smithy-build:[1.31.0, 2.0["
+    implementation "software.amazon.smithy:smithy-cli:[1.31.0, 2.0["
     implementation "software.amazon.smithy:smithy-model:[1.31.0, 2.0["
-    implementation 'io.get-coursier:interface:1.0.4'
     implementation 'com.disneystreaming.smithy:smithytranslate-formatter-jvm-java-api:0.3.4'
 
     // Use JUnit test framework
