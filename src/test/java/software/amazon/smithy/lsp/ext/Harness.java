@@ -21,13 +21,19 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import software.amazon.smithy.build.model.MavenRepository;
+import software.amazon.smithy.cli.dependencies.DependencyResolver;
+import software.amazon.smithy.cli.dependencies.FileCacheResolver;
+import software.amazon.smithy.cli.dependencies.ResolvedArtifact;
 import software.amazon.smithy.lsp.Utils;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.utils.IoUtils;
+import software.amazon.smithy.utils.ListUtils;
 
 public class Harness implements AutoCloseable {
   private final File root;
@@ -85,7 +91,7 @@ public class Harness implements AutoCloseable {
   public static Harness create(SmithyBuildExtensions ext) throws Exception {
     File hs = Files.createTempDirectory("hs").toFile();
     File tmp = Files.createTempDirectory("tmp").toFile();
-    return loadHarness(ext, hs, tmp);
+    return loadHarness(ext, hs, tmp, new MockDependencyResolver(ListUtils.of()));
   }
 
   public static Harness create(SmithyBuildExtensions ext, Map<String, String> files) throws Exception {
@@ -94,7 +100,7 @@ public class Harness implements AutoCloseable {
     for (Entry<String, String> entry : files.entrySet()) {
       safeCreateFile(entry.getKey(), entry.getValue(), hs);
     }
-    return loadHarness(ext, hs, tmp);
+    return loadHarness(ext, hs, tmp, new MockDependencyResolver(ListUtils.of()));
   }
 
   public static Harness create(SmithyBuildExtensions ext, List<Path> files) throws Exception {
@@ -108,11 +114,17 @@ public class Harness implements AutoCloseable {
         safeCreateFile(path.getFileName().toString(), IoUtils.readUtf8File(path), hs);
       }
     }
-    return loadHarness(ext, hs, tmp);
+    return loadHarness(ext, hs, tmp, new MockDependencyResolver(ListUtils.of()));
   }
 
-  private static Harness loadHarness(SmithyBuildExtensions ext, File hs, File tmp) throws Exception {
-    Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, hs);
+  public static Harness create(SmithyBuildExtensions ext, DependencyResolver resolver) throws Exception {
+    File hs = Files.createTempDirectory("hs").toFile();
+    File tmp = Files.createTempDirectory("tmp").toFile();
+    return loadHarness(ext, hs, tmp, resolver);
+  }
+
+  private static Harness loadHarness(SmithyBuildExtensions ext, File hs, File tmp, DependencyResolver resolver) throws Exception {
+    Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, hs, resolver);
     if (loaded.isRight())
       return new Harness(hs, tmp, loaded.getRight(), ext);
     else

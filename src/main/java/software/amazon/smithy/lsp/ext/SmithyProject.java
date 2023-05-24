@@ -38,8 +38,6 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.build.model.MavenRepository;
 import software.amazon.smithy.cli.EnvironmentVariable;
 import software.amazon.smithy.cli.dependencies.DependencyResolver;
-import software.amazon.smithy.cli.dependencies.FileCacheResolver;
-import software.amazon.smithy.cli.dependencies.MavenDependencyResolver;
 import software.amazon.smithy.lsp.SmithyInterface;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.model.Model;
@@ -131,7 +129,8 @@ public final class SmithyProject {
      * @param root workspace root.
      * @return either an error or a loaded project.
      */
-    public static Either<Exception, SmithyProject> load(SmithyBuildExtensions config, File root) {
+    public static Either<Exception, SmithyProject> load(SmithyBuildExtensions config, File root,
+                                                        DependencyResolver resolver) {
         List<Path> imports = config.getImports().stream().map(p -> Paths.get(root.getAbsolutePath(), p).normalize())
                 .collect(Collectors.toList());
 
@@ -144,7 +143,7 @@ public final class SmithyProject {
         List<File> smithyFiles = discoverSmithyFiles(imports, root);
         LspLog.println("Discovered smithy files: " + smithyFiles);
 
-        List<File> externalJars = downloadExternalDependencies(config, root);
+        List<File> externalJars = downloadExternalDependencies(config, resolver);
         LspLog.println("Downloaded external jars: " + externalJars);
 
         return load(imports, smithyFiles, externalJars, root);
@@ -274,23 +273,10 @@ public final class SmithyProject {
         return smithyFiles;
     }
 
-    private static List<File> downloadExternalDependencies(SmithyBuildExtensions extensions, File root) {
+    private static List<File> downloadExternalDependencies(SmithyBuildExtensions extensions,
+                                                           DependencyResolver resolver) {
         LspLog.println("Downloading external dependencies for " + extensions);
         try {
-            long lastModified = extensions.getLastModifiedInMillis();
-            Path buildPath = Paths.get(root.toString(), "build", "smithy");
-            File buildDir = new File(buildPath.toString());
-            if (!buildDir.exists()) {
-                buildDir.mkdirs();
-            }
-            Path cachePath = Paths.get(buildPath.toString(), "classpath.json");
-            File dependencyCache = new File(cachePath.toString());
-            if (!dependencyCache.exists()) {
-                Files.createFile(cachePath);
-            }
-            MavenDependencyResolver delegate = new MavenDependencyResolver();
-            DependencyResolver resolver = new FileCacheResolver(dependencyCache, lastModified, delegate);
-
             addConfiguredMavenRepos(extensions, resolver);
             extensions.getMavenConfig().getDependencies().forEach(resolver::addDependency);
 

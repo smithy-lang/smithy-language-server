@@ -18,6 +18,7 @@ package software.amazon.smithy.lsp.ext;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
+import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
@@ -30,13 +31,11 @@ import software.amazon.smithy.utils.SetUtils;
 
 public class SmithyBuildExtensionsTest {
 
-    final Path DUMMY_PATH = Paths.get("smithy-build.json");
-
     @Test
     public void parsingSmithyBuildFromString() throws ValidationException {
         String mavenConfig = "{\"maven\": {\"dependencies\": [\"d1\", \"d2\"], \"repositories\":" +
                 "[{\"url\": \"r1\"}, {\"url\": \"r2\"}]}}";
-        SmithyBuildExtensions loadedMavenConfig = SmithyBuildLoader.load(DUMMY_PATH, mavenConfig);
+        SmithyBuildExtensions loadedMavenConfig = SmithyBuildLoader.load(getResourcePath(), mavenConfig);
 
         assertEquals(SetUtils.of("d1", "d2"), loadedMavenConfig.getMavenConfig().getDependencies());
         assertEquals(ListUtils.of("r1", "r2"), loadedMavenConfig.getMavenConfig().getRepositories()
@@ -46,7 +45,7 @@ public class SmithyBuildExtensionsTest {
     @Test
     public void parsingSmithyBuildFromStringWithDeprecatedKeys() throws ValidationException {
         String json = "{\"mavenRepositories\": [\"bla\", \"ta\"], \"mavenDependencies\": [\"a1\", \"a2\"]}";
-        SmithyBuildExtensions loaded = SmithyBuildLoader.load(DUMMY_PATH, json);
+        SmithyBuildExtensions loaded = SmithyBuildLoader.load(getResourcePath(), json);
 
         assertEquals(SetUtils.of("a1", "a2"), loaded.getMavenConfig().getDependencies());
         assertEquals(ListUtils.of("bla", "ta"), loaded.getMavenConfig().getRepositories()
@@ -56,25 +55,25 @@ public class SmithyBuildExtensionsTest {
     @Test
     public void partialParsing() throws ValidationException {
         String noExtensions = "{}";
-        SmithyBuildExtensions loadedNoExtensions = SmithyBuildLoader.load(DUMMY_PATH, noExtensions);
+        SmithyBuildExtensions loadedNoExtensions = SmithyBuildLoader.load(getResourcePath(), noExtensions);
         assertNotNull(loadedNoExtensions.getMavenConfig());
         assertEquals(SetUtils.of(), loadedNoExtensions.getMavenConfig().getDependencies());
         assertEquals(SetUtils.of(), loadedNoExtensions.getMavenConfig().getRepositories());
 
         String noConfiguration = "{\"imports\": [\".\"]}";
-        SmithyBuildExtensions loadedNoConfiguration = SmithyBuildLoader.load(DUMMY_PATH, noConfiguration);
+        SmithyBuildExtensions loadedNoConfiguration = SmithyBuildLoader.load(getResourcePath(), noConfiguration);
         assertNotNull(loadedNoConfiguration.getMavenConfig());
         assertEquals(SetUtils.of(), loadedNoConfiguration.getMavenConfig().getDependencies());
         assertEquals(SetUtils.of(), loadedNoConfiguration.getMavenConfig().getRepositories());
 
         String noRepositories = "{\"mavenDependencies\": [\"a1\", \"a2\"]}";
-        SmithyBuildExtensions loadedNoRepositories = SmithyBuildLoader.load(DUMMY_PATH, noRepositories);
+        SmithyBuildExtensions loadedNoRepositories = SmithyBuildLoader.load(getResourcePath(), noRepositories);
         assertNotNull(loadedNoRepositories.getMavenConfig());
         assertEquals(SetUtils.of("a1", "a2"), loadedNoRepositories.getMavenConfig().getDependencies());
         assertEquals(SetUtils.of(), loadedNoRepositories.getMavenConfig().getRepositories());
 
         String noArtifacts = "{\"mavenRepositories\": [\"r1\", \"r2\"]}";
-        SmithyBuildExtensions loadedNoArtifacts = SmithyBuildLoader.load(DUMMY_PATH, noArtifacts);
+        SmithyBuildExtensions loadedNoArtifacts = SmithyBuildLoader.load(getResourcePath(), noArtifacts);
         assertNotNull(loadedNoArtifacts.getMavenConfig());
         assertEquals(SetUtils.of(), loadedNoArtifacts.getMavenConfig().getDependencies());
         assertEquals(ListUtils.of("r1", "r2"), loadedNoArtifacts.getMavenConfig().getRepositories()
@@ -86,7 +85,7 @@ public class SmithyBuildExtensionsTest {
         String conflictingConfig = "{\"maven\": {\"dependencies\": [\"d1\", \"d2\"], \"repositories\":" +
                 "[{\"url\": \"r1\"}, {\"url\": \"r2\"}]}, \"mavenRepositories\": [\"m1\", \"m2\"]," +
                 "\"mavenDependencies\": [\"a1\", \"a2\"]}";
-        SmithyBuildExtensions loadedConflictingConfig = SmithyBuildLoader.load(DUMMY_PATH, conflictingConfig);
+        SmithyBuildExtensions loadedConflictingConfig = SmithyBuildLoader.load(getResourcePath(), conflictingConfig);
         assertEquals(SetUtils.of("d1", "d2"), loadedConflictingConfig.getMavenConfig().getDependencies());
         assertEquals(ListUtils.of("r1", "r2"), loadedConflictingConfig.getMavenConfig().getRepositories()
                 .stream().map(MavenRepository::getUrl).collect(Collectors.toList()));
@@ -107,5 +106,13 @@ public class SmithyBuildExtensionsTest {
         assertEquals(ListUtils.of("r1", "r2", "hi", "there"), result.getMavenConfig().getRepositories()
                 .stream().map(MavenRepository::getUrl).collect(Collectors.toList()));
         assertEquals(ListUtils.of("i1", "i2", "i3", "i4"), result.getImports());
+    }
+
+    private Path getResourcePath() {
+        try {
+            return Paths.get(SmithyBuildExtensionsTest.class.getResource("empty-config.json").toURI());
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

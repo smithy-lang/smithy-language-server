@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import software.amazon.smithy.build.model.MavenConfig;
 import software.amazon.smithy.build.model.MavenRepository;
+import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.SmithyBuilder;
@@ -30,7 +31,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
     private final List<String> imports;
     private final List<String> mavenRepositories;
     private final List<String> mavenDependencies;
-    private final MavenConfig maven;
+    private MavenConfig maven;
     private final long lastModifiedInMillis;
 
     private SmithyBuildExtensions(Builder b) {
@@ -63,6 +64,16 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
 
     public long getLastModifiedInMillis() {
         return lastModifiedInMillis;
+    }
+
+    /**
+     * Merges the MavenConfig from a SmithyBuildConfig into the extensions.
+     * @param config SmithyBuildConfig
+     */
+    public void mergeMavenFromSmithyBuildConfig(SmithyBuildConfig config) {
+        if (config.getMaven().isPresent()) {
+            maven = config.getMaven().get();
+        }
     }
 
     public static final class Builder implements SmithyBuilder<SmithyBuildExtensions> {

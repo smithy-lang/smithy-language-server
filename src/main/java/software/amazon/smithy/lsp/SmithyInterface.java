@@ -40,7 +40,7 @@ public final class SmithyInterface {
    * @return either an exception encountered during model building, or the result
    *         of model building
    */
-  public static Either<Exception, ValidatedResult<Model>>  readModel(Collection<File> files,
+  public static Either<Exception, ValidatedResult<Model>> readModel(Collection<File> files,
       Collection<File> externalJars) {
     try {
       URL[] urls = externalJars.stream().map(SmithyInterface::fileToUrl).toArray(URL[]::new);
