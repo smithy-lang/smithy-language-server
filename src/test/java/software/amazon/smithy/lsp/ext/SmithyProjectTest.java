@@ -150,6 +150,7 @@ public class SmithyProjectTest {
     }
 
     // https://github.com/awslabs/smithy-language-server/issues/110
+    // Note: This test is flaky, it may succeed even if the code being tested is incorrect.
     @Test
     public void handlesSameOperationNameBetweenNamespaces() throws Exception {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/operation-name-conflict").toURI());
@@ -160,7 +161,8 @@ public class SmithyProjectTest {
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
 
-            assertNotNull(locationMap.get(ShapeId.from("b#HelloWorld")));
+            correctLocation(locationMap, "a#HelloWorld", 4, 0, 13,  1);
+            correctLocation(locationMap, "b#HelloWorld", 6, 0, 15,  1);
         }
     }
 
