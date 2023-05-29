@@ -161,8 +161,8 @@ public class SmithyProjectTest {
         try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
             Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
 
-            correctLocation(locationMap, "a#HelloWorld", 4, 0, 13,  1);
-            correctLocation(locationMap, "b#HelloWorld", 6, 0, 15,  1);
+            correctLocation(locationMap, "a#HelloWorld", 4, 0, 13, 1);
+            correctLocation(locationMap, "b#HelloWorld", 6, 0, 15, 1);
         }
     }
 
