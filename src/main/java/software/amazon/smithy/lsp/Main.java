@@ -18,10 +18,14 @@ package software.amazon.smithy.lsp;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.eclipse.lsp4j.jsonrpc.Launcher;
 import org.eclipse.lsp4j.launch.LSPLauncher;
 import org.eclipse.lsp4j.services.LanguageClient;
+import software.amazon.smithy.lsp.websocket.WebSocketRunner;
 
 /**
  * Main launcher for the Language server, started by the editor.
@@ -61,9 +65,21 @@ public final class Main {
         Socket socket = null;
         InputStream in;
         OutputStream out;
-
+        List<String> argList = Arrays.asList(args);
         try {
-            String port = args[0];
+            Optional<Exception> launchFailure;
+            String port = getOrDefault(argList, 0, "0");
+            String type = getOrDefault(argList, 1, null);
+
+            // Check if websocket option is present
+            if ("--ws".equals(type)) {
+                WebSocketRunner webSocketRunner = new WebSocketRunner();
+                String hostname = "localhost";
+                String contextPath = "/";
+                webSocketRunner.run(hostname, Integer.parseInt(port), contextPath);
+                return;
+            }
+
             // If port is set to "0", use System.in/System.out.
             if (port.equals("0")) {
                 in = System.in;
@@ -73,9 +89,7 @@ public final class Main {
                 in = socket.getInputStream();
                 out = socket.getOutputStream();
             }
-
-            Optional<Exception> launchFailure = launch(in, out);
-
+            launchFailure = launch(in, out);
             if (launchFailure.isPresent()) {
                 throw launchFailure.get();
             } else {
@@ -86,7 +100,7 @@ public final class Main {
         } catch (NumberFormatException e) {
             System.out.println("Port number must be a valid integer");
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Failed to start: " + e);
 
             e.printStackTrace();
         } finally {
@@ -95,9 +109,22 @@ public final class Main {
                     socket.close();
                 }
             } catch (Exception e) {
-                System.out.println("Failed to close the socket");
-                System.out.println(e);
+                System.out.println("Failed to close the socket: " + e);
             }
         }
+    }
+
+    private static boolean isEmpty(Collection<?> c) {
+        return c == null || c.isEmpty();
+    }
+
+    private static <T> T getOrDefault(List<T> list, int index, T t) {
+        if (isEmpty(list)) {
+            return t;
+        }
+        if (index < 0 || index >= list.size()) {
+            return t;
+        }
+        return list.get(index);
     }
 }
