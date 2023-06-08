@@ -16,9 +16,11 @@
 package software.amazon.smithy.lsp.ext;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -29,6 +31,12 @@ import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.junit.Test;
+import software.amazon.smithy.build.model.MavenConfig;
+import software.amazon.smithy.build.model.MavenRepository;
+import software.amazon.smithy.cli.EnvironmentVariable;
+import software.amazon.smithy.cli.dependencies.DependencyResolver;
+import software.amazon.smithy.cli.dependencies.FileCacheResolver;
+import software.amazon.smithy.cli.dependencies.ResolvedArtifact;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
@@ -37,12 +45,17 @@ import software.amazon.smithy.model.shapes.StringShape;
 import software.amazon.smithy.model.traits.DocumentationTrait;
 import software.amazon.smithy.model.traits.SinceTrait;
 import software.amazon.smithy.model.validation.ValidatedResult;
+import software.amazon.smithy.utils.IoUtils;
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.MapUtils;
+import software.amazon.smithy.utils.SetUtils;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.StringContains.containsString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 public class SmithyProjectTest {
 
@@ -80,6 +93,52 @@ public class SmithyProjectTest {
             List<File> smithyFiles = hs.getProject().getSmithyFiles();
 
             assertEquals(expectedFiles, smithyFiles);
+        }
+    }
+
+    @Test
+    public void defaultsToMavenCentral() throws Exception {
+        SmithyBuildExtensions extensions = SmithyBuildExtensions.builder().build();
+        MockDependencyResolver delegate = new MockDependencyResolver(ListUtils.of());
+        File cache = File.createTempFile("classpath", ".json");
+        DependencyResolver resolver = new FileCacheResolver(cache, System.currentTimeMillis(), delegate);
+        try (Harness hs = Harness.create(extensions, resolver)) {
+            assertEquals(delegate.repositories.stream().findFirst().get().getUrl(), "https://repo.maven.apache.org/maven2");
+        }
+    }
+
+    @Test
+    public void cachesExternalJars() throws Exception {
+        String repo1 = "https://repo.smithy.io";
+        String repo2 = "https://repo.foo.com";
+        System.setProperty(EnvironmentVariable.SMITHY_MAVEN_REPOS.toString(),
+                String.join("|", repo1, repo2));
+        String dependency = "com.foo:bar:1.0.0";
+        MavenRepository configuredRepo = MavenRepository.builder()
+                .url("https://repo.example.com")
+                .httpCredentials("user:pw")
+                .build();
+        MavenConfig maven = MavenConfig.builder()
+                .dependencies(ListUtils.of(dependency))
+                .repositories(SetUtils.of(configuredRepo))
+                .build();
+        List<MavenRepository> expectedRepos = ListUtils.of(
+                MavenRepository.builder().url(repo1).build(),
+                MavenRepository.builder().url(repo2).build(),
+                configuredRepo
+        );
+        SmithyBuildExtensions extensions = SmithyBuildExtensions.builder().maven(maven).build();
+        File cache = File.createTempFile("classpath", ".json");
+        File jar = File.createTempFile("foo", ".json");
+        Files.write(jar.toPath(), "{}".getBytes(StandardCharsets.UTF_8));
+        ResolvedArtifact artifact = ResolvedArtifact.fromCoordinates(jar.toPath(), "com.foo:bar:1.0.0");
+        MockDependencyResolver delegate = new MockDependencyResolver(ListUtils.of(artifact));
+        DependencyResolver resolver = new FileCacheResolver(cache, System.currentTimeMillis(), delegate);
+        try (Harness hs = Harness.create(extensions, resolver)) {
+            assertTrue(delegate.repositories.containsAll(expectedRepos));
+            assertEquals(expectedRepos.size(), delegate.repositories.size());
+            assertEquals(dependency, delegate.coordinates.get(0));
+            assertThat(IoUtils.readUtf8File(cache.toPath()), containsString(dependency));
         }
     }
 

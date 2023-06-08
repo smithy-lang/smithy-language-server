@@ -16,7 +16,7 @@
 package software.amazon.smithy.lsp.ext;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.model.loader.ModelSyntaxException;
 import software.amazon.smithy.model.node.Node;
@@ -38,11 +38,7 @@ public final class SmithyBuildLoader {
     public static SmithyBuildExtensions load(Path path) throws ValidationException {
         try {
             String content = IoUtils.readUtf8File(path);
-            Path baseImportPath = path.getParent();
-            if (baseImportPath == null) {
-                baseImportPath = Paths.get(".");
-            }
-            return load(baseImportPath, loadWithJson(path, content).expectObjectNode());
+            return loadAndMerge(path, content);
         } catch (ModelSyntaxException e) {
             throw new ValidationException(e.toString());
         }
@@ -50,24 +46,25 @@ public final class SmithyBuildLoader {
 
     static SmithyBuildExtensions load(Path path, String content) throws ValidationException {
         try {
-            Path baseImportPath = path.getParent();
-            if (baseImportPath == null) {
-                baseImportPath = Paths.get(".");
-            }
-            return load(baseImportPath, loadWithJson(path, content).expectObjectNode());
+            return loadAndMerge(path, content);
         } catch (ModelSyntaxException e) {
             throw new ValidationException(e.toString());
         }
+    }
+
+    private static SmithyBuildExtensions loadAndMerge(Path path, String content) {
+        SmithyBuildExtensions config = loadExtension(loadWithJson(path, content).expectObjectNode());
+        config.mergeMavenFromSmithyBuildConfig(SmithyBuildConfig.load(path));
+        return config;
     }
 
     private static Node loadWithJson(Path path, String contents) {
         return Node.parseJsonWithComments(contents, path.toString());
     }
 
-    private static SmithyBuildExtensions load(Path baseImportPath, ObjectNode node) {
+    private static SmithyBuildExtensions loadExtension(ObjectNode node) {
         NodeMapper mapper = new NodeMapper();
-        SmithyBuildExtensions config = mapper.deserialize(node, SmithyBuildExtensions.class);
-        return config;
+        return mapper.deserialize(node, SmithyBuildExtensions.class);
     }
 
 }

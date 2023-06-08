@@ -35,6 +35,9 @@ import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import software.amazon.smithy.build.model.MavenRepository;
+import software.amazon.smithy.cli.EnvironmentVariable;
+import software.amazon.smithy.cli.dependencies.DependencyResolver;
 import software.amazon.smithy.lsp.SmithyInterface;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.model.Model;
@@ -45,6 +48,9 @@ import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidatedResultException;
 
 public final class SmithyProject {
+    private static final MavenRepository CENTRAL = MavenRepository.builder()
+            .url("https://repo.maven.apache.org/maven2")
+            .build();
     private final List<Path> imports;
     private final List<File> smithyFiles;
     private final List<File> externalJars;
@@ -123,7 +129,8 @@ public final class SmithyProject {
      * @param root workspace root.
      * @return either an error or a loaded project.
      */
-    public static Either<Exception, SmithyProject> load(SmithyBuildExtensions config, File root) {
+    public static Either<Exception, SmithyProject> load(SmithyBuildExtensions config, File root,
+                                                        DependencyResolver resolver) {
         List<Path> imports = config.getImports().stream().map(p -> Paths.get(root.getAbsolutePath(), p).normalize())
                 .collect(Collectors.toList());
 
@@ -136,7 +143,7 @@ public final class SmithyProject {
         List<File> smithyFiles = discoverSmithyFiles(imports, root);
         LspLog.println("Discovered smithy files: " + smithyFiles);
 
-        List<File> externalJars = downloadExternalDependencies(config);
+        List<File> externalJars = downloadExternalDependencies(config, resolver);
         LspLog.println("Downloaded external jars: " + externalJars);
 
         return load(imports, smithyFiles, externalJars, root);
@@ -266,13 +273,39 @@ public final class SmithyProject {
         return smithyFiles;
     }
 
-    private static List<File> downloadExternalDependencies(SmithyBuildExtensions ext) {
-        LspLog.println("Downloading external dependencies for " + ext);
+    private static List<File> downloadExternalDependencies(SmithyBuildExtensions extensions,
+                                                           DependencyResolver resolver) {
+        LspLog.println("Downloading external dependencies for " + extensions);
         try {
-            return DependencyDownloader.create(ext).download();
+            addConfiguredMavenRepos(extensions, resolver);
+            extensions.getMavenConfig().getDependencies().forEach(resolver::addDependency);
+
+            return resolver.resolve().stream()
+                    .map(artifact -> artifact.getPath().toFile()).collect(Collectors.toList());
         } catch (Exception e) {
-            LspLog.println("Failed to download external jars for " + ext + ": " + e);
+            LspLog.println("Failed to download external jars for " + extensions + ": " + e);
             return Collections.emptyList();
+        }
+    }
+
+    private static void addConfiguredMavenRepos(SmithyBuildExtensions extensions, DependencyResolver resolver) {
+        // Environment variables take precedence over config files.
+        String envRepos = EnvironmentVariable.SMITHY_MAVEN_REPOS.get();
+        if (envRepos != null) {
+            for (String repo : envRepos.split("\\|")) {
+                resolver.addRepository(MavenRepository.builder().url(repo.trim()).build());
+            }
+        }
+
+        Set<MavenRepository> configuredRepos = extensions.getMavenConfig().getRepositories();
+
+        if (!configuredRepos.isEmpty()) {
+            configuredRepos.forEach(resolver::addRepository);
+        } else if (envRepos == null) {
+            LspLog.println(String.format("maven.repositories is not defined in smithy-build.json and the %s "
+                            + "environment variable is not set. Defaulting to Maven Central.",
+                    EnvironmentVariable.SMITHY_MAVEN_REPOS));
+            resolver.addRepository(CENTRAL);
         }
     }
 

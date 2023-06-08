@@ -74,6 +74,9 @@ import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import smithyfmt.Formatter;
 import smithyfmt.Result;
+import software.amazon.smithy.cli.dependencies.DependencyResolver;
+import software.amazon.smithy.cli.dependencies.FileCacheResolver;
+import software.amazon.smithy.cli.dependencies.MavenDependencyResolver;
 import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
 import software.amazon.smithy.lsp.diagnostics.VersionDiagnostics;
 import software.amazon.smithy.lsp.editor.SmartInput;
@@ -142,7 +145,8 @@ public class SmithyTextDocumentService implements TextDocumentService {
      * @param root workspace root
      */
     public void createProject(SmithyBuildExtensions ext, File root) {
-        Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, root);
+        DependencyResolver resolver = createDependencyResolver(root, ext.getLastModifiedInMillis());
+        Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, root, resolver);
         if (loaded.isRight()) {
             SmithyProject project = loaded.getRight();
             this.project = project;
@@ -156,6 +160,25 @@ public class SmithyTextDocumentService implements TextDocumentService {
             );
             loaded.getLeft().printStackTrace();
         }
+    }
+
+    private DependencyResolver createDependencyResolver(File root, long lastModified) {
+        Path buildPath = Paths.get(root.toString(), "build", "smithy");
+        File buildDir = new File(buildPath.toString());
+        if (!buildDir.exists()) {
+            buildDir.mkdirs();
+        }
+        Path cachePath = Paths.get(buildPath.toString(), "classpath.json");
+        File dependencyCache = new File(cachePath.toString());
+        if (!dependencyCache.exists()) {
+            try {
+                Files.createFile(cachePath);
+            } catch (IOException e) {
+                LspLog.println("Could not create dependency cache file " + e);
+            }
+        }
+        MavenDependencyResolver delegate = new MavenDependencyResolver();
+        return new FileCacheResolver(dependencyCache, lastModified, delegate);
     }
 
     /**
