@@ -160,7 +160,7 @@ dependencies {
     implementation "software.amazon.smithy:smithy-build:[1.35.0, 2.0["
     implementation "software.amazon.smithy:smithy-cli:[1.35.0, 2.0["
     implementation "software.amazon.smithy:smithy-model:[1.35.0, 2.0["
-    implementation 'com.disneystreaming.smithy:smithytranslate-formatter-jvm-java-api:0.3.4'
+    implementation 'com.disneystreaming.smithy:smithytranslate-formatter-jvm-java-api:0.3.10'
 
     // Use JUnit test framework
     testImplementation "junit:junit:4.13"
