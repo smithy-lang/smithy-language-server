@@ -46,7 +46,7 @@ public class CompletionsTest {
             MapUtils.entry("test/def2.smithy", testContent)
         );
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+        try (Harness hs = Harness.builder().files(files).build()) {
             SmithyProject proj = hs.getProject();
 
             DocumentPreamble testPreamble = Document.detectPreamble(hs.readFile(hs.file("test/def2.smithy")));
@@ -75,7 +75,7 @@ public class CompletionsTest {
                 MapUtils.entry("trait-def.smithy", traitDef)
         );
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+        try (Harness hs = Harness.builder().files(files).build()) {
             SmithyProject proj = hs.getProject();
             // Complete match
             assertEquals(SetUtils.of("Foo"), completeNames(proj, "Foo", false));
@@ -120,7 +120,7 @@ public class CompletionsTest {
                 MapUtils.entry("trait-def.smithy", traitDef)
         );
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+        try (Harness hs = Harness.builder().files(files).build()) {
             SmithyProject proj = hs.getProject();
             // Complete match
             assertEquals(SetUtils.of("Foo"), completeNames(proj, "Foo", false));
