@@ -21,14 +21,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
-import software.amazon.smithy.build.model.MavenRepository;
 import software.amazon.smithy.cli.dependencies.DependencyResolver;
-import software.amazon.smithy.cli.dependencies.FileCacheResolver;
 import software.amazon.smithy.cli.dependencies.ResolvedArtifact;
 import software.amazon.smithy.lsp.Utils;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
@@ -64,16 +63,6 @@ public class Harness implements AutoCloseable {
     return this.config;
   }
 
-  private static File safeCreateFile(String path, String contents, File root) throws Exception {
-    File f = Paths.get(root.getAbsolutePath(), path).toFile();
-    new File(f.getParent()).mkdirs();
-    try (FileWriter fw = new FileWriter(f)) {
-      fw.write(contents);
-      fw.flush();
-    }
-
-    return f;
-  }
 
   public File file(String path) {
     return Paths.get(root.getAbsolutePath(), path).toFile();
@@ -88,46 +77,103 @@ public class Harness implements AutoCloseable {
     root.deleteOnExit();
   }
 
-  public static Harness create(SmithyBuildExtensions ext) throws Exception {
-    File hs = Files.createTempDirectory("hs").toFile();
-    File tmp = Files.createTempDirectory("tmp").toFile();
-    return loadHarness(ext, hs, tmp, new MockDependencyResolver(ListUtils.of()));
-  }
-
-  public static Harness create(SmithyBuildExtensions ext, Map<String, String> files) throws Exception {
-    File hs = Files.createTempDirectory("hs").toFile();
-    File tmp = Files.createTempDirectory("tmp").toFile();
-    for (Entry<String, String> entry : files.entrySet()) {
-      safeCreateFile(entry.getKey(), entry.getValue(), hs);
-    }
-    return loadHarness(ext, hs, tmp, new MockDependencyResolver(ListUtils.of()));
-  }
-
-  public static Harness create(SmithyBuildExtensions ext, List<Path> files) throws Exception {
-    File hs = Files.createTempDirectory("hs").toFile();
-    File tmp = Files.createTempDirectory("tmp").toFile();
-    for (Path path : files) {
-      if (Utils.isJarFile(path.toString())) {
-        String contents = String.join(System.lineSeparator(), Utils.jarFileContents(path.toString()));
+  private static Map<String, String> createFiles(List<Path> paths, File hs) {
+    Map<String, String> files = new HashMap<>();
+    try {
+      for (Path path : paths) {
+        String contents;
+        String uri = path.toString();
+        if (Utils.isJarFile(uri)) {
+          contents = String.join(System.lineSeparator(), Utils.jarFileContents(uri));
+        } else {
+          contents = IoUtils.readUtf8File(path);
+        }
+        files.put(uri, contents);
         safeCreateFile(path.getFileName().toString(), contents, hs);
-      } else {
-        safeCreateFile(path.getFileName().toString(), IoUtils.readUtf8File(path), hs);
+      }
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+    return files;
+  }
+
+  public static Builder builder() {
+    return new Builder();
+  }
+
+  public static class Builder {
+    private SmithyBuildExtensions extensions = SmithyBuildExtensions.builder().build();
+    private DependencyResolver dependencyResolver = new MockDependencyResolver();
+    private List<Path> paths;
+    private Map<String, String> files;
+
+    private Builder() {}
+
+    public Builder extensions(SmithyBuildExtensions extensions) {
+      this.extensions = extensions;
+      return this;
+    }
+
+    public Builder dependencyResolver(DependencyResolver dependencyResolver) {
+      this.dependencyResolver = dependencyResolver;
+      return this;
+    }
+
+    public Builder paths(Path... paths) {
+      this.paths = ListUtils.of(paths);
+      return this;
+    }
+
+    public Builder paths(List<Path> paths) {
+      this.paths = paths;
+      return this;
+    }
+
+    public Builder files(Map<String, String> files) {
+      this.files = files;
+      return this;
+    }
+
+    public Harness build() {
+      try {
+        File hs = Files.createTempDirectory("hs").toFile();
+        File tmp = Files.createTempDirectory("tmp").toFile();
+        if (this.files == null && this.paths != null) {
+          this.files = createFiles(this.paths, hs);
+        } else if (this.paths == null && this.files != null) {
+          for (Entry<String, String> entry : files.entrySet()) {
+            safeCreateFile(entry.getKey(), entry.getValue(), hs);
+          }
+        } else {
+          this.files = new HashMap<>();
+        }
+
+        return loadHarness(this.extensions, hs, tmp, this.dependencyResolver);
+      } catch (Exception e) {
+        throw new RuntimeException(e);
       }
     }
-    return loadHarness(ext, hs, tmp, new MockDependencyResolver(ListUtils.of()));
   }
 
-  public static Harness create(SmithyBuildExtensions ext, DependencyResolver resolver) throws Exception {
-    File hs = Files.createTempDirectory("hs").toFile();
-    File tmp = Files.createTempDirectory("tmp").toFile();
-    return loadHarness(ext, hs, tmp, resolver);
-  }
-
-  private static Harness loadHarness(SmithyBuildExtensions ext, File hs, File tmp, DependencyResolver resolver) throws Exception {
+  private static Harness loadHarness(
+          SmithyBuildExtensions ext,
+          File hs,
+          File tmp,
+          DependencyResolver resolver
+  ) throws Exception {
     Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, hs, resolver);
     if (loaded.isRight())
       return new Harness(hs, tmp, loaded.getRight(), ext);
     else
       throw loaded.getLeft();
+  }
+
+  private static void safeCreateFile(String path, String contents, File root) throws Exception {
+    File f = Paths.get(root.getAbsolutePath(), path).toFile();
+    new File(f.getParent()).mkdirs();
+    try (FileWriter fw = new FileWriter(f)) {
+      fw.write(contents);
+      fw.flush();
+    }
   }
 }

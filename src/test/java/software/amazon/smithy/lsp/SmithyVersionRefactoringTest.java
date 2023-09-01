@@ -41,14 +41,14 @@ import static org.junit.Assert.assertEquals;
 public class SmithyVersionRefactoringTest {
 
     @Test
-    public void noVersionCodeAction() throws Exception {
+    public void noVersionCodeAction() {
         String filename = "no-version.smithy";
 
         Map<String, String> files = MapUtils.ofEntries(
             MapUtils.entry(filename, "namespace test")
         );
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+        try (Harness hs = Harness.builder().files(files).build()) {
             Range range0 = new Range(new Position(0, 0), new Position(0, 0));
 
             CodeActionParams params = new CodeActionParams(
@@ -65,14 +65,14 @@ public class SmithyVersionRefactoringTest {
     }
 
     @Test
-    public void outdatedVersionCodeAction() throws Exception {
+    public void outdatedVersionCodeAction() {
         String filename = "old-version.smithy";
 
         Map<String, String> files = MapUtils.ofEntries(
             MapUtils.entry(filename, "$version: \"1\"\nnamespace test2")
         );
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+        try (Harness hs = Harness.builder().files(files).build()) {
             Range range0 = new Range(new Position(0, 0), new Position(0, 0));
 
             Range firstLineRange = new Range(new Position(0, 0), new Position(0, 13));
@@ -90,14 +90,14 @@ public class SmithyVersionRefactoringTest {
     }
 
     @Test
-    public void correctVersionCodeAction() throws Exception {
+    public void correctVersionCodeAction() {
         String filename = "version.smithy";
 
         Map<String, String> files = MapUtils.ofEntries(
             MapUtils.entry(filename, "$version: \"2\"\nnamespace test2")
         );
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+        try (Harness hs = Harness.builder().files(files).build()) {
             Range range0 = new Range(new Position(0, 0), new Position(0, 0));
 
             CodeActionParams params = new CodeActionParams(

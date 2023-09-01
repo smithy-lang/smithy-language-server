@@ -15,17 +15,21 @@
 
 package software.amazon.smithy.lsp.ext;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.StringContains.containsString;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
@@ -50,24 +54,19 @@ import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.MapUtils;
 import software.amazon.smithy.utils.SetUtils;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.core.StringContains.containsString;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-
 public class SmithyProjectTest {
 
     @Test
-    public void respectingImports() throws Exception {
-        List<String> imports = Arrays.asList("bla", "foo");
+    public void respectingImports() {
+        List<String> imports = ListUtils.of("bla", "foo");
         Map<String, String> files = MapUtils.ofEntries(MapUtils.entry("test.smithy", "namespace testRoot"),
                 MapUtils.entry("bar/test.smithy", "namespace testBar"),
                 MapUtils.entry("foo/test.smithy", "namespace testFoo"),
                 MapUtils.entry("bla/test.smithy", "namespace testBla"));
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().imports(imports).build(), files)) {
+        SmithyBuildExtensions extensions = SmithyBuildExtensions.builder().imports(imports).build();
+
+        try (Harness hs = Harness.builder().extensions(extensions).files(files).build()) {
             File inFoo = hs.file("foo/test.smithy");
             File inBla = hs.file("bla/test.smithy");
 
@@ -84,8 +83,7 @@ public class SmithyProjectTest {
                 MapUtils.entry("foo/test.smithy", "namespace testFoo"),
                 MapUtils.entry("bla/test.smithy", "namespace testBla"));
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
-
+        try (Harness hs = Harness.builder().files(files).build()) {
             List<File> expectedFiles = Files.walk(hs.getRoot().toPath())
                     .filter(f -> f.getFileName().toString().endsWith(Constants.SMITHY_EXTENSION)).map(Path::toFile)
                     .collect(Collectors.toList());
@@ -102,7 +100,7 @@ public class SmithyProjectTest {
         MockDependencyResolver delegate = new MockDependencyResolver(ListUtils.of());
         File cache = File.createTempFile("classpath", ".json");
         DependencyResolver resolver = new FileCacheResolver(cache, System.currentTimeMillis(), delegate);
-        try (Harness hs = Harness.create(extensions, resolver)) {
+        try (Harness hs = Harness.builder().extensions(extensions).dependencyResolver(resolver).build()) {
             assertEquals(delegate.repositories.stream().findFirst().get().getUrl(), "https://repo.maven.apache.org/maven2");
         }
     }
@@ -134,7 +132,7 @@ public class SmithyProjectTest {
         ResolvedArtifact artifact = ResolvedArtifact.fromCoordinates(jar.toPath(), "com.foo:bar:1.0.0");
         MockDependencyResolver delegate = new MockDependencyResolver(ListUtils.of(artifact));
         DependencyResolver resolver = new FileCacheResolver(cache, System.currentTimeMillis(), delegate);
-        try (Harness hs = Harness.create(extensions, resolver)) {
+        try (Harness hs = Harness.builder().extensions(extensions).dependencyResolver(resolver).build()) {
             assertTrue(delegate.repositories.containsAll(expectedRepos));
             assertEquals(expectedRepos.size(), delegate.repositories.size());
             assertEquals(dependency, delegate.coordinates.get(0));
@@ -145,7 +143,7 @@ public class SmithyProjectTest {
     @Test
     public void ableToLoadWithUnknownTrait() throws Exception {
         Path modelFile = Paths.get(getClass().getResource("models/unknown-trait.smithy").toURI());
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), ListUtils.of(modelFile))) {
+        try (Harness hs = Harness.builder().paths(modelFile).build()) {
             ValidatedResult<Model> modelValidatedResult = hs.getProject().getModel();
             assertFalse(modelValidatedResult.isBroken());
         }
@@ -156,9 +154,8 @@ public class SmithyProjectTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
         Path main = baseDir.resolve("apply.smithy");
         Path imports = baseDir.resolve("apply-imports.smithy");
-        List<Path> modelFiles = ListUtils.of(main, imports);
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+        try (Harness hs = Harness.builder().paths(main, imports).build()) {
             Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
 
             // Structure shape unchanged by apply
@@ -186,7 +183,7 @@ public class SmithyProjectTest {
 
     // https://github.com/awslabs/smithy-language-server/issues/100
     @Test
-    public void allowsEmptyStructsWithMixins() throws Exception {
+    public void allowsEmptyStructsWithMixins() {
         String fileText = "$version: \"2\"\n" +
                 "\n" +
                 "namespace demo\n" +
@@ -200,7 +197,7 @@ public class SmithyProjectTest {
 
         Map<String, String> files = MapUtils.of("main.smithy", fileText);
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
+        try (Harness hs = Harness.builder().files(files).build()) {
             assertNotNull(hs.getProject());
             Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
 
@@ -215,9 +212,8 @@ public class SmithyProjectTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/operation-name-conflict").toURI());
         Path modelA = baseDir.resolve("a.smithy");
         Path modelB = baseDir.resolve("b.smithy");
-        List<Path> modelFiles = ListUtils.of(modelA, modelB);
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+        try (Harness hs = Harness.builder().paths(modelA, modelB).build()) {
             Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
 
             correctLocation(locationMap, "a#HelloWorld", 4, 0, 13, 1);
@@ -230,9 +226,8 @@ public class SmithyProjectTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
         Path modelMain = baseDir.resolve("main.smithy");
         Path modelTest = baseDir.resolve("test.smithy");
-        List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+        try (Harness hs = Harness.builder().paths(modelMain, modelTest).build()) {
             Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
 
             correctLocation(locationMap, "com.foo#SingleLine", 4, 0, 4, 23);
@@ -250,9 +245,8 @@ public class SmithyProjectTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
         Path modelMain = baseDir.resolve("main.smithy");
         Path modelTest = baseDir.resolve("test.smithy");
-        List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+        try (Harness hs = Harness.builder().paths(modelMain, modelTest).build()) {
             Map<ShapeId, Location> locationMap = hs.getProject().getLocations();
 
             correctLocation(locationMap, "com.foo#SingleLine", 6, 0, 6, 23);
@@ -261,7 +255,7 @@ public class SmithyProjectTest {
             correctLocation(locationMap, "com.foo#MultiTrait", 22, 0,23, 14);
             correctLocation(locationMap, "com.foo#MultiTraitAndLineComments", 37, 0,39, 1);
             correctLocation(locationMap, "com.foo#MultiTraitAndDocComments", 48, 0, 50, 1);
-            correctLocation(locationMap, "com.example#OtherStructure", 7, 0, 11, 1);
+            correctLocation(locationMap, "com.example#OtherStructure", 8, 0, 13, 1);
             correctLocation(locationMap, "com.foo#StructWithDefaultSugar", 97, 0, 99, 1);
             correctLocation(locationMap, "com.foo#MyInlineOperation", 101, 0, 109, 1);
             correctLocation(locationMap, "com.foo#MyInlineOperationFooInput", 102, 13, 105, 5);
@@ -374,9 +368,8 @@ public class SmithyProjectTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v1").toURI());
         Path modelMain = baseDir.resolve("main.smithy");
         Path modelTest = baseDir.resolve("test.smithy");
-        List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+        try (Harness hs = Harness.builder().paths(modelMain, modelTest).build()) {
             SmithyProject project = hs.getProject();
             String uri = hs.file("main.smithy").toString();
             String testUri = hs.file("test.smithy").toString();
@@ -420,9 +413,8 @@ public class SmithyProjectTest {
         Path baseDir = Paths.get(SmithyProjectTest.class.getResource("models/v2").toURI());
         Path modelMain = baseDir.resolve("main.smithy");
         Path modelTest = baseDir.resolve("test.smithy");
-        List<Path> modelFiles = ListUtils.of(modelMain, modelTest);
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), modelFiles)) {
+        try (Harness hs = Harness.builder().paths(modelMain, modelTest).build()) {
             SmithyProject project = hs.getProject();
             String uri = hs.file("main.smithy").toString();
             String testUri = hs.file("test.smithy").toString();
@@ -434,7 +426,6 @@ public class SmithyProjectTest {
             // Position on shape end line, but after char end
             assertFalse(project.getShapeIdFromLocation(uri, new Position(16, 10)).isPresent());
             // Position on shape start line
-            Optional<ShapeId> foo = project.getShapeIdFromLocation(uri, new Position(6, 10));
             assertEquals(ShapeId.from("com.foo#SingleLine"), project.getShapeIdFromLocation(uri,
                     new Position(6, 10)).get());
             // Position on multi-line shape start line
@@ -492,7 +483,7 @@ public class SmithyProjectTest {
             assertEquals(ShapeId.from("com.foo#Suit$HEART"), project.getShapeIdFromLocation(uri,
                     new Position(160,8)).get());
             assertEquals(ShapeId.from("com.example#OtherStructure"), project.getShapeIdFromLocation(testUri,
-                    new Position(7, 15)).get());
+                    new Position(8, 15)).get());
         }
     }
 

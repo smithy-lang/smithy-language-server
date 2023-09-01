@@ -127,6 +127,10 @@ public class SmithyTextDocumentService implements TextDocumentService {
         this.temporaryFolder = tempFile;
     }
 
+    public void setProject(SmithyProject project) {
+        this.project = project;
+    }
+
     public void setClient(LanguageClient client) {
         this.client = Optional.of(client);
     }

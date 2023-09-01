@@ -201,3 +201,16 @@ structure FalseInlinedReversedBarOutput {
 
 @trait
 structure emptyTraitStruct {}
+
+@emptyTraitStruct
+structure UsingLocalTrait {}
+
+structure MemberWithDocComment {
+    /// Comment
+    /// Multi line
+    @tags(["foo"])
+    member: String
+}
+
+@smithy.api#tags(["foo"])
+structure ShapeWithAbsoluteShapeIdTrait {}
