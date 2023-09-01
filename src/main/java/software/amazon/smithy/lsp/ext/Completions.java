@@ -41,6 +41,7 @@ import software.amazon.smithy.model.shapes.TimestampShape;
 import software.amazon.smithy.model.shapes.UnionShape;
 import software.amazon.smithy.model.traits.RequiredTrait;
 import software.amazon.smithy.model.traits.TraitDefinition;
+import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.utils.ListUtils;
 
 public final class Completions {
@@ -52,18 +53,26 @@ public final class Completions {
     }
 
     /**
-     * From a model and (potentially partial) token, build a list of completions.
-     * Empty list is returned for empty tokens. Current implementation is prefix
-     * based.
+     * From a model validation result and (potentially partial) token, build a list of completions.
+     * Empty list is returned for empty tokens, or if the model validation result doesn't contain a model. Current
+     * implementation is prefix based.
      *
-     * @param model Smithy model
+     * @param modelValidatedResult Smithy model validation result
      * @param token token
      * @param isTraitShapeId boolean
      * @param target Optional ShapeId of the target trait target
      * @return list of completion items
      */
-    public static List<SmithyCompletionItem> find(Model model, String token, boolean isTraitShapeId,
-                                                  Optional<ShapeId> target) {
+    public static List<SmithyCompletionItem> find(
+            ValidatedResult<Model> modelValidatedResult,
+            String token,
+            boolean isTraitShapeId,
+            Optional<ShapeId> target
+    ) {
+        if (!modelValidatedResult.getResult().isPresent()) {
+            return ListUtils.of();
+        }
+        Model model = modelValidatedResult.getResult().get();
         Map<String, SmithyCompletionItem> comps = new HashMap<>();
         String lcase = token.toLowerCase();
 

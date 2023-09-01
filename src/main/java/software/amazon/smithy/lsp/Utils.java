@@ -20,10 +20,13 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.io.UnsupportedEncodingException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -79,6 +82,18 @@ public final class Utils {
      */
     public static String toSmithyJarFile(String uri) {
         return "smithyjar:" + uri.substring(9);
+    }
+
+    /**
+     * @param uri Uri of jar file to read, with scheme part "jar:file:"
+     * @return Jar file contents
+     */
+    public static String readJarFile(String uri) {
+        try {
+            return String.join(System.lineSeparator(), jarFileContents(uri));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**
@@ -144,6 +159,41 @@ public final class Utils {
         return pathArray[0];
     }
 
+    /**
+     * Creates a {@link URI} from a raw String which may be
+     * either an absolute path, or a URI. This should be used
+     * when receiving a URI in a request from the client, or
+     * when getting the file location from
+     * {@link software.amazon.smithy.model.SourceLocation}
+     *
+     * <p>This method works as follows:
+     * <ul>
+     * <li>{@code raw} is a URI with the scheme "jar:file:" -
+     * Convert to a Smithy JAR using {@link Utils#toSmithyJarFile(String)}.
+     * <li>{@code raw} is a URI with the scheme "file:" or "smithyjar:" -
+     * No change.
+     * <li>{@code raw} doesn't have either "jar:file:" or "file:"
+     * schemes - Add "file:" scheme.
+     * </ul>
+     *
+     * @param raw Absolute path or URI.
+     * @return URI created from {@code raw}.
+     */
+    public static URI createUri(String raw) {
+        String decoded;
+        try {
+            decoded = java.net.URLDecoder.decode(raw, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }
+        if (isJarFile(decoded)) {
+            return URI.create(toSmithyJarFile(decoded));
+        } else if (isFile(decoded) || isSmithyJarFile(decoded)) {
+            return URI.create(decoded);
+        } else {
+            return Paths.get(decoded).toUri();
+        }
+    }
 
     /**
      * Read only the first N lines of a file.

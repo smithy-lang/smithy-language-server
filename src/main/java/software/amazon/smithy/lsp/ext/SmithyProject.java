@@ -17,14 +17,14 @@ package software.amazon.smithy.lsp.ext;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,87 +38,159 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.build.model.MavenRepository;
 import software.amazon.smithy.cli.EnvironmentVariable;
 import software.amazon.smithy.cli.dependencies.DependencyResolver;
+import software.amazon.smithy.cli.dependencies.FileCacheResolver;
+import software.amazon.smithy.cli.dependencies.MavenDependencyResolver;
 import software.amazon.smithy.lsp.SmithyInterface;
+import software.amazon.smithy.lsp.Utils;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.selector.Selector;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidatedResultException;
+import software.amazon.smithy.utils.IoUtils;
 
 public final class SmithyProject {
     private static final MavenRepository CENTRAL = MavenRepository.builder()
             .url("https://repo.maven.apache.org/maven2")
             .build();
+    private final File root;
     private final List<Path> imports;
     private final List<File> smithyFiles;
     private final List<File> externalJars;
-    private Map<ShapeId, Location> locations = Collections.emptyMap();
+    private final Map<URI, String> modelFiles;
     private final ValidatedResult<Model> model;
-    private final File root;
+    private final Map<ShapeId, Location> locations;
+    private final List<String> errors;
 
-    SmithyProject(
+    private SmithyProject(
+            File root,
             List<Path> imports,
             List<File> smithyFiles,
             List<File> externalJars,
-            File root,
-            ValidatedResult<Model> model
+            Map<URI, String> modelFiles,
+            ValidatedResult<Model> model,
+            Map<ShapeId, Location> locations,
+            List<String> errors
     ) {
-        this.imports = imports;
         this.root = root;
-        this.model = model;
+        this.imports = imports;
         this.smithyFiles = smithyFiles;
         this.externalJars = externalJars;
-        model.getResult().ifPresent(m -> this.locations = collectLocations(m));
+        this.modelFiles = modelFiles;
+        this.model = model;
+        this.locations = locations;
+        this.errors = errors;
     }
 
     /**
-     * Recompile the model, adding a file to list of tracked files, potentially
-     * excluding some other file.
-     * <p>
-     * This version of the method above is used when the
-     * file is in ephemeral storage (temporary location when file is being changed)
+     * Loads the Smithy project in the given directory.
      *
-     * @param changed file which may or may not be already tracked by this project.
-     * @param exclude file to exclude from being recompiled.
-     * @return either an error, or a loaded project.
+     * @param root Directory to load project from.
+     * @return The loaded Smithy project.
      */
-    public Either<Exception, SmithyProject> recompile(File changed, File exclude) {
-        HashSet<File> fileSet = new HashSet<>();
+    public static SmithyProject forDirectory(File root) {
+        SmithyBuildExtensions.Builder builder = SmithyBuildExtensions.builder();
+        List<String> errors = new ArrayList<>();
 
-        for (File existing : onlyExistingFiles(this.smithyFiles)) {
-            if (exclude != null && !existing.equals(exclude)) {
-                fileSet.add(existing);
+        for (String filename: Constants.BUILD_FILES) {
+            File smithyBuild = Paths.get(root.getAbsolutePath(), filename).toFile();
+            if (smithyBuild.isFile()) {
+                try {
+                    SmithyBuildExtensions local = SmithyBuildLoader.load(smithyBuild.toPath());
+                    builder.merge(local);
+                    LspLog.println("Loaded smithy-build config" + local + " from " + smithyBuild.getAbsolutePath());
+                } catch (Exception e) {
+                    errors.add("Failed to load config from" + smithyBuild + ": " + e);
+                }
             }
         }
 
-        if (changed.isFile()) {
-            fileSet.add(changed);
+        if (!errors.isEmpty()) {
+            return new SmithyProject(
+                    root,
+                    new ArrayList<>(),
+                    new ArrayList<>(),
+                    new ArrayList<>(),
+                    new HashMap<>(),
+                    ValidatedResult.empty(),
+                    new HashMap<>(),
+                    errors);
         }
 
-        return load(this.imports, new ArrayList<>(fileSet), this.externalJars, this.root);
+        SmithyBuildExtensions smithyBuild = builder.build();
+        DependencyResolver resolver = createDependencyResolver(root, smithyBuild.getLastModifiedInMillis());
+        return load(smithyBuild, root, resolver);
     }
 
-    public ValidatedResult<Model> getModel() {
-        return this.model;
+    private static DependencyResolver createDependencyResolver(File root, long lastModified) {
+        Path buildPath = Paths.get(root.toString(), "build", "smithy");
+        File buildDir = new File(buildPath.toString());
+        if (!buildDir.exists()) {
+            buildDir.mkdirs();
+        }
+        Path cachePath = Paths.get(buildPath.toString(), "classpath.json");
+        File dependencyCache = new File(cachePath.toString());
+        if (!dependencyCache.exists()) {
+            try {
+                Files.createFile(cachePath);
+            } catch (IOException e) {
+                LspLog.println("Could not create dependency cache file " + e);
+            }
+        }
+        MavenDependencyResolver delegate = new MavenDependencyResolver();
+        return new FileCacheResolver(dependencyCache, lastModified, delegate);
     }
 
-    public List<File> getExternalJars() {
-        return this.externalJars;
+    /**
+     * Reload the model.
+     *
+     * @return The loaded project.
+     */
+    public SmithyProject reload() {
+        return load(
+                SmithyInterface.readModel(smithyFiles, externalJars),
+                this.imports,
+                onlyExistingFiles(this.smithyFiles),
+                this.externalJars,
+                this.root,
+                this.modelFiles
+        );
     }
 
-    public List<File> getSmithyFiles() {
-        return this.smithyFiles;
-    }
+    /**
+     * Reloads the project with changes for a specific file. This may be used
+     * to add new files to the project.
+     *
+     * @param changedUri URI of the changed file.
+     * @param contents Contents of the changed file.
+     * @return The reloaded project.
+     */
+    public SmithyProject reloadWithChanges(URI changedUri, String contents) {
+        this.modelFiles.put(changedUri, contents);
+        // Reload the model using in-memory versions of source files
+        List<File> existingSourceFiles = onlyExistingFiles(this.smithyFiles);
+        // Handle the case when the file is new
+        File changedFile = new File(changedUri);
+        if (!existingSourceFiles.contains(changedFile)) {
+            existingSourceFiles.add(changedFile);
+        }
+        Map<String, String> sources = new HashMap<>();
+        for (File sourceFile : existingSourceFiles) {
+            URI uri = sourceFile.toURI();
+            sources.put(Paths.get(uri).toString(), this.modelFiles.get(uri));
+        }
 
-    public List<SmithyCompletionItem> getCompletions(String token, boolean isTrait, Optional<ShapeId> target) {
-        return this.model.getResult().map(model -> Completions.find(model, token, isTrait, target))
-                .orElse(Collections.emptyList());
-    }
-
-    public Map<ShapeId, Location> getLocations() {
-        return this.locations;
+        return load(
+                SmithyInterface.readModel(sources, this.externalJars),
+                this.imports,
+                existingSourceFiles,
+                this.externalJars,
+                this.root,
+                this.modelFiles
+        );
     }
 
     /**
@@ -129,9 +201,9 @@ public final class SmithyProject {
      * @param root workspace root.
      * @return either an error or a loaded project.
      */
-    public static Either<Exception, SmithyProject> load(SmithyBuildExtensions config, File root,
-                                                        DependencyResolver resolver) {
-        List<Path> imports = config.getImports().stream().map(p -> Paths.get(root.getAbsolutePath(), p).normalize())
+    static SmithyProject load(SmithyBuildExtensions config, File root, DependencyResolver resolver) {
+        List<Path> imports = config.getImports().stream()
+                .map(p -> Paths.get(root.getAbsolutePath(), p).normalize())
                 .collect(Collectors.toList());
 
         if (imports.isEmpty()) {
@@ -146,8 +218,135 @@ public final class SmithyProject {
         List<File> externalJars = downloadExternalDependencies(config, resolver);
         LspLog.println("Downloaded external jars: " + externalJars);
 
-        return load(imports, smithyFiles, externalJars, root);
+        Either<Exception, ValidatedResult<Model>> readModelResult = SmithyInterface.readModel(smithyFiles,
+                externalJars);
 
+        Map<URI, String> modelFiles;
+        if (readModelResult.isRight()) {
+            modelFiles = readModelFiles(smithyFiles, readModelResult.getRight());
+        } else {
+            modelFiles = new HashMap<>();
+        }
+        return load(readModelResult, imports, smithyFiles, externalJars, root, modelFiles);
+    }
+
+    private static SmithyProject load(
+            Either<Exception, ValidatedResult<Model>> loadModelResult,
+            List<Path> imports,
+            List<File> smithyFiles,
+            List<File> externalJars,
+            File root,
+            Map<URI, String> modelFiles
+    ) {
+        List<String> errors = new ArrayList<>();
+        Map<ShapeId, Location> definitionLocations = new HashMap<>();
+        ValidatedResult<Model> model = ValidatedResult.empty();
+        if (loadModelResult.isRight()) {
+            model = loadModelResult.getRight();
+            model.getValidationEvents().forEach(LspLog::println);
+            // TODO: This shouldn't fail, it's only here because location collection is buggy.
+            try {
+                definitionLocations = collectLocations(model);
+            } catch (Exception e) {
+                errors.add("Failed to collect definition locations:\n" + e);
+            }
+        } else {
+            errors.add(loadModelResult.getLeft().toString());
+        }
+        return new SmithyProject(
+                root,
+                imports,
+                smithyFiles,
+                externalJars,
+                modelFiles,
+                model,
+                definitionLocations,
+                errors
+        );
+    }
+
+    static Map<ShapeId, Location> collectLocations(ValidatedResult<Model> model) {
+        if (model.getResult().isPresent()) {
+            ShapeLocationCollector collector = new FileCachingCollector();
+            return collector.collectDefinitionLocations(model.getResult().get());
+        }
+        return new HashMap<>();
+    }
+
+    /**
+     * @return The result of loading the Smithy model for this project.
+     */
+    public ValidatedResult<Model> getModel() {
+        return this.model;
+    }
+
+    /**
+     * @return The list of jars downloaded from dependencies which were used
+     * to load this project.
+     */
+    public List<File> getExternalJars() {
+        return this.externalJars;
+    }
+
+    /**
+     * @return The list of *.smithy files used to load this project, which
+     * were discovered by walking all subdirectories of the root of the project.
+     */
+    public List<File> getSmithyFiles() {
+        return this.smithyFiles;
+    }
+
+    /**
+     * Gets a map of URIs to file contents for all loaded Smithy model files,
+     * including model files located in JARs.
+     *
+     * @return Map of URI to file contents.
+     */
+    public Map<URI, String> getModelFiles() {
+        return this.modelFiles;
+    }
+
+    /**
+     * @return A map of all the {@link ShapeId} in the loaded model to their
+     * respective {@link Location}.
+     */
+    public Map<ShapeId, Location> getLocations() {
+        return this.locations;
+    }
+
+    /**
+     * @return The root directory of this project.
+     */
+    public File getRoot() {
+        return this.root;
+    }
+
+    /**
+     * Gets a list of the errors that occurred when trying to load the
+     * model, <b>excluding</b> model validation errors.
+     *
+     * @see SmithyProject#isBroken()
+     *
+     * @return List of errors.
+     */
+    public List<String> getErrors() {
+        return this.errors;
+    }
+
+    /**
+     * {@link SmithyProject} is considered to be broken if any exception
+     * that isn't a result of a model validation error occurs when the
+     * language server attempted to load the model.
+     *
+     * <p>For example, a project with an invalid smithy-build.json is
+     * considered to be broken.
+     *
+     * @see SmithyProject#getErrors()
+     *
+     * @return Whether the project is broken
+     */
+    public boolean isBroken() {
+        return this.errors.size() > 0;
     }
 
     /**
@@ -167,44 +366,6 @@ public final class SmithyProject {
         }
     }
 
-    private static Either<Exception, SmithyProject> load(
-            List<Path> imports,
-            List<File> smithyFiles,
-            List<File> externalJars,
-            File root
-    ) {
-        Either<Exception, ValidatedResult<Model>> model = createModel(smithyFiles, externalJars);
-
-        if (model.isLeft()) {
-            return Either.forLeft(model.getLeft());
-        } else {
-            model.getRight().getValidationEvents().forEach(LspLog::println);
-
-            try {
-                SmithyProject p = new SmithyProject(imports, smithyFiles, externalJars, root, model.getRight());
-                return Either.forRight(p);
-            } catch (Exception e) {
-                return Either.forLeft(e);
-            }
-        }
-    }
-
-    private static Either<Exception, ValidatedResult<Model>> createModel(
-            List<File> discoveredFiles,
-            List<File> externalJars
-    ) {
-        return SmithyInterface.readModel(discoveredFiles, externalJars);
-    }
-
-    public File getRoot() {
-        return this.root;
-    }
-
-    private static Map<ShapeId, Location> collectLocations(Model model) {
-        ShapeLocationCollector collector = new FileCachingCollector();
-        return collector.collectDefinitionLocations(model);
-    }
-
     /**
      * Returns the shapeId of the shape that corresponds to the file uri and position within the model.
      *
@@ -212,11 +373,11 @@ public final class SmithyProject {
      * @param position Cursor position within model file.
      * @return ShapeId of corresponding shape defined at location.
      */
-    public Optional<ShapeId> getShapeIdFromLocation(String uri, Position position) {
+    public Optional<ShapeId> getShapeIdFromLocation(URI uri, Position position) {
         Comparator<Map.Entry<ShapeId, Location>> rangeSize = Comparator.comparing(entry ->
                 entry.getValue().getRange().getEnd().getLine() - entry.getValue().getRange().getStart().getLine());
         return locations.entrySet().stream()
-                .filter(entry -> entry.getValue().getUri().endsWith(Paths.get(uri).toString()))
+                .filter(entry -> entry.getValue().getUri().endsWith(uri.getPath()))
                 .filter(entry -> isPositionInRange(entry.getValue().getRange(), position))
                 // Since the position is in each of the overlapping shapes, return the location with the smallest range.
                 .sorted(rangeSize)
@@ -250,9 +411,10 @@ public final class SmithyProject {
     }
 
     private static List<File> walkSmithyFolder(Path path, File root) {
-
         try (Stream<Path> walk = Files.walk(path)) {
-            return walk.filter(Files::isRegularFile).filter(SmithyProject::isValidSmithyFile).map(Path::toFile)
+            return walk.filter(Files::isRegularFile)
+                    .filter(SmithyProject::isValidSmithyFile)
+                    .map(Path::toFile)
                     .collect(Collectors.toList());
         } catch (IOException e) {
             LspLog.println("Failed to walk import '" + path + "' from root " + root + ": " + e);
@@ -262,7 +424,6 @@ public final class SmithyProject {
 
     private static List<File> discoverSmithyFiles(List<Path> imports, File root) {
         List<File> smithyFiles = new ArrayList<>();
-
         imports.forEach(path -> {
             if (Files.isDirectory(path)) {
                 smithyFiles.addAll(walkSmithyFolder(path, root));
@@ -309,7 +470,33 @@ public final class SmithyProject {
         }
     }
 
-    private static List<File> onlyExistingFiles(Collection<File> files) {
+    private static List<File> onlyExistingFiles(List<File> files) {
         return files.stream().filter(File::isFile).collect(Collectors.toList());
+    }
+
+    private static Map<URI, String> readModelFiles(List<File> sources, ValidatedResult<Model> model) {
+        Set<URI> modelFilesUris = sources.stream()
+                .map(File::getAbsolutePath)
+                .map(Utils::createUri)
+                .collect(Collectors.toSet());
+        Set<URI> loadedModelFileUris = model.getResult()
+                .map(Model::shapes)
+                .orElse(Stream.empty())
+                .map(Shape::getSourceLocation)
+                .map(SourceLocation::getFilename)
+                .map(Utils::createUri)
+                .collect(Collectors.toSet());
+        modelFilesUris.addAll(loadedModelFileUris);
+        Map<URI, String> modelFiles = new HashMap<>();
+        for (URI uri : modelFilesUris) {
+            String contents;
+            if (Utils.isSmithyJarFile(uri.toString())) {
+                contents = Utils.readJarFile(uri.toString());
+            } else {
+                contents = IoUtils.readUtf8File(Paths.get(uri).toString());
+            }
+            modelFiles.put(uri, contents);
+        }
+        return modelFiles;
     }
 }

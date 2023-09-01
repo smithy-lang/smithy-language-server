@@ -21,14 +21,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.cli.dependencies.DependencyResolver;
-import software.amazon.smithy.cli.dependencies.ResolvedArtifact;
 import software.amazon.smithy.lsp.Utils;
 import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.utils.IoUtils;
@@ -62,7 +59,6 @@ public class Harness implements AutoCloseable {
   public SmithyBuildExtensions getConfig() {
     return this.config;
   }
-
 
   public File file(String path) {
     return Paths.get(root.getAbsolutePath(), path).toFile();
@@ -155,17 +151,13 @@ public class Harness implements AutoCloseable {
     }
   }
 
-  private static Harness loadHarness(
-          SmithyBuildExtensions ext,
-          File hs,
-          File tmp,
-          DependencyResolver resolver
-  ) throws Exception {
-    Either<Exception, SmithyProject> loaded = SmithyProject.load(ext, hs, resolver);
-    if (loaded.isRight())
-      return new Harness(hs, tmp, loaded.getRight(), ext);
-    else
-      throw loaded.getLeft();
+  private static Harness loadHarness(SmithyBuildExtensions ext, File hs, File tmp, DependencyResolver resolver) {
+    SmithyProject loaded = SmithyProject.load(ext, hs, resolver);
+    if (!loaded.isBroken()) {
+      return new Harness(hs, tmp, loaded, ext);
+    } else {
+      throw new RuntimeException(String.join("\n", loaded.getErrors()));
+    }
   }
 
   private static void safeCreateFile(String path, String contents, File root) throws Exception {

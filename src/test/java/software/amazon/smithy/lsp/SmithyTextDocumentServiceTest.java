@@ -24,9 +24,9 @@ import static software.amazon.smithy.lsp.TestUtils.getV1Dir;
 import static software.amazon.smithy.lsp.TestUtils.getV2Dir;
 
 import java.io.File;
+import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -71,23 +71,13 @@ public class SmithyTextDocumentServiceTest {
                 MapUtils.entry(goodFileName, "$version: \"2\"\nnamespace testBla"));
 
         try (Harness hs = Harness.builder().files(files).build()) {
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
-            tds.setProject(hs.getProject());
-
-            File broken = hs.file(brokenFileName);
-            File good = hs.file(goodFileName);
-
-            // When compiling broken file
-            Set<String> filesWithDiagnostics = tds.recompile(broken, Optional.empty()).getRight().stream()
-                    .filter(pds -> (pds.getDiagnostics().size() > 0)).map(PublishDiagnosticsParams::getUri)
+            Set<URI> filesWithDiagnostics = SmithyTextDocumentService.createPerFileDiagnostics(hs.getProject())
+                    .stream()
+                    .filter(pds -> (pds.getDiagnostics().size() > 0))
+                    .map(PublishDiagnosticsParams::getUri)
+                    .map(Utils::createUri)
                     .collect(Collectors.toSet());
-            assertEquals(SetUtils.of(uri(broken)), filesWithDiagnostics);
-
-            // When compiling good file
-            filesWithDiagnostics = tds.recompile(good, Optional.empty()).getRight().stream()
-                    .filter(pds -> (pds.getDiagnostics().size() > 0)).map(PublishDiagnosticsParams::getUri)
-                    .collect(Collectors.toSet());
-            assertEquals(SetUtils.of(uri(broken)), filesWithDiagnostics);
+            assertEquals(SetUtils.of(hs.file(brokenFileName).toURI()), filesWithDiagnostics);
         }
     }
 
@@ -102,7 +92,7 @@ public class SmithyTextDocumentServiceTest {
 
         try (Harness hs = Harness.builder().files(files).build()) {
             StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client));
             tds.setProject(hs.getProject());
 
             File broken = hs.file(brokenFileName);
@@ -125,7 +115,7 @@ public class SmithyTextDocumentServiceTest {
 
             // SAVE
 
-            tds.didSave(new DidSaveTextDocumentParams(new TextDocumentIdentifier(uri(broken))));
+            tds.didSave(new DidSaveTextDocumentParams(new TextDocumentIdentifier(broken.toURI().toString())));
 
             // broken file has a diagnostic published against it
             assertEquals(1, filePublishedDiagnostics(broken, client.diagnostics).size());
@@ -142,15 +132,10 @@ public class SmithyTextDocumentServiceTest {
         String modelFilename = "ext/models/unknown-trait.smithy";
         Path modelFilePath = Paths.get(getClass().getResource(modelFilename).toURI());
         try (Harness hs = Harness.builder().paths(modelFilePath).build()) {
-            StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
-            tds.setProject(hs.getProject());
-
-            File modelFile = hs.file(modelFilename);
-
             // There must be one warning diagnostic at the unknown trait's location
             Range unknownTraitRange = new Range(new Position(6, 0), new Position(6, 0));
-            long matchingDiagnostics = tds.recompile(modelFile, Optional.empty()).getRight().stream()
+            long matchingDiagnostics = SmithyTextDocumentService.createPerFileDiagnostics(hs.getProject())
+                    .stream()
                     .flatMap(params -> params.getDiagnostics().stream())
                     .filter(diagnostic -> diagnostic.getSeverity().equals(DiagnosticSeverity.Warning))
                     .filter(diagnostic -> diagnostic.getRange().equals(unknownTraitRange))
@@ -169,7 +154,7 @@ public class SmithyTextDocumentServiceTest {
 
         try (Harness hs = Harness.builder().files(files).build()) {
             StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client));
             tds.setProject(hs.getProject());
 
             File file1 = hs.file(fileName1);
@@ -177,11 +162,17 @@ public class SmithyTextDocumentServiceTest {
 
             // OPEN
 
-            tds.didChange(new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri(file1), 1),
+            VersionedTextDocumentIdentifier tdi = new VersionedTextDocumentIdentifier(file1.toURI().toString(), 1);
+            tds.didChange(new DidChangeTextDocumentParams(tdi,
                     ListUtils.of(new TextDocumentContentChangeEvent("inspect broken"))));
 
             // Only diagnostics for existing files are reported
-            assertEquals(SetUtils.of(uri(file1), uri(file2)), SetUtils.copyOf(getUris(client.diagnostics)));
+            Set<URI> expected = SetUtils.of(file1.toURI(), file2.toURI());
+            Set<URI> actual = client.diagnostics.stream()
+                    .map(PublishDiagnosticsParams::getUri)
+                    .map(Utils::createUri)
+                    .collect(Collectors.toSet());
+            assertEquals(expected, actual);
         }
     }
 
@@ -191,10 +182,10 @@ public class SmithyTextDocumentServiceTest {
         Path modelMain = baseDir.resolve(MAIN_MODEL_FILENAME);
         try (Harness hs = Harness.builder().paths(modelMain).build()) {
             StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client));
             tds.setProject(hs.getProject());
 
-            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(MAIN_MODEL_FILENAME).toString());
+            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(MAIN_MODEL_FILENAME).toURI().toString());
 
             CompletionParams traitParams = completionParams(mainTdi, 85, 10);
             List<CompletionItem> traitCompletionItems = tds.completion(traitParams).get().getLeft();
@@ -227,10 +218,10 @@ public class SmithyTextDocumentServiceTest {
         Path modelMain = baseDir.resolve(MAIN_MODEL_FILENAME);
         try (Harness hs = Harness.builder().paths(modelMain).build()) {
             StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client));
             tds.setProject(hs.getProject());
 
-            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(MAIN_MODEL_FILENAME).toString());
+            TextDocumentIdentifier mainTdi = new TextDocumentIdentifier(hs.file(MAIN_MODEL_FILENAME).toURI().toString());
 
             CompletionParams traitParams = completionParams(mainTdi, 87, 10);
             List<CompletionItem> traitCompletionItems = tds.completion(traitParams).get().getLeft();
@@ -264,7 +255,7 @@ public class SmithyTextDocumentServiceTest {
 
         try (Harness hs = Harness.builder().paths(modelMain).build()) {
             StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client));
             tds.setProject(hs.getProject());
 
             Either<Exception, List<Location>> result = tds.runSelector("[id|namespace=com.foo]");
@@ -288,7 +279,7 @@ public class SmithyTextDocumentServiceTest {
 
         try (Harness hs = Harness.builder().paths(modelMain).build()) {
             StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client));
             tds.setProject(hs.getProject());
             tds.setClient(client);
 
@@ -312,7 +303,7 @@ public class SmithyTextDocumentServiceTest {
         Path broken = baseDir.resolve("broken.smithy");
         try (Harness hs = Harness.builder().paths(broken).build()) {
             StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client));
             tds.setProject(hs.getProject());
 
             Either<Exception, List<Location>> result = tds.runSelector("[id|namespace=com.foo]");
@@ -328,7 +319,7 @@ public class SmithyTextDocumentServiceTest {
         Path broken = baseDir.resolve("broken.smithy");
         try (Harness hs = Harness.builder().paths(broken).build()) {
             StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client));
             tds.setProject(hs.getProject());
 
             Either<Exception, List<Location>> result = tds.runSelector("[id|namespace=com.foo]");
@@ -351,9 +342,9 @@ public class SmithyTextDocumentServiceTest {
         );
 
         try (Harness hs = Harness.builder().files(files).build()) {
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty());
             StubClient client = new StubClient();
-            tds.createProject(hs.getConfig(), hs.getRoot());
+            tds.setProject(hs.getProject());
             tds.setClient(client);
 
             tds.didOpen(new DidOpenTextDocumentParams(textDocumentItem(hs.file(fileName1), files.get(fileName1))));
@@ -369,7 +360,6 @@ public class SmithyTextDocumentServiceTest {
             tds.didOpen(new DidOpenTextDocumentParams(textDocumentItem(hs.file(fileName3), files.get(fileName3))));
             assertEquals(0, fileDiagnostics(hs.file(fileName3), client.diagnostics).size());
         }
-
     }
 
     @Test
@@ -382,10 +372,11 @@ public class SmithyTextDocumentServiceTest {
         Path anotherFilePath = baseDir.resolve(anotherFile);
 
         try (Harness hs = Harness.builder().paths(currentFilePath, anotherFilePath).build()) {
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty(), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.empty());
             tds.setProject(hs.getProject());
 
-            TextDocumentIdentifier currentDocumentIdent = new TextDocumentIdentifier(uri(hs.file(currentFile)));
+            String uri = hs.file(currentFile).toURI().toString();
+            TextDocumentIdentifier currentDocumentIdent = new TextDocumentIdentifier(uri);
 
             List<Either<SymbolInformation, DocumentSymbol>> symbols =
                     tds.documentSymbol(new DocumentSymbolParams(currentDocumentIdent)).get();
@@ -398,33 +389,29 @@ public class SmithyTextDocumentServiceTest {
             assertEquals("Weather", symbols.get(1).getRight().getName());
             assertEquals(SymbolKind.Struct, symbols.get(1).getRight().getKind());
         }
-
-    }
-
-    private Set<String> getUris(Collection<PublishDiagnosticsParams> diagnostics) {
-        return diagnostics.stream().map(PublishDiagnosticsParams::getUri).collect(Collectors.toSet());
     }
 
     private List<PublishDiagnosticsParams> filePublishedDiagnostics(File f, List<PublishDiagnosticsParams> diags) {
-        return diags.stream().filter(pds -> pds.getUri().equals(uri(f))).collect(Collectors.toList());
+        return diags.stream()
+                .filter(pds -> URI.create(pds.getUri()).equals(f.toURI()))
+                .collect(Collectors.toList());
     }
 
     private List<Diagnostic> fileDiagnostics(File f, List<PublishDiagnosticsParams> diags) {
-        return diags.stream().filter(pds -> pds.getUri().equals(uri(f))).flatMap(pd -> pd.getDiagnostics().stream())
+        return diags.stream()
+                .filter(pds -> URI.create(pds.getUri()).equals(f.toURI()))
+                .flatMap(pd -> pd.getDiagnostics().stream())
                 .collect(Collectors.toList());
     }
 
     private List<DiagnosticSeverity> getSeverities(File f, List<PublishDiagnosticsParams> diags) {
         return filePublishedDiagnostics(f, diags).stream()
-                .flatMap(pds -> pds.getDiagnostics().stream().map(Diagnostic::getSeverity)).collect(Collectors.toList());
+                .flatMap(pds -> pds.getDiagnostics().stream().map(Diagnostic::getSeverity))
+                .collect(Collectors.toList());
     }
 
     private TextDocumentItem textDocumentItem(File f, String text) {
-        return new TextDocumentItem(uri(f), "smithy", 1, text);
-    }
-
-    private String uri(File f) {
-        return f.toURI().toString();
+        return new TextDocumentItem(f.toURI().toString(), "smithy", 1, text);
     }
 
     private CompletionParams completionParams(TextDocumentIdentifier tdi, int line, int character) {

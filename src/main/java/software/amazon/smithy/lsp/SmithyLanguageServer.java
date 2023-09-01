@@ -124,15 +124,7 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
 
   @Override
   public TextDocumentService getTextDocumentService() {
-    File temp = null;
-    try {
-      temp = Files.createTempDirectory("smithy-lsp").toFile();
-      LspLog.println("Created a temporary folder for file contents " + temp);
-      temp.deleteOnExit();
-    } catch (IOException e) {
-      LspLog.println("Failed to create a temporary folder " + e);
-    }
-    SmithyTextDocumentService local = new SmithyTextDocumentService(this.client, temp);
+    SmithyTextDocumentService local = new SmithyTextDocumentService(this.client);
     tds = Optional.of(local);
     return local;
   }

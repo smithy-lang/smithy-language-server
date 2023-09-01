@@ -238,9 +238,9 @@ public class HoverProviderTest {
         paths.add(rootDir.resolve(filename));
         try (Harness hs = builder.paths(paths).build()) {
             StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client));
             tds.setProject(hs.getProject());
-            TextDocumentIdentifier tdi = new TextDocumentIdentifier(hs.file(filename).toString());
+            TextDocumentIdentifier tdi = new TextDocumentIdentifier(hs.file(filename).toURI().toString());
 
             HoverParams params = new HoverParams(tdi, new Position(line, column));
             try {

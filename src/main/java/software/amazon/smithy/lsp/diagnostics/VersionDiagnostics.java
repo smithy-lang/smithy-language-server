@@ -17,6 +17,7 @@ package software.amazon.smithy.lsp.diagnostics;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -93,10 +94,10 @@ public final class VersionDiagnostics {
      * @param temporaryContents a map of file to content (represent opened file that are not saved)
      * @return a list of PublishDiagnosticsParams
      */
-    public static List<Diagnostic> createVersionDiagnostics(File f, Map<File, String> temporaryContents) {
+    public static List<Diagnostic> createVersionDiagnostics(File f, Map<URI, String> temporaryContents) {
         // number of line to read in which we expect the $version statement
         int n = 5;
-        String editedContent = temporaryContents.get(f);
+        String editedContent = temporaryContents.get(f.toURI());
 
         List<Utils.NumberedLine> lines;
         try {
