@@ -39,6 +39,7 @@ import software.amazon.smithy.utils.ListUtils;
 public final class LspLog {
     private static FileWriter fw = null;
     private static Optional<List<Object>> buffer = Optional.of(new ArrayList<>());
+    private static boolean enabled = false;
 
     private LspLog() {
     }
@@ -70,6 +71,10 @@ public final class LspLog {
      * @param folder workspace folder where log file will be created
      */
     public static void setWorkspaceFolder(File folder) {
+        if (!enabled) {
+            return;
+        }
+
         try {
             fw = new FileWriter(Paths.get(folder.getAbsolutePath(), "/.smithy.lsp.log").toFile());
             synchronized (buffer) {
@@ -82,6 +87,13 @@ public final class LspLog {
 
     }
 
+    /**
+     * Enables writing LspLog to a file.
+     */
+    public static void enable() {
+        enabled = true;
+    }
+
     private static String currentTime() {
         return LocalTime.now().withNano(0).format(DateTimeFormatter.ISO_LOCAL_TIME);
     }
@@ -92,6 +104,9 @@ public final class LspLog {
      * @param message object to write, will be converted to String
      */
     public static void println(Object message) {
+        if (!enabled) {
+            return;
+        }
         String sanitizedMessage = getStringifiedMessage(message);
         String timestamped = "[" + currentTime() + "] " + sanitizedMessage;
         try {
