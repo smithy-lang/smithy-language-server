@@ -15,6 +15,7 @@
 
 package software.amazon.smithy.lsp;
 
+import com.google.gson.JsonObject;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -84,6 +85,18 @@ public class SmithyLanguageServer implements LanguageServer, LanguageClientAware
         params.setWorkspaceFolders(ListUtils.of(workspaceFolder));
       } catch (IOException e) {
         e.printStackTrace();
+      }
+    }
+
+    // TODO: Replace with a Gson Type Adapter if more config options are added beyond `logToFile`.
+    Object initializationOptions = params.getInitializationOptions();
+    if (initializationOptions instanceof JsonObject) {
+      JsonObject jsonObject = (JsonObject) initializationOptions;
+      if (jsonObject.has("logToFile")) {
+        String setting = jsonObject.get("logToFile").getAsString();
+        if (setting.equals("enabled")) {
+          LspLog.enable();
+        }
       }
     }
 

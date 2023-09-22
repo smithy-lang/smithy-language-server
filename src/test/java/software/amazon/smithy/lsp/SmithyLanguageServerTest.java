@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.google.gson.JsonObject;
 import java.io.File;
 import java.nio.file.Files;
 
@@ -33,6 +34,7 @@ public class SmithyLanguageServerTest {
         SmithyLanguageServer languageServer = new SmithyLanguageServer();
         InitializeResult initResults = languageServer.initialize(initParams).get();
         ServerCapabilities capabilities = initResults.getCapabilities();
+        File lspLog = new File(temp + "/.smithy.lsp.log");
 
         assertNull(languageServer.tempWorkspaceRoot);
         assertEquals(TextDocumentSyncKind.Full, capabilities.getTextDocumentSync().getLeft());
@@ -41,6 +43,8 @@ public class SmithyLanguageServerTest {
         assertTrue(capabilities.getDeclarationProvider().getLeft());
         assertEquals(new CompletionOptions(true, null), capabilities.getCompletionProvider());
         assertTrue(capabilities.getHoverProvider().getLeft());
+        // LspLog is disabled by default.
+        assertFalse(lspLog.exists());
     }
 
     @Test
@@ -53,5 +57,22 @@ public class SmithyLanguageServerTest {
         assertTrue(languageServer.tempWorkspaceRoot.exists());
         assertTrue(languageServer.tempWorkspaceRoot.isDirectory());
         assertTrue(languageServer.tempWorkspaceRoot.canWrite());
+    }
+
+    @Test
+    public void lspLogCanBeEnabled() throws Exception {
+        InitializeParams initParams = new InitializeParams();
+        File temp = Files.createTempDirectory("smithy-lsp-log-test").toFile();
+        temp.deleteOnExit();
+        initParams.setWorkspaceFolders(ListUtils.of(new WorkspaceFolder(temp.toURI().toString())));
+        JsonObject initOptions = new JsonObject();
+        initOptions.addProperty("logToFile", "enabled");
+        initParams.setInitializationOptions(initOptions);
+        SmithyLanguageServer languageServer = new SmithyLanguageServer();
+        languageServer.initialize(initParams);
+
+        File expectedLspLog = new File(temp + "/.smithy.lsp.log");
+
+        assertTrue(expectedLspLog.exists());
     }
 }
