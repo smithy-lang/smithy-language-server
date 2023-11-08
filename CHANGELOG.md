@@ -1,5 +1,19 @@
 # Smithy Language Server Changelog
 
+## 0.2.4 (2024-11-08)
+
+### Features
+* Upgraded Smithy version to 1.40.0 ([#128](https://github.com/awslabs/smithy-language-server/pull/128))
+* Added setting to enable LspLog ([#125](https://github.com/awslabs/smithy-language-server/pull/125))
+* Added formatting with smithytranslate-formatter ([#117](https://github.com/awslabs/smithy-language-server/pull/117))
+* Added Smithy CLI maven resolution ([#113](https://github.com/awslabs/smithy-language-server/pull/113))
+* Added basic textDocument/documentSymbol ([#99](https://github.com/awslabs/smithy-language-server/pull/99))
+
+### Bug fixes
+* Fixed matching inline inputs and outputs with operations ([#111](https://github.com/awslabs/smithy-language-server/pull/111))
+* Fixed loading of workspaces ([#101](https://github.com/awslabs/smithy-language-server/pull/101))
+* Fixed location of elided members ([#98](https://github.com/awslabs/smithy-language-server/pull/98))
+
 ## 0.2.3 (2023-03-15)
 
 ### Features
