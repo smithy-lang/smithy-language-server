@@ -27,8 +27,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.CompletionItem;
 import org.junit.Test;
-import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
+import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.utils.IoUtils;
 import software.amazon.smithy.utils.MapUtils;
 import software.amazon.smithy.utils.SetUtils;
@@ -47,15 +48,17 @@ public class CompletionsTest {
         );
 
         try (Harness hs = Harness.builder().files(files).build()) {
-            SmithyProject proj = hs.getProject();
+            ValidatedResult<Model> model = hs.getProject().getModel();
 
             DocumentPreamble testPreamble = Document.detectPreamble(hs.readFile(hs.file("test/def2.smithy")));
-            List<CompletionItem> itemsWithEdit = Completions.resolveImports(proj.getCompletions("Hello", false, Optional.empty()),
+            List<CompletionItem> itemsWithEdit = Completions.resolveImports(
+                    Completions.find(model, "Hello", false, Optional.empty()),
                     testPreamble);
             assertEquals("\nuse bar#Hello\n", itemsWithEdit.get(0).getAdditionalTextEdits().get(0).getNewText());
 
             DocumentPreamble barPreamble = Document.detectPreamble(hs.readFile(hs.file("bar/def1.smithy")));
-            List<CompletionItem> itemsWithEdit2 = Completions.resolveImports(proj.getCompletions("Hello", false, Optional.empty()),
+            List<CompletionItem> itemsWithEdit2 = Completions.resolveImports(
+                    Completions.find(model, "Hello", false, Optional.empty()),
                     barPreamble);
             assertNull(itemsWithEdit2.get(0).getAdditionalTextEdits());
         }
@@ -160,7 +163,8 @@ public class CompletionsTest {
         if (shapeId != null) {
             target = Optional.of(ShapeId.from(shapeId));
         }
-        return proj.getCompletions(token, isTrait, target).stream().map(ci -> ci.getCompletionItem().getLabel())
+        return Completions.find(proj.getModel(), token, isTrait, target).stream()
+                .map(ci -> ci.getCompletionItem().getLabel())
                 .collect(Collectors.toSet());
     }
 }

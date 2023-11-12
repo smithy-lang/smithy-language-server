@@ -350,13 +350,7 @@ final class FileCachingCollector implements ShapeLocationCollector {
     }
 
     private static String getUri(String fileName) {
-        return Utils.isJarFile(fileName)
-                ? Utils.toSmithyJarFile(fileName)
-                : addFilePrefix(fileName);
-    }
-
-    private static String addFilePrefix(String fileName) {
-        return !fileName.startsWith("file:") ? "file:" + fileName : fileName;
+        return Utils.createUri(fileName).toString();
     }
 
     private static List<String> getAllFilenamesFromModel(Model model) {

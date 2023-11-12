@@ -23,11 +23,12 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
+import java.io.FileWriter;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -325,9 +326,7 @@ public class SmithyProjectTest {
                 .addShape(stringShapeBaz)
                 .build();
         ValidatedResult<Model> model = Model.assembler().addModel(unvalidatedModel).assemble();
-        SmithyProject project = new SmithyProject(Collections.emptyList(), Collections.emptyList(),
-                Collections.emptyList(), baseDir.toFile(), model);
-        Map<ShapeId, Location> locationMap = project.getLocations();
+        Map<ShapeId, Location> locationMap = SmithyProject.collectLocations(model);
 
         correctLocation(locationMap, "ns.foo#Bar", 4, 0, 4, 10);
         correctLocation(locationMap, "ns.foo#Baz", 7, 0, 7, 10);
@@ -355,9 +354,7 @@ public class SmithyProjectTest {
                 .addShape(stringShapeBaz)
                 .build();
         ValidatedResult<Model> model = Model.assembler().addModel(unvalidatedModel).assemble();
-        SmithyProject project = new SmithyProject(Collections.emptyList(), Collections.emptyList(),
-                Collections.emptyList(), baseDir.toFile(), model);
-        Map<ShapeId, Location> locationMap = project.getLocations();
+        Map<ShapeId, Location> locationMap = SmithyProject.collectLocations(model);
 
         correctLocation(locationMap, "ns.foo#Bar", 4, 0, 4, 10);
         correctLocation(locationMap, "ns.foo#Baz", 7, 0, 7, 10);
@@ -371,10 +368,11 @@ public class SmithyProjectTest {
 
         try (Harness hs = Harness.builder().paths(modelMain, modelTest).build()) {
             SmithyProject project = hs.getProject();
-            String uri = hs.file("main.smithy").toString();
-            String testUri = hs.file("test.smithy").toString();
+            URI uri = hs.file("main.smithy").toURI();
+            URI nonExistentUri = URI.create("non-existent-model-file.smithy");
+            URI testUri = hs.file("test.smithy").toURI();
 
-            assertFalse(project.getShapeIdFromLocation("non-existent-model-file.smithy", new Position(0, 0)).isPresent());
+            assertFalse(project.getShapeIdFromLocation(nonExistentUri, new Position(0, 0)).isPresent());
             assertFalse(project.getShapeIdFromLocation(uri, new Position(0, 0)).isPresent());
             // Position on shape start line, but before char start
             assertFalse(project.getShapeIdFromLocation(uri, new Position(17, 0)).isPresent());
@@ -416,10 +414,11 @@ public class SmithyProjectTest {
 
         try (Harness hs = Harness.builder().paths(modelMain, modelTest).build()) {
             SmithyProject project = hs.getProject();
-            String uri = hs.file("main.smithy").toString();
-            String testUri = hs.file("test.smithy").toString();
+            URI uri = hs.file("main.smithy").toURI();
+            URI nonExistentUri = URI.create("non-existent-model-file.smithy");
+            URI testUri = hs.file("test.smithy").toURI();
 
-            assertFalse(project.getShapeIdFromLocation("non-existent-model-file.smithy", new Position(0, 0)).isPresent());
+            assertFalse(project.getShapeIdFromLocation(nonExistentUri, new Position(0, 0)).isPresent());
             assertFalse(project.getShapeIdFromLocation(uri, new Position(0, 0)).isPresent());
             // Position on shape start line, but before char start
             assertFalse(project.getShapeIdFromLocation(uri, new Position(19, 0)).isPresent());
@@ -484,6 +483,208 @@ public class SmithyProjectTest {
                     new Position(160,8)).get());
             assertEquals(ShapeId.from("com.example#OtherStructure"), project.getShapeIdFromLocation(testUri,
                     new Position(8, 15)).get());
+        }
+    }
+
+    @Test
+    public void loadsProjectInDirectory() {
+        File root = getTestProjectRoot();
+        String modelFilename = "main.smithy";
+        String modelContents = "$version: \"2\"\nnamespace com.foo\nstructure Foo {}\n";
+        File modelFile = createModelFileInModelsDir(root, modelFilename, modelContents);
+        SmithyProject project = SmithyProject.forDirectory(root);
+
+        assertFalse(project.isBroken());
+        assertFalse(project.getModel().isBroken());
+        assertEquals(root, project.getRoot());
+        assertEquals(1, project.getSmithyFiles().size());
+        assertTrue(project.getSmithyFiles().contains(modelFile));
+        assertTrue(project.getModelFiles().containsKey(modelFile.toURI()));
+        assertEquals(modelContents, project.getModelFiles().get(modelFile.toURI()));
+        assertEquals(2, project.getModelFiles().size());
+    }
+
+    @Test
+    public void reloadsProject() {
+        File root = getTestProjectRoot();
+        String modelFilename = "main.smithy";
+        String modelContents = "$version: \"2\"\nnamespace com.foo\nstructure Foo {}\n";
+        File modelFile = createModelFileInModelsDir(root, modelFilename, modelContents);
+        SmithyProject project = SmithyProject.forDirectory(root);
+        SmithyProject reloaded = project.reload();
+
+        assertFalse(reloaded.isBroken());
+        assertFalse(reloaded.getModel().isBroken());
+        assertEquals(root, reloaded.getRoot());
+        assertEquals(1, reloaded.getSmithyFiles().size());
+        assertTrue(reloaded.getSmithyFiles().contains(modelFile));
+        assertTrue(reloaded.getModelFiles().containsKey(modelFile.toURI()));
+        assertEquals(modelContents, reloaded.getModelFiles().get(modelFile.toURI()));
+        assertEquals(2, reloaded.getModelFiles().size());
+    }
+
+    @Test
+    public void reloadsProjectWithChangesToFile() {
+        File root = getTestProjectRoot();
+        String modelFilename = "main.smithy";
+        String modelContents = "$version: \"2\"\nnamespace com.foo\nstructure Foo {}\n";
+        File modelFile = createModelFileInModelsDir(root, modelFilename, modelContents);
+        SmithyProject project = SmithyProject.forDirectory(root);
+
+        String updatedModelContents = modelContents + "structure Bar {}\n";
+        SmithyProject reloaded = project.reloadWithChanges(modelFile.toURI(), updatedModelContents);
+
+        assertFalse(reloaded.isBroken());
+        assertFalse(reloaded.getModel().isBroken());
+        assertEquals(root, reloaded.getRoot());
+        assertEquals(1, reloaded.getSmithyFiles().size());
+        assertTrue(reloaded.getSmithyFiles().contains(modelFile));
+        assertTrue(reloaded.getModelFiles().containsKey(modelFile.toURI()));
+        assertEquals(updatedModelContents, reloaded.getModelFiles().get(modelFile.toURI()));
+        assertEquals(2, reloaded.getModelFiles().size());
+    }
+
+    @Test
+    public void reloadsProjectWithNewFile() {
+        File root = getTestProjectRoot();
+        String modelFilename = "main.smithy";
+        String modelContents = "$version: \"2\"\nnamespace com.foo\nstructure Foo {}\n";
+        File modelFile = createModelFileInModelsDir(root, modelFilename, modelContents);
+        SmithyProject project = SmithyProject.forDirectory(root);
+
+        String newModelFilename = "other.smithy";
+        String newModelContents = "$version: \"2\"\nnamespace com.foo\nstructure Bar {}\n";
+        File newModelFile = createModelFileInModelsDir(root, newModelFilename, newModelContents);
+        SmithyProject reloaded = project.reloadWithChanges(newModelFile.toURI(), newModelContents);
+
+        assertFalse(reloaded.isBroken());
+        assertFalse(reloaded.getModel().isBroken());
+        assertEquals(root, reloaded.getRoot());
+        assertEquals(2, reloaded.getSmithyFiles().size());
+        assertTrue(reloaded.getSmithyFiles().contains(modelFile));
+        assertTrue(reloaded.getSmithyFiles().contains(newModelFile));
+        assertTrue(reloaded.getModelFiles().containsKey(modelFile.toURI()));
+        assertTrue(reloaded.getModelFiles().containsKey(newModelFile.toURI()));
+        assertEquals(modelContents, reloaded.getModelFiles().get(modelFile.toURI()));
+        assertEquals(newModelContents, reloaded.getModelFiles().get(newModelFile.toURI()));
+        assertEquals(3, reloaded.getModelFiles().size());
+    }
+
+    @Test
+    public void loadingProjectWithBrokenModel() {
+        File root = getTestProjectRoot();
+        String modelFilename = "main.smithy";
+        // Model has unknown shape
+        String modelContents = "$version: \"2\"\nnamespace com.foo\nstructure Foo { bar: Bar }\n";
+        File modelFile = createModelFileInModelsDir(root, modelFilename, modelContents);
+        SmithyProject project = SmithyProject.forDirectory(root);
+
+        assertFalse(project.isBroken());
+        assertTrue(project.getModel().isBroken());
+        assertEquals(project.getRoot(), root);
+        assertEquals(1, project.getSmithyFiles().size());
+        assertTrue(project.getSmithyFiles().contains(modelFile));
+        assertTrue(project.getModelFiles().containsKey(modelFile.toURI()));
+        assertEquals(modelContents, project.getModelFiles().get(modelFile.toURI()));
+        assertEquals(2, project.getModelFiles().size());
+    }
+
+    @Test
+    public void reloadingProjectWithBrokenModelWithFixes() {
+        File root = getTestProjectRoot();
+        String modelFilename = "main.smithy";
+        // Model has unknown shape
+        String modelContents = "$version: \"2\"\nnamespace com.foo\nstructure Foo { bar: Bar }\n";
+        File modelFile = createModelFileInModelsDir(root, modelFilename, modelContents);
+        SmithyProject project = SmithyProject.forDirectory(root);
+
+        assertTrue(project.getModel().isBroken());
+
+        String updatedModelContents = modelContents + "structure Bar {}\n";
+        SmithyProject reloaded = project.reloadWithChanges(modelFile.toURI(), updatedModelContents);
+
+        assertFalse(reloaded.isBroken());
+        assertFalse(reloaded.getModel().isBroken());
+        assertEquals(root, reloaded.getRoot());
+        assertEquals(1, reloaded.getSmithyFiles().size());
+        assertTrue(reloaded.getSmithyFiles().contains(modelFile));
+        assertTrue(reloaded.getModelFiles().containsKey(modelFile.toURI()));
+        assertEquals(updatedModelContents, reloaded.getModelFiles().get(modelFile.toURI()));
+        assertEquals(2, project.getModelFiles().size());
+    }
+
+    @Test
+    public void loadingProjectWithBrokenConfig() {
+        File root = getTestProjectRoot();
+        String invalidSmithyBuildContents = "{";
+        File smithyBuildFile = Paths.get(root.getAbsolutePath(), "smithy-build.json").toFile();
+        writeToFile(smithyBuildFile, invalidSmithyBuildContents);
+        SmithyProject project = SmithyProject.forDirectory(root);
+
+        assertTrue(project.isBroken());
+        assertEquals(1, project.getErrors().size());
+        assertTrue(project.getErrors().get(0).contains("Error parsing JSON"));
+    }
+
+    @Test
+    public void loadingProjectWithConfig() throws Exception {
+        Path jarImportModelPath = Paths.get(getClass().getResource("models/jars/smithy-test-traits.jar").toURI());
+        String coordinates = "com.example:smithy-test-traits:0.0.1";
+        DependencyResolver dependencyResolver = new MockDependencyResolver(
+                ResolvedArtifact.fromCoordinates(jarImportModelPath, coordinates)
+        );
+        MavenConfig mavenConfig = MavenConfig.builder()
+                .dependencies(ListUtils.of(coordinates))
+                .build();
+        SmithyBuildExtensions buildExtensions = SmithyBuildExtensions.builder()
+                .maven(mavenConfig)
+                .build();
+
+        File root = getTestProjectRoot();
+        String modelFilename = "main.smithy";
+        String modelContents = "$version: \"2\"\nnamespace com.foo\nuse smithy.test#test\n@test()service Weather {}\n";
+        File modelFile = createModelFileInModelsDir(root, modelFilename, modelContents);
+
+        SmithyProject project = SmithyProject.load(buildExtensions, root, dependencyResolver);
+
+        assertFalse(project.isBroken());
+        assertFalse(project.getModel().isBroken());
+        assertEquals(root, project.getRoot());
+        assertEquals(1, project.getSmithyFiles().size());
+        assertTrue(project.getSmithyFiles().contains(modelFile));
+        assertEquals(1, project.getExternalJars().size());
+        assertTrue(project.getExternalJars().contains(jarImportModelPath.toFile()));
+        assertEquals(3, project.getModelFiles().size());
+    }
+
+    private static File getTestProjectRoot() {
+        try {
+            File root = Files.createTempDirectory("test").toFile();
+            root.deleteOnExit();
+            return root;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static File createModelFileInModelsDir(File root, String filename, String contents) {
+        File modelRoot = Paths.get(root.getAbsolutePath(), "model").toFile();
+        if (!modelRoot.exists()) {
+            modelRoot.mkdirs();
+        }
+        File modelFile = Paths.get(modelRoot.getAbsolutePath(), filename).toFile();
+        writeToFile(modelFile, contents);
+        return modelFile;
+    }
+
+    private static void writeToFile(File file, String contents) {
+        try {
+            try (FileWriter fw = new FileWriter(file)) {
+                fw.write(contents);
+                fw.flush();
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 

@@ -157,9 +157,9 @@ public class DefinitionProviderTest {
         Path model = rootDir.resolve(filename);
         try (Harness hs = Harness.builder().paths(model).build()) {
             StubClient client = new StubClient();
-            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client), hs.getTempFolder());
+            SmithyTextDocumentService tds = new SmithyTextDocumentService(Optional.of(client));
             tds.setProject(hs.getProject());
-            TextDocumentIdentifier tdi = new TextDocumentIdentifier(hs.file(filename).toString());
+            TextDocumentIdentifier tdi = new TextDocumentIdentifier(hs.file(filename).toURI().toString());
             DefinitionParams params = getDefinitionParams(tdi, line, column);
             try {
                 return tds.definition(params).get().getLeft();
