@@ -240,7 +240,10 @@ final class FileCachingCollector implements ShapeLocationCollector {
             String suffix = getOperationInputOrOutputSuffix(shape, preamble);
             String shapeName = shape.getId().getName();
 
-            String matchingOperationName = shapeName.substring(0, shapeName.length() - suffix.length());
+            String matchingOperationName =
+                shapeName.endsWith(suffix)
+                    ? shapeName.substring(0, shapeName.length() - suffix.length())
+                    : shapeName;
             ShapeId matchingOperationId = ShapeId.fromParts(shape.getId().getNamespace(), matchingOperationName);
 
             return model.shapes(OperationShape.class)
