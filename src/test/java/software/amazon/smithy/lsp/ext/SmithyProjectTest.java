@@ -493,6 +493,14 @@ public class SmithyProjectTest {
                     new Position(160,8)).get());
             assertEquals(ShapeId.from("com.example#OtherStructure"), project.getShapeIdFromLocation(testUri,
                     new Position(7, 15)).get());
+            assertEquals(ShapeId.from("com.foo#ShortI"), project.getShapeIdFromLocation(uri,
+                new Position(210,5)).get());
+            assertEquals(ShapeId.from("com.foo#ShortI$c"), project.getShapeIdFromLocation(uri,
+                new Position(211,6)).get());
+            assertEquals(ShapeId.from("com.foo#ShortO"), project.getShapeIdFromLocation(uri,
+                new Position(215,5)).get());
+            assertEquals(ShapeId.from("com.foo#ShortO$d"), project.getShapeIdFromLocation(uri,
+                new Position(216,6)).get());
         }
     }
 

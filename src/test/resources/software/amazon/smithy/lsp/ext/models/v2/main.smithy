@@ -201,3 +201,18 @@ structure FalseInlinedReversedBarOutput {
 
 @trait
 structure emptyTraitStruct {}
+
+operation ShortInputOutput {
+    output: ShortO
+    input: ShortI
+}
+
+@input
+structure ShortI {
+    c: String
+}
+
+@output
+structure ShortO {
+    d: String
+}
