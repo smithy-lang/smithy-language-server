@@ -8,6 +8,7 @@ on:
 jobs:
   get-version:
     runs-on: ubuntu-latest
+    if: github.repository == 'smithy-lang/smithy-language-server'
     steps:
       - uses: actions/checkout@v3
 
