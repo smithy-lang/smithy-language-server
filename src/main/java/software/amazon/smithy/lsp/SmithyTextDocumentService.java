@@ -72,8 +72,6 @@ import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
-import smithyfmt.Formatter;
-import smithyfmt.Result;
 import software.amazon.smithy.cli.dependencies.DependencyResolver;
 import software.amazon.smithy.cli.dependencies.FileCacheResolver;
 import software.amazon.smithy.cli.dependencies.MavenDependencyResolver;
@@ -91,6 +89,7 @@ import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.knowledge.NeighborProviderIndex;
+import software.amazon.smithy.model.loader.IdlTokenizer;
 import software.amazon.smithy.model.loader.ParserUtils;
 import software.amazon.smithy.model.neighbor.Walker;
 import software.amazon.smithy.model.shapes.Shape;
@@ -99,6 +98,8 @@ import software.amazon.smithy.model.shapes.ShapeType;
 import software.amazon.smithy.model.shapes.SmithyIdlModelSerializer;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
+import software.amazon.smithy.syntax.Formatter;
+import software.amazon.smithy.syntax.TokenTree;
 import software.amazon.smithy.utils.SimpleParser;
 
 public class SmithyTextDocumentService implements TextDocumentService {
@@ -697,23 +698,31 @@ public class SmithyTextDocumentService implements TextDocumentService {
         );
         if (content.isPresent()) {
             SmartInput input = content.get();
-            final Result result = Formatter.format(input.getInput());
-            final Range fullRange = input.getRange();
-            if (result.isSuccess() && !result.getValue().equals(input.getInput())) {
-                return Utils.completableFuture(Collections.singletonList(new TextEdit(
-                        fullRange,
-                        result.getValue()
-                )));
-            } else if (!result.isSuccess()) {
-                LspLog.println("Failed to format: " + result.getError());
-                return emptyResult;
-            } else {
+            try {
+                String formatted = Formatter.format(parse(file.toPath().toString(), input.getInput()));
+                final Range fullRange = input.getRange();
+                if (!formatted.equals(input.getInput())) {
+                    return Utils.completableFuture(Collections.singletonList(new TextEdit(
+                            fullRange,
+                            formatted
+                    )));
+                } else {
+                    return emptyResult;
+                }
+            } catch (Throwable ex) {
+                LspLog.println("Failed to format");
+                LspLog.println(ex);
                 return emptyResult;
             }
         } else {
             LspLog.println("Content is unavailable, not formatting.");
             return emptyResult;
         }
+    }
+
+    private TokenTree parse(String fileName, String contents) {
+        IdlTokenizer tokenizer = IdlTokenizer.create(fileName, contents);
+        return TokenTree.of(tokenizer);
     }
 
     private File fileUri(TextDocumentIdentifier tdi) {
