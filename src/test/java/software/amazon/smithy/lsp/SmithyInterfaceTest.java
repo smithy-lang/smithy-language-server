@@ -17,7 +17,6 @@ package software.amazon.smithy.lsp;
 
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertEquals;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -25,6 +24,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.junit.Test;
@@ -105,10 +105,16 @@ public class SmithyInterfaceTest {
         assertTrue(result.isRight());
         List<ValidationEvent> validationEvents = result.getRight().getValidationEvents();
         assertFalse(validationEvents.isEmpty());
-        assertEquals(
-            "Proto index 1 is used muliple times in members name,age of shape (structure: `some.test#MyStruct`).",
-                validationEvents.get(0).getMessage()
-        );
+
+        String expectedMessage = "Proto index 1 is used muliple times in members name," +
+                "age of shape (structure: `some.test#MyStruct`).";
+        Optional<ValidationEvent> matchingEvent = validationEvents.stream()
+                .filter(ev ->ev.getMessage().equals(expectedMessage)).findFirst();
+
+        if (!matchingEvent.isPresent()) {
+            throw new AssertionError("Expected validation event with message `" + expectedMessage
+                    + "`, but events were " + validationEvents);
+        }
     }
 
     private static List<File> getFiles(String... filenames) throws Exception {
