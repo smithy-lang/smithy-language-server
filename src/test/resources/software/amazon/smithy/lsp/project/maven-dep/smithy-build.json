@@ -1,0 +1,9 @@
+{
+    "version": "1",
+    "sources": ["main.smithy"],
+    "maven": {
+        "dependencies": [
+            "software.amazon.smithy:smithy-smoke-test-traits:1.45.0"
+        ]
+    }
+}
