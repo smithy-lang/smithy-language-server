@@ -1,0 +1,8 @@
+{
+    "dependencies": [
+        {
+            "name": "doesn't exist",
+            "path": "./doesnt-exist.jar"
+        }
+    ]
+}

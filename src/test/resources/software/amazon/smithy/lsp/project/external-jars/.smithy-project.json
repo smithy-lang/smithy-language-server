@@ -1,0 +1,12 @@
+{
+    "dependencies": [
+        {
+            "name": "alloy-core",
+            "path": "./alloy-core.jar"
+        },
+        {
+            "name": "smithy-test-traits",
+            "path": "./smithy-test-traits.jar"
+        }
+    ]
+}
