@@ -1,0 +1,16 @@
+{
+    "version": "1",
+    "maven": {
+        "dependencies": ["dep1", "dep2"],
+        "repositories": [
+            {
+                "url": "url1"
+            },
+            {
+                "url": "url2"
+            }
+        ]
+    },
+    "mavenRepositories": ["m1", "m2"],
+    "mavenDependencies": ["mdep1", "mdep2"]
+}
