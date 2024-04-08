@@ -2,6 +2,7 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+
 package software.amazon.smithy.lsp;
 
 import java.net.URI;
@@ -14,9 +15,12 @@ import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.CompletionTriggerKind;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
+import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.FileChangeType;
+import org.eclipse.lsp4j.FileEvent;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.Position;
@@ -56,6 +60,10 @@ public final class RequestBuilders {
 
     public static PositionRequest positionRequest() {
         return new PositionRequest();
+    }
+
+    public static DidChangeWatchedFiles didChangeWatchedFiles() {
+        return new DidChangeWatchedFiles();
     }
 
     public static final class DidChange {
@@ -226,6 +234,19 @@ public final class RequestBuilders {
                     new TextDocumentIdentifier(uri),
                     new Position(line, character),
                     new CompletionContext(CompletionTriggerKind.Invoked));
+        }
+    }
+
+    public static final class DidChangeWatchedFiles {
+        public final List<FileEvent> changes = new ArrayList<>();
+
+        public DidChangeWatchedFiles event(String uri, FileChangeType type) {
+            this.changes.add(new FileEvent(uri, type));
+            return this;
+        }
+
+        public DidChangeWatchedFilesParams build() {
+            return new DidChangeWatchedFilesParams(changes);
         }
     }
 }

@@ -7,6 +7,7 @@ package software.amazon.smithy.lsp.project;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,7 @@ import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.ModelAssembler;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.validation.ValidatedResult;
+import software.amazon.smithy.utils.IoUtils;
 
 /**
  * A Smithy project open on the client. It keeps track of its Smithy files and
@@ -195,15 +197,73 @@ public final class Project {
 
         this.modelResult = assembler.assemble();
 
-        Set<Shape> updatedShapes = modelResult.getResult()
-                .map(model -> model.shapes()
-                        .filter(shape -> shape.getSourceLocation().getFilename().equals(path))
-                        .collect(Collectors.toSet()))
-                .orElse(previous.getShapes());
-
+        Set<Shape> updatedShapes = getFileShapes(path, previous.getShapes());
         // TODO: Could cache validation events
         SmithyFile updated = ProjectLoader.buildSmithyFile(path, document, updatedShapes).build();
         this.smithyFiles.put(path, updated);
+    }
+
+    /**
+     * Updates this project by adding and removing files. Also runs model validation.
+     *
+     * @param addUris URIs of files to add
+     * @param removeUris URIs of files to remove
+     */
+    public void updateFiles(List<String> addUris, List<String> removeUris) {
+        if (!modelResult.getResult().isPresent()) {
+            LOGGER.severe("Attempted to update files in project with no model: " + addUris + " " + removeUris);
+            return;
+        }
+
+        if (addUris.isEmpty() && removeUris.isEmpty()) {
+            LOGGER.info("No files provided to update");
+            return;
+        }
+
+        Model currentModel = modelResult.getResult().get();
+        ModelAssembler assembler = assemblerFactory.get();
+        if (!removeUris.isEmpty()) {
+            Model.Builder builder = currentModel.toBuilder();
+            for (String uri : removeUris) {
+                String path = UriAdapter.toPath(uri);
+                // Note: no need to remove anything from sources/imports, since they're
+                //  based on what's in the build files.
+                SmithyFile smithyFile = smithyFiles.remove(path);
+                if (smithyFile == null) {
+                    LOGGER.severe("Attempted to remove file not in project: " + uri);
+                    continue;
+                }
+                for (Shape shape : smithyFile.getShapes()) {
+                    builder.removeShape(shape.getId());
+                }
+            }
+            assembler.addModel(builder.build());
+        } else {
+            assembler.addModel(currentModel);
+        }
+
+        for (String uri : addUris) {
+            assembler.addImport(UriAdapter.toPath(uri));
+        }
+
+        this.modelResult = assembler.assemble();
+
+        for (String uri : addUris) {
+            String path = UriAdapter.toPath(uri);
+            Set<Shape> fileShapes = getFileShapes(path, Collections.emptySet());
+            Document document = Document.of(IoUtils.readUtf8File(path));
+            SmithyFile smithyFile = ProjectLoader.buildSmithyFile(path, document, fileShapes)
+                    .build();
+            smithyFiles.put(path, smithyFile);
+        }
+    }
+
+    private Set<Shape> getFileShapes(String path, Set<Shape> orDefault) {
+        return this.modelResult.getResult()
+                .map(model -> model.shapes()
+                        .filter(shape -> shape.getSourceLocation().getFilename().equals(path))
+                        .collect(Collectors.toSet()))
+                .orElse(orDefault);
     }
 
     static Builder builder() {

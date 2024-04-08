@@ -5,6 +5,7 @@
 
 package software.amazon.smithy.lsp;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,11 +37,39 @@ public class TestWorkspace {
     }
 
     /**
-     * @param filename The name of the file to get the URI for. Can be relative to the root
+     * @param filename The name of the file to get the URI for, relative to the root
      * @return The LSP URI for the given filename
      */
     public String getUri(String filename) {
         return this.root.resolve(filename).toUri().toString();
+    }
+
+    /**
+     * @param relativePath The path where the model will be added, relative to the root
+     * @param model The text of the model to add
+     */
+    public void addModel(String relativePath, String model) {
+        try {
+            Files.write(root.resolve(relativePath), model.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void moveModel(String currentPath, String toPath) {
+        try {
+            Files.move(root.resolve(currentPath), root.resolve(toPath));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void deleteModel(String relativePath) {
+        try {
+            Files.delete(root.resolve(relativePath));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -51,6 +80,15 @@ public class TestWorkspace {
     public static TestWorkspace singleModel(String model) {
         return builder()
                 .withSourceFile("main.smithy", model)
+                .build();
+    }
+
+    /**
+     * @return A workspace with no models, and a smithy-build.json with sources = ["model/"]
+     */
+    public static TestWorkspace emptyWithDirSource() {
+        return builder()
+                .withSourceDir(new Dir().path("model"))
                 .build();
     }
 

@@ -49,6 +49,60 @@ public final class ProjectLoader {
     }
 
     /**
+     * Loads a detached (single-file) {@link Project} with the given file.
+     *
+     * <p>Unlike {@link #load(Path)}, this method isn't fallible since it
+     * doesn't do any IO.
+     *
+     * @param uri URI of the file to load into a project
+     * @param text Text of the file to load into a project
+     * @return The loaded project
+     */
+    public static Project loadDetached(String uri, String text) {
+        String asPath = UriAdapter.toPath(uri);
+        ValidatedResult<Model> modelResult = Model.assembler()
+                .addUnparsedModel(asPath, text)
+                .assemble();
+
+        Path path = Paths.get(asPath);
+        List<Path> sources = Collections.singletonList(path);
+
+        Project.Builder builder = Project.builder()
+                .root(path) // TODO: Does this need to be a directory?
+                .sources(sources)
+                .modelResult(modelResult);
+
+        Map<String, Set<Shape>> shapes;
+        if (modelResult.getResult().isPresent()) {
+            Model model = modelResult.getResult().get();
+            shapes = model.shapes().collect(Collectors.groupingByConcurrent(
+                    shape -> shape.getSourceLocation().getFilename(), Collectors.toSet()));
+        } else {
+            shapes = new HashMap<>(0);
+        }
+
+        Map<String, SmithyFile> smithyFiles = new HashMap<>(shapes.size());
+        for (Map.Entry<String, Set<Shape>> entry : shapes.entrySet()) {
+            String filePath = entry.getKey();
+            Document document;
+            if (UriAdapter.isSmithyJarFile(filePath) || UriAdapter.isJarFile(filePath)) {
+                document = Document.of(IoUtils.readUtf8Url(UriAdapter.jarUrl(filePath)));
+            } else if (filePath.equals(asPath)) {
+                document = Document.of(text);
+            } else {
+                LOGGER.severe("Found unexpected file when loading detached (single file) project: " + filePath);
+                continue;
+            }
+            Set<Shape> fileShapes = entry.getValue();
+            SmithyFile smithyFile = buildSmithyFile(filePath, document, fileShapes).build();
+            smithyFiles.put(filePath, smithyFile);
+        }
+        builder.smithyFiles(smithyFiles);
+
+        return builder.build();
+    }
+
+    /**
      * Loads a {@link Project} from a given root path.
      *
      * <p>This will return a failed result if loading the project config, resolving
