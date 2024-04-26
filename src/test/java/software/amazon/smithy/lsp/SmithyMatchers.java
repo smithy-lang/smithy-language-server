@@ -20,7 +20,7 @@ public final class SmithyMatchers {
     private SmithyMatchers() {}
 
     public static Matcher<Model> hasShapeWithId(String id) {
-        return new CustomTypeSafeMatcher<Model>("a model with the right shape id") {
+        return new CustomTypeSafeMatcher<Model>("a model with the shape id `" + id + "`") {
             @Override
             protected boolean matchesSafely(Model item) {
                 return item.getShape(ShapeId.from(id)).isPresent();

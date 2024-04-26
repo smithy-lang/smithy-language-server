@@ -130,10 +130,14 @@ public final class ProjectLoader {
 
         List<Path> dependencies = resolveResult.unwrap();
 
-        // TODO: We need some default behavior for when no project files are specified, like running in
-        //  'detached' mode or something
-        List<Path> sources = config.getSources().stream().map(root::resolve).collect(Collectors.toList());
-        List<Path> imports = config.getImports().stream().map(root::resolve).collect(Collectors.toList());
+        List<Path> sources = config.getSources().stream()
+                .map(root::resolve)
+                .map(Path::normalize)
+                .collect(Collectors.toList());
+        List<Path> imports = config.getImports().stream()
+                .map(root::resolve)
+                .map(Path::normalize)
+                .collect(Collectors.toList());
 
         // The model assembler factory is used to get assemblers that already have the correct
         // dependencies resolved for future loads

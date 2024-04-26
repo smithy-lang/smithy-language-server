@@ -1,4 +1,4 @@
 {
     "version": "1",
-    "sources": ["model/"]
+    "sources": ["model", "model2"]
 }

@@ -48,7 +48,7 @@ final class ProjectDependencyResolver {
                     .collect(Collectors.toCollection(ArrayList::new));
             config.getDependencies().forEach((projectDependency) -> {
                 // TODO: Not sure if this needs to check for existence
-                Path path = root.resolve(projectDependency.getPath());
+                Path path = root.resolve(projectDependency.getPath()).normalize();
                 deps.add(path);
             });
             return deps;

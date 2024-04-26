@@ -66,9 +66,18 @@ public class ProjectTest {
         Project project = ProjectLoader.load(root).unwrap();
 
         assertThat(project.getRoot(), equalTo(root));
-        assertThat(project.getSources(), hasItem(root.resolve("model")));
+        assertThat(project.getSources(), hasItems(
+                root.resolve("model"),
+                root.resolve("model2")));
+        assertThat(project.getSmithyFiles().keySet(), hasItems(
+                containsString("model/main.smithy"),
+                containsString("model/subdir/sub.smithy"),
+                containsString("model2/subdir2/sub2.smithy"),
+                containsString("model2/subdir2/subsubdir/subsub.smithy")));
         assertThat(project.getModelResult().isBroken(), is(false));
         assertThat(project.getModelResult().unwrap(), hasShapeWithId("com.foo#Foo"));
+        assertThat(project.getModelResult().unwrap(), hasShapeWithId("com.foo#Bar"));
+        assertThat(project.getModelResult().unwrap(), hasShapeWithId("com.foo#Baz"));
     }
 
     @Test
@@ -221,5 +230,24 @@ public class ProjectTest {
         Result<Project, List<Exception>> result = ProjectLoader.load(root);
 
         assertThat(result.isErr(), is(true));
+    }
+
+    @Test
+    public void loadsProjectWithUnNormalizedDirs() {
+        Path root = Paths.get(getClass().getResource("unnormalized-dirs").getPath());
+        Project project = ProjectLoader.load(root).unwrap();
+
+        assertThat(project.getRoot(), equalTo(root));
+        assertThat(project.getSources(), hasItems(
+                root.resolve("model"),
+                root.resolve("model2")));
+        assertThat(project.getImports(), hasItem(root.resolve("model3")));
+        assertThat(project.getSmithyFiles().keySet(), hasItems(
+                equalTo(root.resolve("model/test-traits.smithy").toString()),
+                equalTo(root.resolve("model/one.smithy").toString()),
+                equalTo(root.resolve("model2/two.smithy").toString()),
+                equalTo(root.resolve("model3/three.smithy").toString()),
+                containsString(root.resolve("smithy-test-traits.jar") + "!/META-INF/smithy/smithy.test.json")));
+        assertThat(project.getDependencies(), hasItem(root.resolve("smithy-test-traits.jar")));
     }
 }

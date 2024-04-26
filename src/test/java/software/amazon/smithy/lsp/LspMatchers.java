@@ -17,7 +17,7 @@ public final class LspMatchers {
     private LspMatchers() {}
 
     public static Matcher<CompletionItem> hasLabel(String label) {
-        return new CustomTypeSafeMatcher<CompletionItem>("a completion item with the right label") {
+        return new CustomTypeSafeMatcher<CompletionItem>("a completion item with the label + `" + label + "`") {
             @Override
             protected boolean matchesSafely(CompletionItem item) {
                 return item.getLabel().equals(label);

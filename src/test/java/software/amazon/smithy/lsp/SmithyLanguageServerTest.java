@@ -22,6 +22,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -48,6 +49,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.hamcrest.Matcher;
 import org.junit.jupiter.api.Test;
+import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.RangeAdapter;
 
@@ -966,6 +968,34 @@ public class SmithyLanguageServerTest {
                 .build());
 
         assertThat(server.getProjects().isDetached(movedUri), is(true));
+    }
+
+    @Test
+    public void loadsProjectWithUnNormalizedSourcesDirs() {
+        SmithyBuildConfig config = SmithyBuildConfig.builder()
+                .version("1")
+                .sources(Collections.singletonList("./././smithy"))
+                .build();
+        String filename = "smithy/main.smithy";
+        String modelText = "$version: \"2\"\n"
+                           + "namespace com.foo\n"
+                           + "\n"
+                           + "string Foo\n";
+        TestWorkspace workspace = TestWorkspace.builder()
+                .withSourceDir(TestWorkspace.dir()
+                        .path("./smithy")
+                        .withSourceFile("main.smithy", modelText))
+                .withConfig(config)
+                .build();
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String uri = workspace.getUri(filename);
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text(modelText)
+                .build());
+        assertThat(server.getProjects().isDetached(uri), is(false));
     }
 
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {

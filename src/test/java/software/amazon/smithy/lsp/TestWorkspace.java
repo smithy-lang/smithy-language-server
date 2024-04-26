@@ -109,6 +109,10 @@ public class TestWorkspace {
         return new Builder();
     }
 
+    public static Dir dir() {
+        return new Dir();
+    }
+
     public static class Dir {
         String path;
         Map<String, String> sourceModels = new HashMap<>();
@@ -163,6 +167,7 @@ public class TestWorkspace {
     }
 
     public static final class Builder extends Dir {
+        private SmithyBuildConfig config = null;
         private Builder() {}
 
         @Override
@@ -189,6 +194,11 @@ public class TestWorkspace {
             return this;
         }
 
+        public Builder withConfig(SmithyBuildConfig config) {
+            this.config = config;
+            return this;
+        }
+
         public TestWorkspace build() {
             try {
                 if (path == null) {
@@ -205,11 +215,13 @@ public class TestWorkspace {
                 imports.addAll(importModels.keySet());
                 imports.addAll(importDirs.stream().map(d -> d.path).collect(Collectors.toList()));
 
-                SmithyBuildConfig config = SmithyBuildConfig.builder()
-                        .version("1")
-                        .sources(sources)
-                        .imports(imports)
-                        .build();
+                if (config == null) {
+                    config = SmithyBuildConfig.builder()
+                            .version("1")
+                            .sources(sources)
+                            .imports(imports)
+                            .build();
+                }
                 String configString = Node.prettyPrintJson(MAPPER.serialize(config));
                 Files.write(root.resolve("smithy-build.json"), configString.getBytes(StandardCharsets.UTF_8));
 
