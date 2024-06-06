@@ -8,6 +8,7 @@ package software.amazon.smithy.lsp;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Tracks asynchronous lifecycle tasks. Allows cancelling of an ongoing task
@@ -39,6 +40,12 @@ final class DocumentLifecycleManager {
     void cancelAllTasks() {
         for (CompletableFuture<Void> task : tasks.values()) {
             task.cancel(true);
+        }
+    }
+
+    void waitForAllTasks() throws ExecutionException, InterruptedException {
+        for (CompletableFuture<Void> task : tasks.values()) {
+            task.get();
         }
     }
 }

@@ -6,7 +6,9 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
@@ -24,6 +26,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.CompletionItem;
@@ -52,6 +55,8 @@ import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.RangeAdapter;
+import software.amazon.smithy.model.node.ArrayNode;
+import software.amazon.smithy.model.node.Node;
 
 public class SmithyLanguageServerTest {
     @Test
@@ -433,6 +438,7 @@ public class SmithyLanguageServerTest {
                 .buildCompletion();
         List<CompletionItem> completions = server.completion(completionParams).get().getLeft();
 
+        // TODO: Somehow this has become flaky
         assertThat(completions, containsInAnyOrder(hasLabel("GetFoo"), hasLabel("GetFooInput")));
     }
 
@@ -996,6 +1002,113 @@ public class SmithyLanguageServerTest {
                 .text(modelText)
                 .build());
         assertThat(server.getProjects().isDetached(uri), is(false));
+    }
+
+    @Test
+    public void reloadingProjectWithArrayMetadataValues() throws Exception {
+        String modelText1 = "$version: \"2\"\n"
+                           + "\n"
+                           + "metadata foo = [1]\n"
+                           + "metadata foo = [2]\n"
+                           + "metadata bar = {a: [1]}\n"
+                           + "\n"
+                           + "namespace com.foo\n"
+                           + "\n"
+                           + "string Foo\n";
+        String modelText2 = "$version: \"2\"\n"
+                            + "\n"
+                            + "metadata foo = [3]\n"
+                            + "\n"
+                            + "namespace com.foo\n"
+                            + "\n"
+                            + "string Bar\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        Map<String, Node> metadataBefore = server.getProject().getModelResult().unwrap().getMetadata();
+        assertThat(metadataBefore, hasKey("foo"));
+        assertThat(metadataBefore, hasKey("bar"));
+        assertThat(metadataBefore.get("foo"), instanceOf(ArrayNode.class));
+        assertThat(metadataBefore.get("foo").expectArrayNode().size(), equalTo(3));
+
+        String uri = workspace.getUri("model-0.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text(modelText1)
+                .build());
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri)
+                .range(RangeAdapter.lineSpan(8, 0, 0))
+                .text("\nstring Baz\n")
+                .build());
+        server.didSave(RequestBuilders.didSave()
+                .uri(uri)
+                .build());
+
+        server.getLifecycleManager().getTask(uri).get();
+
+        Map<String, Node> metadataAfter = server.getProject().getModelResult().unwrap().getMetadata();
+        assertThat(metadataAfter, hasKey("foo"));
+        assertThat(metadataAfter, hasKey("bar"));
+        assertThat(metadataAfter.get("foo"), instanceOf(ArrayNode.class));
+        assertThat(metadataAfter.get("foo").expectArrayNode().size(), equalTo(3));
+
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri)
+                .range(RangeAdapter.of(2, 0, 3, 0)) // removing the first 'foo' metadata
+                .text("")
+                .build());
+
+        server.getLifecycleManager().getTask(uri).get();
+
+        Map<String, Node> metadataAfter2 = server.getProject().getModelResult().unwrap().getMetadata();
+        assertThat(metadataAfter2, hasKey("foo"));
+        assertThat(metadataAfter2, hasKey("bar"));
+        assertThat(metadataAfter2.get("foo"), instanceOf(ArrayNode.class));
+        assertThat(metadataAfter2.get("foo").expectArrayNode().size(), equalTo(2));
+    }
+
+    @Test
+    public void changingWatchedFilesWithMetadata() throws Exception {
+        String modelText1 = "$version: \"2\"\n"
+                            + "\n"
+                            + "metadata foo = [1]\n"
+                            + "metadata foo = [2]\n"
+                            + "metadata bar = {a: [1]}\n"
+                            + "\n"
+                            + "namespace com.foo\n"
+                            + "\n"
+                            + "string Foo\n";
+        String modelText2 = "$version: \"2\"\n"
+                            + "\n"
+                            + "metadata foo = [3]\n"
+                            + "\n"
+                            + "namespace com.foo\n"
+                            + "\n"
+                            + "string Bar\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        Map<String, Node> metadataBefore = server.getProject().getModelResult().unwrap().getMetadata();
+        assertThat(metadataBefore, hasKey("foo"));
+        assertThat(metadataBefore, hasKey("bar"));
+        assertThat(metadataBefore.get("foo"), instanceOf(ArrayNode.class));
+        assertThat(metadataBefore.get("foo").expectArrayNode().size(), equalTo(3));
+
+        String uri = workspace.getUri("model-1.smithy");
+
+        workspace.deleteModel("model-1.smithy");
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(uri, FileChangeType.Deleted)
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        Map<String, Node> metadataAfter = server.getProject().getModelResult().unwrap().getMetadata();
+        assertThat(metadataAfter, hasKey("foo"));
+        assertThat(metadataAfter, hasKey("bar"));
+        assertThat(metadataAfter.get("foo"), instanceOf(ArrayNode.class));
+        assertThat(metadataAfter.get("foo").expectArrayNode().size(), equalTo(2));
     }
 
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {

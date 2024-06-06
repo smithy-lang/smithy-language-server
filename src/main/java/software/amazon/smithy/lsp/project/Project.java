@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,6 +21,7 @@ import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.UriAdapter;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.ModelAssembler;
+import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.utils.IoUtils;
@@ -37,6 +39,7 @@ public final class Project {
     private final Map<String, SmithyFile> smithyFiles;
     private final Supplier<ModelAssembler> assemblerFactory;
     private ValidatedResult<Model> modelResult;
+    private Map<String, Map<String, Node>> perFileMetadata;
 
     private Project(Builder builder) {
         this.root = Objects.requireNonNull(builder.root);
@@ -46,6 +49,7 @@ public final class Project {
         this.smithyFiles = builder.smithyFiles;
         this.modelResult = builder.modelResult;
         this.assemblerFactory = builder.assemblerFactory;
+        this.perFileMetadata = builder.perFileMetadata;
     }
 
     /**
@@ -181,9 +185,14 @@ public final class Project {
         SmithyFile previous = smithyFiles.get(path);
         Model currentModel = modelResult.getResult().get(); // unwrap would throw if the model is broken
 
-        Model.Builder builder = currentModel.toBuilder();
+        Model.Builder builder = prepBuilderForReload(currentModel);
         for (Shape shape : previous.getShapes()) {
             builder.removeShape(shape.getId());
+        }
+        for (Map.Entry<String, Map<String, Node>> e : this.perFileMetadata.entrySet()) {
+            if (!e.getKey().equals(path)) {
+                e.getValue().forEach(builder::putMetadataProperty);
+            }
         }
         Model rest = builder.build();
 
@@ -200,6 +209,7 @@ public final class Project {
         Set<Shape> updatedShapes = getFileShapes(path, previous.getShapes());
         // TODO: Could cache validation events
         SmithyFile updated = ProjectLoader.buildSmithyFile(path, document, updatedShapes).build();
+        this.perFileMetadata = ProjectLoader.computePerFileMetadata(this.modelResult);
         this.smithyFiles.put(path, updated);
     }
 
@@ -223,18 +233,33 @@ public final class Project {
         Model currentModel = modelResult.getResult().get();
         ModelAssembler assembler = assemblerFactory.get();
         if (!removeUris.isEmpty()) {
-            Model.Builder builder = currentModel.toBuilder();
+            // Slightly strange way to do this, but we need to remove all model metadata, then
+            // re-add only metadata for remaining files.
+            Set<String> remainingFilesWithMetadata = new HashSet<>(perFileMetadata.keySet());
+
+            Model.Builder builder = prepBuilderForReload(currentModel);
+
             for (String uri : removeUris) {
                 String path = UriAdapter.toPath(uri);
+
+                remainingFilesWithMetadata.remove(path);
+
                 // Note: no need to remove anything from sources/imports, since they're
                 //  based on what's in the build files.
                 SmithyFile smithyFile = smithyFiles.remove(path);
+
                 if (smithyFile == null) {
                     LOGGER.severe("Attempted to remove file not in project: " + uri);
                     continue;
                 }
                 for (Shape shape : smithyFile.getShapes()) {
                     builder.removeShape(shape.getId());
+                }
+            }
+            for (String remainingFileWithMetadata : remainingFilesWithMetadata) {
+                Map<String, Node> fileMetadata = perFileMetadata.get(remainingFileWithMetadata);
+                for (Map.Entry<String, Node> fileMetadataEntry : fileMetadata.entrySet()) {
+                    builder.putMetadataProperty(fileMetadataEntry.getKey(), fileMetadataEntry.getValue());
                 }
             }
             assembler.addModel(builder.build());
@@ -247,6 +272,7 @@ public final class Project {
         }
 
         this.modelResult = assembler.assemble();
+        this.perFileMetadata = ProjectLoader.computePerFileMetadata(this.modelResult);
 
         for (String uri : addUris) {
             String path = UriAdapter.toPath(uri);
@@ -256,6 +282,15 @@ public final class Project {
                     .build();
             smithyFiles.put(path, smithyFile);
         }
+    }
+
+    // This mainly exists to explain why we remove the metadata
+    private Model.Builder prepBuilderForReload(Model model) {
+        return model.toBuilder()
+                // clearing the metadata here, and adding back only metadata from other files
+                // is the only sure-fire way to make sure everything is truly removed, and we
+                // don't lose anything
+                .clearMetadata();
     }
 
     private Set<Shape> getFileShapes(String path, Set<Shape> orDefault) {
@@ -278,6 +313,7 @@ public final class Project {
         private final Map<String, SmithyFile> smithyFiles = new HashMap<>();
         private ValidatedResult<Model> modelResult;
         private Supplier<ModelAssembler> assemblerFactory = Model::assembler;
+        private Map<String, Map<String, Node>> perFileMetadata = new HashMap<>();
 
         private Builder() {
         }
@@ -333,6 +369,11 @@ public final class Project {
 
         public Builder assemblerFactory(Supplier<ModelAssembler> assemblerFactory) {
             this.assemblerFactory = assemblerFactory;
+            return this;
+        }
+
+        public Builder perFileMetadata(Map<String, Map<String, Node>> perFileMetadata) {
+            this.perFileMetadata = perFileMetadata;
             return this;
         }
 
