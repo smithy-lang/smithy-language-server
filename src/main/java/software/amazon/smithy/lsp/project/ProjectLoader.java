@@ -16,6 +16,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,8 @@ import software.amazon.smithy.utils.IoUtils;
 
 /**
  * Loads {@link Project}s.
+ *
+ * TODO: There's a lot of duplicated logic and redundant code here to refactor.
  */
 public final class ProjectLoader {
     private static final Logger LOGGER = Logger.getLogger(ProjectLoader.class.getName());
@@ -53,8 +56,8 @@ public final class ProjectLoader {
     /**
      * Loads a detached (single-file) {@link Project} with the given file.
      *
-     * <p>Unlike {@link #load(Path)}, this method isn't fallible since it
-     * doesn't do any IO.
+     * <p>Unlike {@link #load(Path, ProjectManager, Set)}, this method isn't
+     * fallible since it doesn't do any IO.
      *
      * @param uri URI of the file to load into a project
      * @param text Text of the file to load into a project
@@ -106,7 +109,8 @@ public final class ProjectLoader {
     }
 
     /**
-     * Loads a {@link Project} from a given root path.
+     * Loads a {@link Project} at the given root path, using any {@code managedDocuments}
+     * instead of loading from disk.
      *
      * <p>This will return a failed result if loading the project config, resolving
      * the dependencies, or creating the model assembler fail.
@@ -117,9 +121,15 @@ public final class ProjectLoader {
      * reason about how the project was structured.
      *
      * @param root Path of the project root
+     * @param projects Currently loaded projects, for getting content of managed documents
+     * @param managedDocuments URIs of documents managed by the client
      * @return Result of loading the project
      */
-    public static Result<Project, List<Exception>> load(Path root) {
+    public static Result<Project, List<Exception>> load(
+            Path root,
+            ProjectManager projects,
+            Set<String> managedDocuments
+    ) {
         Result<ProjectConfig, List<Exception>> configResult = ProjectConfigLoader.loadFromRoot(root);
         if (configResult.isErr()) {
             return Result.err(configResult.unwrapErr());
@@ -133,15 +143,6 @@ public final class ProjectLoader {
 
         List<Path> dependencies = resolveResult.unwrap();
 
-        List<Path> sources = config.getSources().stream()
-                .map(root::resolve)
-                .map(Path::normalize)
-                .collect(Collectors.toList());
-        List<Path> imports = config.getImports().stream()
-                .map(root::resolve)
-                .map(Path::normalize)
-                .collect(Collectors.toList());
-
         // The model assembler factory is used to get assemblers that already have the correct
         // dependencies resolved for future loads
         Result<Supplier<ModelAssembler>, Exception> assemblerFactoryResult = createModelAssemblerFactory(dependencies);
@@ -152,16 +153,46 @@ public final class ProjectLoader {
         Supplier<ModelAssembler> assemblerFactory = assemblerFactoryResult.unwrap();
         ModelAssembler assembler = assemblerFactory.get();
 
-        Result<ValidatedResult<Model>, Exception> loadModelResult = Result.ofFallible(() ->
-                loadModel(assembler, sources, imports));
+        // Note: The model assembler can handle loading all smithy files in a directory, so there's some potential
+        //  here for inconsistent behavior.
+        List<Path> allSmithyFilePaths = collectAllSmithyPaths(root, config.getSources(), config.getImports());
+
+        Result<ValidatedResult<Model>, Exception> loadModelResult = Result.ofFallible(() -> {
+            for (Path path : allSmithyFilePaths) {
+                if (!managedDocuments.isEmpty()) {
+                    String pathString = path.toString();
+                    String uri = UriAdapter.toUri(pathString);
+                    if (managedDocuments.contains(uri)) {
+                        assembler.addUnparsedModel(pathString, projects.getDocument(uri).copyText());
+                    } else {
+                        assembler.addImport(path);
+                    }
+                } else {
+                    assembler.addImport(path);
+                }
+            }
+
+            return assembler.assemble();
+        });
         // TODO: Assembler can fail if a file is not found. We can be more intelligent about
         //  handling this case to allow partially loading the project, but we will need to
-        //  collect the errors somehow. For now, just fail
+        //  collect and report the errors somehow. For now, using collectAllSmithyPaths skips
+        //  any files that don't exist, so we're essentially side-stepping the issue by
+        //  coincidence.
         if (loadModelResult.isErr()) {
             return Result.err(Collections.singletonList(loadModelResult.unwrapErr()));
         }
 
         ValidatedResult<Model> modelResult = loadModelResult.unwrap();
+
+        List<Path> sources = config.getSources().stream()
+                .map(root::resolve)
+                .map(Path::normalize)
+                .collect(Collectors.toList());
+        List<Path> imports = config.getImports().stream()
+                .map(root::resolve)
+                .map(Path::normalize)
+                .collect(Collectors.toList());
 
         Project.Builder projectBuilder = Project.builder()
                 .root(root)
@@ -181,7 +212,6 @@ public final class ProjectLoader {
         }
 
         // There may be smithy files part of the project that aren't part of the model
-        List<Path> allSmithyFilePaths = collectAllSmithyPaths(root, config.getSources(), config.getImports());
         for (Path path : allSmithyFilePaths) {
             if (!shapes.containsKey(path.toString())) {
                 shapes.put(path.toString(), Collections.emptySet());
@@ -207,6 +237,10 @@ public final class ProjectLoader {
         return Result.ok(projectBuilder.smithyFiles(smithyFiles)
                 .perFileMetadata(computePerFileMetadata(modelResult))
                 .build());
+    }
+
+    static Result<Project, List<Exception>> load(Path root) {
+        return load(root, new ProjectManager(), new HashSet<>(0));
     }
 
     /**
@@ -316,11 +350,11 @@ public final class ProjectLoader {
     private static List<Path> collectAllSmithyPaths(Path root, List<String> sources, List<String> imports) {
         List<Path> paths = new ArrayList<>();
         for (String file : sources) {
-            Path path = root.resolve(file);
+            Path path = root.resolve(file).normalize();
             collectDirectory(paths, root, path);
         }
         for (String file : imports) {
-            Path path = root.resolve(file);
+            Path path = root.resolve(file).normalize();
             collectDirectory(paths, root, path);
         }
         return paths;

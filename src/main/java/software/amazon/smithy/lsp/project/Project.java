@@ -7,6 +7,7 @@ package software.amazon.smithy.lsp.project;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,6 +40,7 @@ public final class Project {
     private final Map<String, SmithyFile> smithyFiles;
     private final Supplier<ModelAssembler> assemblerFactory;
     private ValidatedResult<Model> modelResult;
+    // TODO: Probably should move this into SmithyFile
     private Map<String, Map<String, Node>> perFileMetadata;
 
     private Project(Builder builder) {
@@ -219,7 +221,7 @@ public final class Project {
      * @param addUris URIs of files to add
      * @param removeUris URIs of files to remove
      */
-    public void updateFiles(List<String> addUris, List<String> removeUris) {
+    public void updateFiles(Collection<String> addUris, Collection<String> removeUris) {
         if (!modelResult.getResult().isPresent()) {
             LOGGER.severe("Attempted to update files in project with no model: " + addUris + " " + removeUris);
             return;

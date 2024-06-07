@@ -6,6 +6,7 @@
 package software.amazon.smithy.lsp;
 
 import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
 import org.hamcrest.CustomTypeSafeMatcher;
@@ -69,6 +70,20 @@ public final class LspMatchers {
                     description.appendDescriptionOf(expected)
                             .appendText("was " + document.borrowRange(range).toString());
                 }
+            }
+        };
+    }
+
+    public static Matcher<Diagnostic> diagnosticWithMessage(Matcher<String> message) {
+        return new CustomTypeSafeMatcher<Diagnostic>("has matching message") {
+            @Override
+            protected boolean matchesSafely(Diagnostic item) {
+                return message.matches(item.getMessage());
+            }
+
+            @Override
+            public void describeMismatchSafely(Diagnostic event, Description description) {
+                description.appendDescriptionOf(message).appendText("was " + event.getMessage());
             }
         };
     }

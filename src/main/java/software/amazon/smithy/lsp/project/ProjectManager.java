@@ -8,6 +8,7 @@ package software.amazon.smithy.lsp.project;
 import java.util.HashMap;
 import java.util.Map;
 import org.eclipse.lsp4j.InitializeParams;
+import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.UriAdapter;
 
 /**
@@ -53,22 +54,17 @@ public final class ProjectManager {
      * @return The project the given {@code uri} belongs to
      */
     public Project getProject(String uri) {
-        // We might be in a state where a file was added to the main project,
-        // but was opened before the project loaded. This would result in it
-        // being placed in a detached project. Removing it here is basically
-        // like removing it lazily, although it does feel a little hacky.
-        if (mainProject.getSmithyFiles().containsKey(UriAdapter.toPath(uri)) && detached.containsKey(uri)) {
-            removeDetachedProject(uri);
-        }
-
-        if (detached.containsKey(uri)) {
+        String path = UriAdapter.toPath(uri);
+        if (isDetached(uri)) {
             return detached.get(uri);
+        }  else if (mainProject.getSmithyFiles().containsKey(path)) {
+            return mainProject;
+        } else {
+            // Note: In practice, this shouldn't really happen because the server shouldn't
+            //  be tracking any files that aren't attached to a project. But for testing, this
+            //  is useful to ensure that fact.
+            return null;
         }
-
-        // TODO: Maybe this should take care of loading the detached project, so
-        //  we can assume in other places that any given file always belongs to
-        //  some project.
-        return mainProject;
     }
 
     /**
@@ -76,6 +72,15 @@ public final class ProjectManager {
      * @return Whether the given {@code uri} is of a file in a detached project
      */
     public boolean isDetached(String uri) {
+        // We might be in a state where a file was added to the main project,
+        // but was opened before the project loaded. This would result in it
+        // being placed in a detached project. Removing it here is basically
+        // like removing it lazily, although it does feel a little hacky.
+        String path = UriAdapter.toPath(uri);
+        if (mainProject.getSmithyFiles().containsKey(path) && detached.containsKey(uri)) {
+            removeDetachedProject(uri);
+        }
+
         return detached.containsKey(uri);
     }
 
@@ -96,5 +101,18 @@ public final class ProjectManager {
      */
     public Project removeDetachedProject(String uri) {
         return detached.remove(uri);
+    }
+
+    /**
+     * @param uri The URI of the file to get the document of
+     * @return The {@link Document} corresponding to the given {@code uri}, if
+     *  it exists in any projects, otherwise {@code null}.
+     */
+    public Document getDocument(String uri) {
+        Project project = getProject(uri);
+        if (project != null) {
+            return project.getDocument(uri);
+        }
+        return null;
     }
 }

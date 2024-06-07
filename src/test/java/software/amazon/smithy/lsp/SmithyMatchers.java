@@ -36,7 +36,7 @@ public final class SmithyMatchers {
         };
     }
 
-    public static Matcher<ValidationEvent> hasMessage(Matcher<String> message) {
+    public static Matcher<ValidationEvent> eventWithMessage(Matcher<String> message) {
         return new CustomTypeSafeMatcher<ValidationEvent>("has matching message") {
             @Override
             protected boolean matchesSafely(ValidationEvent item) {

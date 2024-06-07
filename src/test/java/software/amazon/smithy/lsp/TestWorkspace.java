@@ -24,9 +24,11 @@ import software.amazon.smithy.model.node.NodeMapper;
 public class TestWorkspace {
     private static final NodeMapper MAPPER = new NodeMapper();
     private final Path root;
+    private SmithyBuildConfig config;
 
-    private TestWorkspace(Path root) {
+    private TestWorkspace(Path root, SmithyBuildConfig config) {
         this.root = root;
+        this.config = config;
     }
 
     /**
@@ -34,6 +36,10 @@ public class TestWorkspace {
      */
     public Path getRoot() {
         return root;
+    }
+
+    public SmithyBuildConfig getConfig() {
+        return config;
     }
 
     /**
@@ -70,6 +76,11 @@ public class TestWorkspace {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public void updateConfig(SmithyBuildConfig newConfig) {
+        writeConfig(root, newConfig);
+        this.config = newConfig;
     }
 
     /**
@@ -222,15 +233,24 @@ public class TestWorkspace {
                             .imports(imports)
                             .build();
                 }
-                String configString = Node.prettyPrintJson(MAPPER.serialize(config));
-                Files.write(root.resolve("smithy-build.json"), configString.getBytes(StandardCharsets.UTF_8));
+                writeConfig(root, config);
 
                 writeModels(root);
 
-                return new TestWorkspace(root);
+                return new TestWorkspace(root, config);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
+        }
+    }
+
+    private static void writeConfig(Path root, SmithyBuildConfig config) {
+        String configString = Node.prettyPrintJson(MAPPER.serialize(config));
+        Path configPath = root.resolve("smithy-build.json");
+        try {
+            Files.write(configPath, configString.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 }

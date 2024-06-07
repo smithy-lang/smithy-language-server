@@ -15,15 +15,18 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static software.amazon.smithy.lsp.LspMatchers.diagnosticWithMessage;
 import static software.amazon.smithy.lsp.LspMatchers.hasLabel;
 import static software.amazon.smithy.lsp.LspMatchers.hasText;
 import static software.amazon.smithy.lsp.LspMatchers.makesEditedDocument;
-import static software.amazon.smithy.lsp.SmithyMatchers.hasMessage;
+import static software.amazon.smithy.lsp.SmithyMatchers.eventWithMessage;
+import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithId;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +48,7 @@ import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextEdit;
@@ -470,13 +474,13 @@ public class SmithyLanguageServerTest {
         server.getLifecycleManager().getTask(uri).get();
 
         assertThat(server.getProject().getModelResult().getValidationEvents(),
-                containsInAnyOrder(hasMessage(containsString("Error creating trait"))));
+                containsInAnyOrder(eventWithMessage(containsString("Error creating trait"))));
 
         DidSaveTextDocumentParams didSaveParams = new RequestBuilders.DidSave().uri(uri).build();
         server.didSave(didSaveParams);
 
         assertThat(server.getProject().getModelResult().getValidationEvents(),
-                containsInAnyOrder(hasMessage(containsString("Error creating trait"))));
+                containsInAnyOrder(eventWithMessage(containsString("Error creating trait"))));
     }
 
     @Test
@@ -873,11 +877,12 @@ public class SmithyLanguageServerTest {
                 .text("$")
                 .build());
 
-        // Make sure the task is running, then wait for it (what if it's already done?)
+        // Make sure the task is running, then wait for it
         CompletableFuture<Void> future = server.getLifecycleManager().getTask(uri);
         assertThat(future, notNullValue());
         future.get();
 
+        assertThat(server.getLifecycleManager().isManaged(uri), is(true));
         assertThat(server.getProjects().isDetached(uri), is(false));
         assertThat(server.getProjects().getMainProject().getSmithyFile(uri), notNullValue());
         assertThat(server.getProjects().getMainProject().getDocument(uri), notNullValue());
@@ -908,7 +913,8 @@ public class SmithyLanguageServerTest {
                 .event(uri, FileChangeType.Deleted)
                 .build());
 
-        assertThat(server.getProjects().getProject(uri).getSmithyFile(uri), nullValue());
+        assertThat(server.getLifecycleManager().isManaged(uri), is(false));
+        assertThat(server.getProjects().getDocument(uri), nullValue());
     }
 
     @Test
@@ -928,16 +934,31 @@ public class SmithyLanguageServerTest {
                 .text(modelText)
                 .build());
 
+        assertThat(server.getLifecycleManager().isManaged(uri), is(true));
         assertThat(server.getProjects().isDetached(uri), is(true));
+        assertThat(server.getProjects().getProject(uri), notNullValue());
 
         String movedFilename = "model/main.smithy";
         workspace.moveModel(filename, movedFilename);
         String movedUri = workspace.getUri(movedFilename);
+        server.didClose(RequestBuilders.didClose()
+                .uri(uri)
+                .build());
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(movedUri)
+                .text(modelText)
+                .build());
         server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(uri, FileChangeType.Deleted)
                 .event(movedUri, FileChangeType.Created)
                 .build());
 
+        assertThat(server.getLifecycleManager().isManaged(uri), is(false));
+        assertThat(server.getProjects().isDetached(uri), is(false));
+        assertThat(server.getProjects().getProject(uri), nullValue());
+        assertThat(server.getLifecycleManager().isManaged(movedUri), is(true));
         assertThat(server.getProjects().isDetached(movedUri), is(false));
+        assertThat(server.getProjects().getProject(movedUri), notNullValue());
     }
 
     @Test
@@ -956,7 +977,10 @@ public class SmithyLanguageServerTest {
                 .uri(uri)
                 .text(modelText)
                 .build());
+
+        assertThat(server.getLifecycleManager().isManaged(uri), is(true));
         assertThat(server.getProjects().isDetached(uri), is(false));
+        assertThat(server.getProjects().getProject(uri), notNullValue());
 
         String movedFilename = "main.smithy";
         workspace.moveModel(filename, movedFilename);
@@ -973,7 +997,12 @@ public class SmithyLanguageServerTest {
                 .event(uri, FileChangeType.Deleted)
                 .build());
 
+        assertThat(server.getLifecycleManager().isManaged(uri), is(false));
+        assertThat(server.getProjects().isDetached(uri), is(false));
+        assertThat(server.getProjects().getProject(uri), nullValue());
+        assertThat(server.getLifecycleManager().isManaged(movedUri), is(true));
         assertThat(server.getProjects().isDetached(movedUri), is(true));
+        assertThat(server.getProjects().getProject(movedUri), notNullValue());
     }
 
     @Test
@@ -1001,7 +1030,10 @@ public class SmithyLanguageServerTest {
                 .uri(uri)
                 .text(modelText)
                 .build());
+
+        assertThat(server.getLifecycleManager().isManaged(uri), is(true));
         assertThat(server.getProjects().isDetached(uri), is(false));
+        assertThat(server.getProjects().getProject(uri), notNullValue());
     }
 
     @Test
@@ -1109,6 +1141,159 @@ public class SmithyLanguageServerTest {
         assertThat(metadataAfter, hasKey("bar"));
         assertThat(metadataAfter.get("foo"), instanceOf(ArrayNode.class));
         assertThat(metadataAfter.get("foo").expectArrayNode().size(), equalTo(2));
+    }
+
+    // TODO: Somehow this is flaky
+    @Test
+    public void addingOpenedDetachedFile() throws Exception {
+        TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
+        String filename = "main.smithy";
+        String modelText = "$version: \"2\"\n"
+                           + "\n"
+                           + "namespace com.foo\n"
+                           + "\n"
+                           + "string Foo\n";
+        workspace.addModel(filename, modelText);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String uri = workspace.getUri("main.smithy");
+
+        assertThat(server.getLifecycleManager().getManagedDocuments(), not(hasItem(uri)));
+        assertThat(server.getProjects().isDetached(uri), is(false));
+        assertThat(server.getProjects().getProject(uri), nullValue());
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text(modelText)
+                .build());
+
+        assertThat(server.getLifecycleManager().getManagedDocuments(), hasItem(uri));
+        assertThat(server.getProjects().isDetached(uri), is(true));
+        assertThat(server.getProjects().getProject(uri), notNullValue());
+
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri)
+                .range(RangeAdapter.point(3, 0))
+                .text("string Bar\n")
+                .build());
+
+        // Add the already-opened file to the project
+        List<String> updatedSources = new ArrayList<>(workspace.getConfig().getSources());
+        updatedSources.add("main.smithy");
+        workspace.updateConfig(workspace.getConfig()
+                .toBuilder()
+                .sources(updatedSources)
+                .build());
+
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(workspace.getUri("smithy-build.json"), FileChangeType.Changed)
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        assertThat(server.getLifecycleManager().getManagedDocuments(), hasItem(uri));
+        assertThat(server.getProjects().isDetached(uri), is(false));
+        assertThat(server.getProject().getSmithyFile(uri), notNullValue());
+        assertThat(server.getProject().getModelResult().unwrap(), hasShapeWithId("com.foo#Foo"));
+        assertThat(server.getProject().getModelResult().unwrap(), hasShapeWithId("com.foo#Bar"));
+    }
+
+    @Test
+    public void movingDetachedFile() throws Exception {
+        TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
+        String filename = "main.smithy";
+        String modelText = "$version: \"2\"\n"
+                           + "\n"
+                           + "namespace com.foo\n"
+                           + "\n"
+                           + "string Foo\n";
+        workspace.addModel(filename, modelText);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String uri = workspace.getUri(filename);
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text(modelText)
+                .build());
+
+        // Moving to an also detached file - the server doesn't send DidChangeWatchedFiles
+        String movedFilename = "main-2.smithy";
+        workspace.moveModel(filename, movedFilename);
+        String movedUri = workspace.getUri(movedFilename);
+
+        server.didClose(RequestBuilders.didClose()
+                .uri(uri)
+                .build());
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(movedUri)
+                .text(modelText)
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        assertThat(server.getLifecycleManager().isManaged(uri), is(false));
+        assertThat(server.getProjects().getProject(uri), nullValue());
+        assertThat(server.getProjects().isDetached(uri), is(false));
+        assertThat(server.getLifecycleManager().isManaged(movedUri), is(true));
+        assertThat(server.getProjects().getProject(movedUri), notNullValue());
+        assertThat(server.getProjects().isDetached(movedUri), is(true));
+    }
+
+    @Test
+    public void updatesDiagnosticsAfterReload() throws Exception {
+        TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
+
+        String filename1 = "model/main.smithy";
+        String modelText1 = "$version: \"2\"\n"
+                            + "\n"
+                            + "namespace com.foo\n"
+                            + "\n"
+                            + "// using an unknown trait\n"
+                            + "@foo\n"
+                            + "string Bar\n";
+        workspace.addModel(filename1, modelText1);
+
+        StubClient client = new StubClient();
+        SmithyLanguageServer server = initFromWorkspace(workspace, client);
+
+        String uri1 = workspace.getUri(filename1);
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri1)
+                .text(modelText1)
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        List<PublishDiagnosticsParams> publishedDiagnostics1 = client.diagnostics;
+        assertThat(publishedDiagnostics1, hasSize(1));
+        assertThat(publishedDiagnostics1.get(0).getUri(), equalTo(uri1));
+        assertThat(publishedDiagnostics1.get(0).getDiagnostics(), containsInAnyOrder(
+                diagnosticWithMessage(containsString("Model.UnresolvedTrait"))));
+
+        String filename2 = "model/trait.smithy";
+        String modelText2 = "$version: \"2\"\n"
+                            + "\n"
+                            + "namespace com.foo\n"
+                            + "\n"
+                            + "// adding the missing trait\n"
+                            + "@trait\n"
+                            + "structure foo {}\n";
+        workspace.addModel(filename2, modelText2);
+
+        String uri2 = workspace.getUri(filename2);
+
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(uri2, FileChangeType.Created)
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        List<PublishDiagnosticsParams> publishedDiagnostics2 = client.diagnostics;
+        assertThat(publishedDiagnostics2, hasSize(2)); // sent more diagnostics
+        assertThat(publishedDiagnostics2.get(1).getUri(), equalTo(uri1)); // sent diagnostics for opened file
+        assertThat(publishedDiagnostics2.get(1).getDiagnostics(), empty()); // adding the trait cleared the event
     }
 
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {

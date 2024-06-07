@@ -12,7 +12,7 @@ import org.eclipse.lsp4j.UnregistrationParams;
 import org.eclipse.lsp4j.services.LanguageClient;
 
 public final class StubClient implements LanguageClient {
-    public List<PublishDiagnosticsParams> diagnostics = new ArrayList<>();
+    public final List<PublishDiagnosticsParams> diagnostics = new ArrayList<>();
     public List<MessageParams> shown = new ArrayList<>();
     public List<MessageParams> logged = new ArrayList<>();
 
@@ -27,7 +27,9 @@ public final class StubClient implements LanguageClient {
 
     @Override
     public void publishDiagnostics(PublishDiagnosticsParams diagnostics) {
-        this.diagnostics.add(diagnostics);
+        synchronized (this.diagnostics) {
+            this.diagnostics.add(diagnostics);
+        }
     }
 
     @Override

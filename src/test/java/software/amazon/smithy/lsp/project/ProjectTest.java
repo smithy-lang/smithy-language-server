@@ -6,9 +6,6 @@
 package software.amazon.smithy.lsp.project;
 
 import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.CoreMatchers.hasItems;
@@ -16,8 +13,11 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.hasSize;
+import static software.amazon.smithy.lsp.SmithyMatchers.eventWithMessage;
 import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithId;
-import static software.amazon.smithy.lsp.SmithyMatchers.hasMessage;
 import static software.amazon.smithy.lsp.document.DocumentTest.string;
 
 import java.nio.file.Path;
@@ -182,7 +182,7 @@ public class ProjectTest {
                 containsString("alloy-core.jar!/META-INF/smithy/uuid.smithy")));
 
         assertThat(project.getModelResult().isBroken(), is(true));
-        assertThat(project.getModelResult().getValidationEvents(Severity.ERROR), hasItem(hasMessage(containsString("Proto index 1"))));
+        assertThat(project.getModelResult().getValidationEvents(Severity.ERROR), hasItem(eventWithMessage(containsString("Proto index 1"))));
 
         assertThat(project.getModelResult().getResult().isPresent(), is(true));
         Model model = project.getModelResult().getResult().get();
@@ -208,11 +208,12 @@ public class ProjectTest {
     }
 
     @Test
-    public void failsLoadingProjectWithNonExistingSource() {
+    public void doesntFailLoadingProjectWithNonExistingSource() {
         Path root = Paths.get(getClass().getResource("broken/source-doesnt-exist").getPath());
         Result<Project, List<Exception>> result = ProjectLoader.load(root);
 
-        assertThat(result.isErr(), is(true));
+        assertThat(result.isErr(), is(false));
+        assertThat(result.unwrap().getSmithyFiles().size(), equalTo(1)); // still have the prelude
     }
 
 
