@@ -106,7 +106,7 @@ public class TestWorkspace {
     /**
      * @param models Strings of the models to create in the workspace
      * @return A workspace with n models, each "model-n.smithy", with their given contents,
-     *  and a smithy-build.json with sources = [..."model-n.smithy"]
+     *  and a smithy-build.json with sources = ["model-0.smithy", ..., "model-n.smithy"]
      */
     public static TestWorkspace multipleModels(String... models) {
         Builder builder = builder();

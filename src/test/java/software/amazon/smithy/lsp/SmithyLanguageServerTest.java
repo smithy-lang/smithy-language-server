@@ -4,6 +4,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasKey;
@@ -20,7 +21,9 @@ import static software.amazon.smithy.lsp.LspMatchers.hasLabel;
 import static software.amazon.smithy.lsp.LspMatchers.hasText;
 import static software.amazon.smithy.lsp.LspMatchers.makesEditedDocument;
 import static software.amazon.smithy.lsp.SmithyMatchers.eventWithMessage;
+import static software.amazon.smithy.lsp.SmithyMatchers.hasValue;
 import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithId;
+import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithIdAndTraits;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -55,6 +58,7 @@ import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.hamcrest.Matcher;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.document.Document;
@@ -1294,6 +1298,116 @@ public class SmithyLanguageServerTest {
         assertThat(publishedDiagnostics2, hasSize(2)); // sent more diagnostics
         assertThat(publishedDiagnostics2.get(1).getUri(), equalTo(uri1)); // sent diagnostics for opened file
         assertThat(publishedDiagnostics2.get(1).getDiagnostics(), empty()); // adding the trait cleared the event
+    }
+
+    @Test
+    public void invalidSyntaxModelPartiallyLoads() {
+        String modelText1 = "$version: \"2\"\n"
+                            + "namespace com.foo\n"
+                            + "string Foo\n";
+        String modelText2 = "string Bar\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String uri = workspace.getUri("model-0.smithy");
+
+        assertThat(server.getProject().getSmithyFile(uri), notNullValue());
+        assertThat(server.getProject().getModelResult().isBroken(), is(true));
+        assertThat(server.getProject().getModelResult().getResult().isPresent(), is(true));
+        assertThat(server.getProject().getModelResult().getResult().get(), hasShapeWithId("com.foo#Foo"));
+    }
+
+    @Test
+    public void invalidSyntaxDetachedProjectBecomesValid() throws Exception {
+        TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String filename = "main.smithy";
+        String modelText = "string Foo\n";
+        workspace.addModel(filename, modelText);
+
+        String uri = workspace.getUri(filename);
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text(modelText)
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        assertThat(server.getProjects().isDetached(uri), is(true));
+        assertThat(server.getProjects().getProject(uri), notNullValue());
+        assertThat(server.getProjects().getProject(uri).getModelResult().isBroken(), is(true));
+        assertThat(server.getProjects().getProject(uri).getModelResult().getResult().isPresent(), is(true));
+        assertThat(server.getProjects().getProject(uri).getSmithyFiles().keySet(), hasItem(endsWith(filename)));
+
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri)
+                .range(RangeAdapter.origin())
+                .text("$version: \"2\"\nnamespace com.foo\n")
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        assertThat(server.getProjects().isDetached(uri), is(true));
+        assertThat(server.getProjects().getProject(uri), notNullValue());
+        assertThat(server.getProjects().getProject(uri).getModelResult().isBroken(), is(false));
+        assertThat(server.getProjects().getProject(uri).getModelResult().getResult().isPresent(), is(true));
+        assertThat(server.getProjects().getProject(uri).getSmithyFiles().keySet(), hasItem(endsWith(filename)));
+        assertThat(server.getProjects().getProject(uri).getModelResult().unwrap(), hasShapeWithId("com.foo#Foo"));
+    }
+
+    @Test
+    @Disabled
+    public void todoCheckApplysInPartialLoad() throws Exception {
+        String modelText1 = "$version: \"2\"\n"
+                            + "namespace com.foo\n"
+                            + "string Foo\n";
+        String modelText2 = "$version: \"2\"\n"
+                            + "namespace com.foo\n"
+                            + "string Bar\n"
+                            + "apply Foo @length(min: 1)\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String uri2 = workspace.getUri("model-1.smithy");
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri2)
+                .text(modelText2)
+                .build());
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri2)
+                .range(RangeAdapter.point(3, 23))
+                .text("2")
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        assertThat(server.getProject().getModelResult().getResult().isPresent(), is(true));
+        assertThat(server.getProject().getModelResult(), hasValue(hasShapeWithId("com.foo#Bar")));
+        assertThat(server.getProject().getModelResult(), hasValue(
+                hasShapeWithIdAndTraits("com.foo#Foo", "smithy.api#length")));
+
+        String uri1 = workspace.getUri("model-0.smithy");
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri1)
+                .text(modelText1)
+                .build());
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri1)
+                .range(RangeAdapter.point(3, 0))
+                .text("string Another\n")
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        assertThat(server.getProject().getModelResult().getResult().isPresent(), is(true));
+        assertThat(server.getProject().getModelResult(), hasValue(hasShapeWithId("com.foo#Bar")));
+        assertThat(server.getProject().getModelResult(), hasValue(hasShapeWithId("com.foo#Baz")));
+        assertThat(server.getProject().getModelResult(), hasValue(hasShapeWithId("com.foo#Another")));
+        assertThat(server.getProject().getModelResult(), hasValue(
+                hasShapeWithIdAndTraits("com.foo#Foo", "smithy.api#length")));
     }
 
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {
