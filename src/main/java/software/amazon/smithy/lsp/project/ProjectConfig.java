@@ -29,6 +29,10 @@ final class ProjectConfig {
         this.mavenConfig = builder.mavenConfig;
     }
 
+    static ProjectConfig empty() {
+        return builder().build();
+    }
+
     static Builder builder() {
         return new Builder();
     }

@@ -21,10 +21,19 @@ public final class SmithyMatchers {
     private SmithyMatchers() {}
 
     public static <T> Matcher<ValidatedResult<T>> hasValue(Matcher<T> matcher) {
-        return new CustomTypeSafeMatcher<ValidatedResult<T>>("a validated result with a value") {
+        return new CustomTypeSafeMatcher<ValidatedResult<T>>("A validated result with value " + matcher.toString()) {
             @Override
             protected boolean matchesSafely(ValidatedResult<T> item) {
                 return item.getResult().isPresent() && matcher.matches(item.getResult().get());
+            }
+
+            @Override
+            public void describeMismatchSafely(ValidatedResult<T> item, Description description) {
+                if (item.getResult().isPresent()) {
+                    matcher.describeMismatch(item.getResult().get(), description);
+                } else {
+                    description.appendText("Expected a value but result was empty.");
+                }
             }
         };
     }
@@ -42,23 +51,6 @@ public final class SmithyMatchers {
                         .map(Shape::toShapeId)
                         .collect(Collectors.toSet());
                 description.appendText("had only these non-prelude shapes: " + nonPreludeIds);
-            }
-        };
-    }
-
-    public static Matcher<Model> hasShapeWithIdAndTraits(String id, String... traitIds) {
-        return new CustomTypeSafeMatcher<Model>("a model with a shape with id " + id + " that has traits: " + String.join(",", traitIds)) {
-            @Override
-            protected boolean matchesSafely(Model item) {
-                if (!item.getShape(ShapeId.from(id)).isPresent()) {
-                    return false;
-                }
-                Shape shape = item.expectShape(ShapeId.from(id));
-                boolean hasTraits = true;
-                for (String traitId : traitIds) {
-                    hasTraits = hasTraits && shape.hasTrait(traitId);
-                }
-                return hasTraits;
             }
         };
     }

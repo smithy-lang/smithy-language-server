@@ -205,6 +205,7 @@ public final class ProjectLoader {
 
         return Result.ok(projectBuilder.smithyFiles(smithyFiles)
                 .perFileMetadata(computePerFileMetadata(modelResult))
+                .smithyFileDependenciesIndex(SmithyFileDependenciesIndex.compute(modelResult))
                 .build());
     }
 

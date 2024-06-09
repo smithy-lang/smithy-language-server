@@ -22,8 +22,8 @@ import static software.amazon.smithy.lsp.LspMatchers.hasText;
 import static software.amazon.smithy.lsp.LspMatchers.makesEditedDocument;
 import static software.amazon.smithy.lsp.SmithyMatchers.eventWithMessage;
 import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithId;
-import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithIdAndTraits;
 import static software.amazon.smithy.lsp.SmithyMatchers.hasValue;
+import static software.amazon.smithy.lsp.UtilMatchers.anOptionalOf;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -58,13 +58,15 @@ import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.hamcrest.Matcher;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.RangeAdapter;
 import software.amazon.smithy.model.node.ArrayNode;
 import software.amazon.smithy.model.node.Node;
+import software.amazon.smithy.model.shapes.Shape;
+import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.traits.LengthTrait;
 
 public class SmithyLanguageServerTest {
     @Test
@@ -953,7 +955,6 @@ public class SmithyLanguageServerTest {
                 .text(modelText)
                 .build());
         server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
-                .event(uri, FileChangeType.Deleted)
                 .event(movedUri, FileChangeType.Created)
                 .build());
 
@@ -1452,8 +1453,7 @@ public class SmithyLanguageServerTest {
     }
 
     @Test
-    @Disabled
-    public void todoCheckApplysInPartialLoad() throws Exception {
+    public void appliedTraitsAreMaintainedInPartialLoad() throws Exception {
         String modelText1 = "$version: \"2\"\n"
                             + "namespace com.foo\n"
                             + "string Foo\n";
@@ -1472,16 +1472,16 @@ public class SmithyLanguageServerTest {
                 .build());
         server.didChange(RequestBuilders.didChange()
                 .uri(uri2)
-                .range(RangeAdapter.point(3, 23))
+                .range(RangeAdapter.of(3, 23, 3, 24))
                 .text("2")
                 .build());
 
         server.getLifecycleManager().waitForAllTasks();
 
-        assertThat(server.getProject().getModelResult().getResult().isPresent(), is(true));
         assertThat(server.getProject().getModelResult(), hasValue(hasShapeWithId("com.foo#Bar")));
-        assertThat(server.getProject().getModelResult(), hasValue(
-                hasShapeWithIdAndTraits("com.foo#Foo", "smithy.api#length")));
+        Shape foo = server.getProject().getModelResult().getResult().get().expectShape(ShapeId.from("com.foo#Foo"));
+        assertThat(foo.getIntroducedTraits().keySet(), containsInAnyOrder(LengthTrait.ID));
+        assertThat(foo.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(2L)));
 
         String uri1 = workspace.getUri("model-0.smithy");
 
@@ -1497,12 +1497,11 @@ public class SmithyLanguageServerTest {
 
         server.getLifecycleManager().waitForAllTasks();
 
-        assertThat(server.getProject().getModelResult().getResult().isPresent(), is(true));
         assertThat(server.getProject().getModelResult(), hasValue(hasShapeWithId("com.foo#Bar")));
-        assertThat(server.getProject().getModelResult(), hasValue(hasShapeWithId("com.foo#Baz")));
         assertThat(server.getProject().getModelResult(), hasValue(hasShapeWithId("com.foo#Another")));
-        assertThat(server.getProject().getModelResult(), hasValue(
-                hasShapeWithIdAndTraits("com.foo#Foo", "smithy.api#length")));
+        foo = server.getProject().getModelResult().getResult().get().expectShape(ShapeId.from("com.foo#Foo"));
+        assertThat(foo.getIntroducedTraits().keySet(), containsInAnyOrder(LengthTrait.ID));
+        assertThat(foo.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(2L)));
     }
 
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {

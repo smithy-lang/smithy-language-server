@@ -27,7 +27,9 @@ import software.amazon.smithy.model.shapes.Shape;
 public final class SmithyFile {
     private final String path;
     private final Document document;
-    private final Set<Shape> shapes;
+    // TODO: If we have more complex use-cases for partially updating SmithyFile, we
+    //  could use a toBuilder()
+    private Set<Shape> shapes;
     private final DocumentNamespace namespace;
     private final DocumentImports imports;
     private final Map<Position, DocumentShape> documentShapes;
@@ -62,6 +64,10 @@ public final class SmithyFile {
      */
     public Set<Shape> getShapes() {
         return shapes;
+    }
+
+    void setShapes(Set<Shape> shapes) {
+        this.shapes = shapes;
     }
 
     /**

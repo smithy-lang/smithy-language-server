@@ -18,6 +18,7 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasSize;
 import static software.amazon.smithy.lsp.SmithyMatchers.eventWithMessage;
 import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithId;
+import static software.amazon.smithy.lsp.UtilMatchers.anOptionalOf;
 import static software.amazon.smithy.lsp.document.DocumentTest.string;
 
 import java.nio.file.Path;
@@ -25,11 +26,17 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import software.amazon.smithy.lsp.TestWorkspace;
+import software.amazon.smithy.lsp.document.Document;
+import software.amazon.smithy.lsp.protocol.RangeAdapter;
 import software.amazon.smithy.lsp.protocol.UriAdapter;
 import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.traits.LengthTrait;
+import software.amazon.smithy.model.traits.PatternTrait;
+import software.amazon.smithy.model.traits.TagsTrait;
 import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
@@ -250,5 +257,339 @@ public class ProjectTest {
                 equalTo(root.resolve("model3/three.smithy").toString()),
                 containsString(root.resolve("smithy-test-traits.jar") + "!/META-INF/smithy/smithy.test.json")));
         assertThat(project.getDependencies(), hasItem(root.resolve("smithy-test-traits.jar")));
+    }
+
+    @Test
+    public void changeFileApplyingSimpleTrait() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Foo\n"
+                    + "apply Bar @length(min: 1)\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("length"), is(true));
+        assertThat(bar.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+
+        project.updateModelWithoutValidating(uri);
+
+        bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("length"), is(true));
+        assertThat(bar.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+    }
+
+    @Test
+    public void changeFileApplyingListTrait() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Foo\n"
+                    + "apply Bar @tags([\"foo\"])\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("tags"), is(true));
+        assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo"));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+
+        project.updateModelWithoutValidating(uri);
+
+        bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("tags"), is(true));
+        assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo"));
+    }
+
+    @Test
+    public void changeFileApplyingListTraitWithUnrelatedDependencies() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Foo\n"
+                    + "apply Bar @tags([\"foo\"])\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n"
+                    + "string Baz\n";
+        String m3 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "apply Baz @length(min: 1)\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        Shape baz = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Baz"));
+        assertThat(bar.hasTrait("tags"), is(true));
+        assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo"));
+        assertThat(baz.hasTrait("length"), is(true));
+        assertThat(baz.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+
+        project.updateModelWithoutValidating(uri);
+
+        bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        baz = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Baz"));
+        assertThat(bar.hasTrait("tags"), is(true));
+        assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo"));
+        assertThat(baz.hasTrait("length"), is(true));
+        assertThat(baz.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+    }
+
+    @Test
+    public void changingFileApplyingListTraitWithRelatedDependencies() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Foo\n"
+                    + "apply Bar @tags([\"foo\"])\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n";
+        String m3 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "apply Bar @length(min: 1)\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("tags"), is(true));
+        assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo"));
+        assertThat(bar.hasTrait("length"), is(true));
+        assertThat(bar.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+
+        project.updateModelWithoutValidating(uri);
+
+        bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("tags"), is(true));
+        assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo"));
+        assertThat(bar.hasTrait("length"), is(true));
+        assertThat(bar.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+    }
+
+    @Test
+    public void changingFileApplyingListTraitWithRelatedArrayTraitDependencies() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Foo\n"
+                    + "apply Bar @tags([\"foo\"])\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n";
+        String m3 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "apply Bar @tags([\"bar\"])\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("tags"), is(true));
+        assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo", "bar"));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+
+        project.updateModelWithoutValidating(uri);
+
+        bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("tags"), is(true));
+        assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo", "bar"));
+    }
+
+    @Test
+    public void changingFileWithDependencies() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Foo\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n"
+                    + "apply Foo @length(min: 1)\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape foo = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Foo"));
+        assertThat(foo.hasTrait("length"), is(true));
+        assertThat(foo.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+
+        project.updateModelWithoutValidating(uri);
+
+        foo = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Foo"));
+        assertThat(foo.hasTrait("length"), is(true));
+        assertThat(foo.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+    }
+
+    @Test
+    public void changingFileWithArrayDependencies() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Foo\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n"
+                    + "apply Foo @tags([\"foo\"])\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape foo = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Foo"));
+        assertThat(foo.hasTrait("tags"), is(true));
+        assertThat(foo.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo"));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+
+        project.updateModelWithoutValidating(uri);
+
+        foo = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Foo"));
+        assertThat(foo.hasTrait("tags"), is(true));
+        assertThat(foo.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo"));
+    }
+
+    @Test
+    public void changingFileWithMixedArrayDependencies() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "@tags([\"foo\"])\n"
+                    + "string Foo\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n"
+                    + "apply Foo @tags([\"foo\"])\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape foo = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Foo"));
+        assertThat(foo.hasTrait("tags"), is(true));
+        assertThat(foo.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo", "foo"));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+
+        project.updateModelWithoutValidating(uri);
+
+        foo = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Foo"));
+        assertThat(foo.hasTrait("tags"), is(true));
+        assertThat(foo.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo", "foo"));
+    }
+
+    @Test
+    public void changingFileWithArrayDependenciesWithDependencies() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Foo\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n"
+                    + "apply Foo @tags([\"foo\"])\n";
+        String m3 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "apply Bar @length(min: 1)\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape foo = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Foo"));
+        Shape bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(foo.hasTrait("tags"), is(true));
+        assertThat(foo.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo"));
+        assertThat(bar.hasTrait("length"), is(true));
+        assertThat(bar.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+
+        project.updateModelWithoutValidating(uri);
+
+        foo = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Foo"));
+        bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(foo.hasTrait("tags"), is(true));
+        assertThat(foo.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo"));
+        assertThat(bar.hasTrait("length"), is(true));
+        assertThat(bar.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+    }
+
+    @Test
+    public void removingSimpleApply() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "apply Bar @length(min: 1)\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n";
+        String m3 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "apply Bar @pattern(\"a\")\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("pattern"), is(true));
+        assertThat(bar.expectTrait(PatternTrait.class).getPattern().pattern(), equalTo("a"));
+        assertThat(bar.hasTrait("length"), is(true));
+        assertThat(bar.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(1L)));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.lineSpan(2, 0, document.lineEnd(2)), "");
+
+        project.updateModelWithoutValidating(uri);
+
+        bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("pattern"), is(true));
+        assertThat(bar.expectTrait(PatternTrait.class).getPattern().pattern(), equalTo("a"));
+        assertThat(bar.hasTrait("length"), is(false));
+    }
+
+    @Test
+    public void removingArrayApply() {
+        String m1 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "apply Bar @tags([\"foo\"])\n";
+        String m2 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "string Bar\n";
+        String m3 = "$version: \"2\"\n"
+                    + "namespace com.foo\n"
+                    + "apply Bar @tags([\"bar\"])\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
+        Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
+
+        Shape bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("tags"), is(true));
+        assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("foo", "bar"));
+
+        String uri = workspace.getUri("model-0.smithy");
+        Document document = project.getDocument(uri);
+        document.applyEdit(RangeAdapter.lineSpan(2, 0, document.lineEnd(2)), "");
+
+        project.updateModelWithoutValidating(uri);
+
+        bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
+        assertThat(bar.hasTrait("tags"), is(true));
+        assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("bar"));
     }
 }
