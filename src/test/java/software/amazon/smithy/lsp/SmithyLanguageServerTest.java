@@ -21,9 +21,9 @@ import static software.amazon.smithy.lsp.LspMatchers.hasLabel;
 import static software.amazon.smithy.lsp.LspMatchers.hasText;
 import static software.amazon.smithy.lsp.LspMatchers.makesEditedDocument;
 import static software.amazon.smithy.lsp.SmithyMatchers.eventWithMessage;
-import static software.amazon.smithy.lsp.SmithyMatchers.hasValue;
 import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithId;
 import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithIdAndTraits;
+import static software.amazon.smithy.lsp.SmithyMatchers.hasValue;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -1203,6 +1203,45 @@ public class SmithyLanguageServerTest {
     }
 
     @Test
+    public void detachingOpenedFile() throws Exception {
+        String modelText = "$version: \"2\"\n"
+                           + "namespace com.foo\n"
+                           + "string Foo\n";
+        TestWorkspace workspace = TestWorkspace.singleModel(modelText);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String uri = workspace.getUri("main.smithy");
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text(modelText)
+                .build());
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri)
+                .range(RangeAdapter.point(3, 0))
+                .text("string Bar\n")
+                .build());
+
+        workspace.updateConfig(workspace.getConfig()
+                .toBuilder()
+                .sources(new ArrayList<>())
+                .build());
+
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(workspace.getUri("smithy-build.json"), FileChangeType.Changed)
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        assertThat(server.getLifecycleManager().getManagedDocuments(), hasItem(uri));
+        assertThat(server.getProjects().isDetached(uri), is(true));
+        assertThat(server.getProjects().getProject(uri), notNullValue());
+        assertThat(server.getProjects().getProject(uri).getSmithyFile(uri), notNullValue());
+        assertThat(server.getProjects().getProject(uri).getModelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
+        assertThat(server.getProjects().getProject(uri).getModelResult(), hasValue(hasShapeWithId("com.foo#Bar")));
+    }
+
+    @Test
     public void movingDetachedFile() throws Exception {
         TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
         String filename = "main.smithy";
@@ -1354,6 +1393,62 @@ public class SmithyLanguageServerTest {
         assertThat(server.getProjects().getProject(uri).getModelResult().getResult().isPresent(), is(true));
         assertThat(server.getProjects().getProject(uri).getSmithyFiles().keySet(), hasItem(endsWith(filename)));
         assertThat(server.getProjects().getProject(uri).getModelResult().unwrap(), hasShapeWithId("com.foo#Foo"));
+    }
+
+    @Test
+    public void addingDetachedFileWithInvalidSyntax() throws Exception {
+        TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String filename = "main.smithy";
+        workspace.addModel(filename, "");
+
+        String uri = workspace.getUri(filename);
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text("")
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        assertThat(server.getProjects().isDetached(uri), is(true));
+        assertThat(server.getProjects().getProject(uri), notNullValue());
+        assertThat(server.getProjects().getProject(uri).getSmithyFile(uri), notNullValue());
+
+        List<String> updatedSources = new ArrayList<>(workspace.getConfig().getSources());
+        updatedSources.add(filename);
+        workspace.updateConfig(workspace.getConfig()
+                .toBuilder()
+                .sources(updatedSources)
+                .build());
+
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(workspace.getUri("smithy-build.json"), FileChangeType.Changed)
+                .build());
+
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri)
+                .text("$version: \"2\"\n")
+                .range(RangeAdapter.origin())
+                .build());
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri)
+                .text("namespace com.foo\n")
+                .range(RangeAdapter.point(1, 0))
+                .build());
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri)
+                .text("string Foo\n")
+                .range(RangeAdapter.point(2, 0))
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
+        assertThat(server.getProjects().isDetached(uri), is(false));
+        assertThat(server.getProjects().getDetachedProjects().keySet(), empty());
+        assertThat(server.getProject().getSmithyFile(uri), notNullValue());
+        assertThat(server.getProject().getModelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
     }
 
     @Test

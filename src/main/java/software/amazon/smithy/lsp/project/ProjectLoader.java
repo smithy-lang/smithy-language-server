@@ -58,7 +58,8 @@ public final class ProjectLoader {
      * Loads a detached (single-file) {@link Project} with the given file.
      *
      * <p>Unlike {@link #load(Path, ProjectManager, Set)}, this method isn't
-     * fallible since it doesn't do any IO.
+     * fallible since it doesn't do any IO that we would want to recover an
+     * error from.
      *
      * @param uri URI of the file to load into a project
      * @param text Text of the file to load into a project
@@ -75,7 +76,9 @@ public final class ProjectLoader {
 
         Project.Builder builder = Project.builder()
                 .root(path.getParent())
-                .sources(sources)
+                .config(ProjectConfig.builder()
+                        .sources(Collections.singletonList(asPath))
+                        .build())
                 .modelResult(modelResult);
 
         Map<String, SmithyFile> smithyFiles = computeSmithyFiles(sources, modelResult, (filePath) -> {
@@ -176,19 +179,9 @@ public final class ProjectLoader {
 
         ValidatedResult<Model> modelResult = loadModelResult.unwrap();
 
-        List<Path> sources = config.getSources().stream()
-                .map(root::resolve)
-                .map(Path::normalize)
-                .collect(Collectors.toList());
-        List<Path> imports = config.getImports().stream()
-                .map(root::resolve)
-                .map(Path::normalize)
-                .collect(Collectors.toList());
-
         Project.Builder projectBuilder = Project.builder()
                 .root(root)
-                .sources(sources)
-                .imports(imports)
+                .config(config)
                 .dependencies(dependencies)
                 .modelResult(modelResult)
                 .assemblerFactory(assemblerFactory);

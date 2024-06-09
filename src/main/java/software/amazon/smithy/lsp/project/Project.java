@@ -34,8 +34,7 @@ import software.amazon.smithy.utils.IoUtils;
 public final class Project {
     private static final Logger LOGGER = Logger.getLogger(Project.class.getName());
     private final Path root;
-    private final List<Path> sources;
-    private final List<Path> imports;
+    private final ProjectConfig config;
     private final List<Path> dependencies;
     private final Map<String, SmithyFile> smithyFiles;
     private final Supplier<ModelAssembler> assemblerFactory;
@@ -45,8 +44,7 @@ public final class Project {
 
     private Project(Builder builder) {
         this.root = Objects.requireNonNull(builder.root);
-        this.sources = builder.sources;
-        this.imports = builder.imports;
+        this.config = Objects.requireNonNull(builder.config);
         this.dependencies = builder.dependencies;
         this.smithyFiles = builder.smithyFiles;
         this.modelResult = builder.modelResult;
@@ -75,19 +73,27 @@ public final class Project {
     }
 
     /**
-     * @return The paths of all Smithy sources, exactly as they were specified
-     *  in this project's smithy build configuration files
+     * @return The paths of all Smithy sources specified
+     *  in this project's smithy build configuration files,
+     *  normalized and resolved against {@link #getRoot()}.
      */
     public List<Path> getSources() {
-        return sources;
+        return config.getSources().stream()
+                .map(root::resolve)
+                .map(Path::normalize)
+                .collect(Collectors.toList());
     }
 
     /**
-     * @return The paths of all imports, exactly as they were specified in this
-     *  project's smithy build configuration files
+     * @return The paths of all Smithy imports specified
+     *  in this project's smithy build configuration files,
+     *  normalized and resolved against {@link #getRoot()}.
      */
     public List<Path> getImports() {
-        return imports;
+        return config.getImports().stream()
+                .map(root::resolve)
+                .map(Path::normalize)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -309,8 +315,7 @@ public final class Project {
 
     static final class Builder {
         private Path root;
-        private final List<Path> sources = new ArrayList<>();
-        private final List<Path> imports = new ArrayList<>();
+        private ProjectConfig config;
         private final List<Path> dependencies = new ArrayList<>();
         private final Map<String, SmithyFile> smithyFiles = new HashMap<>();
         private ValidatedResult<Model> modelResult;
@@ -325,25 +330,8 @@ public final class Project {
             return this;
         }
 
-        public Builder sources(List<Path> paths) {
-            this.sources.clear();
-            this.sources.addAll(paths);
-            return this;
-        }
-
-        public Builder addSource(Path path) {
-            this.sources.add(path);
-            return this;
-        }
-
-        public Builder imports(List<Path> paths) {
-            this.imports.clear();
-            this.imports.addAll(paths);
-            return this;
-        }
-
-        public Builder addImport(Path path) {
-            this.imports.add(path);
+        public Builder config(ProjectConfig config) {
+            this.config = config;
             return this;
         }
 
