@@ -59,6 +59,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.hamcrest.Matcher;
 import org.junit.jupiter.api.Test;
+import software.amazon.smithy.build.model.MavenConfig;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.RangeAdapter;
@@ -1502,6 +1503,54 @@ public class SmithyLanguageServerTest {
         foo = server.getProject().getModelResult().getResult().get().expectShape(ShapeId.from("com.foo#Foo"));
         assertThat(foo.getIntroducedTraits().keySet(), containsInAnyOrder(LengthTrait.ID));
         assertThat(foo.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(2L)));
+    }
+
+    @Test
+    public void brokenBuildFileEventuallyConsistent() throws Exception {
+        TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        workspace.addModel("model/main.smithy", "");
+        String uri = workspace.getUri("model/main.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text("")
+                .build());
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(uri, FileChangeType.Created)
+                .build());
+
+        String invalidDependency = "software.amazon.smithy:smithy-smoke-test-traits:[1.0, 2.0[";
+        workspace.updateConfig(workspace.getConfig().toBuilder()
+                .maven(MavenConfig.builder()
+                        .dependencies(Collections.singletonList(invalidDependency))
+                        .build())
+                .build());
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(workspace.getUri("smithy-build.json"), FileChangeType.Changed)
+                .build());
+
+        String fixed = "software.amazon.smithy:smithy-smoke-test-traits:1.49.0";
+        workspace.updateConfig(workspace.getConfig().toBuilder()
+                .maven(MavenConfig.builder()
+                        .dependencies(Collections.singletonList(fixed))
+                        .build())
+                .build());
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(workspace.getUri("smithy-build.json"), FileChangeType.Changed)
+                .build());
+
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri)
+                .text("$version: \"2\"\nnamespace com.foo\nstring Foo\n")
+                .range(RangeAdapter.origin())
+                .build());
+        server.getLifecycleManager().waitForAllTasks();
+
+        assertThat(server.getProjects().getProject(uri), notNullValue());
+        assertThat(server.getProjects().getDocument(uri), notNullValue());
+        assertThat(server.getProjects().getProject(uri).getSmithyFile(uri), notNullValue());
+        assertThat(server.getProjects().getProject(uri).getModelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
     }
 
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {

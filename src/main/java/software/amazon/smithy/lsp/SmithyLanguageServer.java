@@ -269,7 +269,11 @@ public class SmithyLanguageServer implements
             LOGGER.severe("Init project failed");
             // TODO: Maybe we just start with this anyways by default, and then add to it
             //  if we find a smithy-build.json, etc.
-            projects.updateMainProject(Project.empty(root));
+            // If we overwrite an existing project with an empty one, we lose track of the state of tracked
+            // files. Instead, we will just keep the original project before the reload failure.
+            if (projects.getMainProject() == null) {
+                projects.updateMainProject(Project.empty(root));
+            }
 
             String baseMessage = "Failed to load Smithy project at " + root;
             StringBuilder errorMessage = new StringBuilder(baseMessage).append(":");
