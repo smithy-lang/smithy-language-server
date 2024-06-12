@@ -319,6 +319,19 @@ public final class Document {
      *  within, or {@code null} if the position is not within an id
      */
     public CharBuffer borrowId(Position position) {
+        DocumentId id = getDocumentIdAt(position);
+        if (id == null) {
+            return null;
+        }
+        return id.borrowIdValue();
+    }
+
+    /**
+     * @param position The position within the id to get
+     * @return A new id that the given {@code position} is
+     *  within, or {@code null} if the position is not within an id
+     */
+    public DocumentId getDocumentIdAt(Position position) {
         int idx = indexOfPosition(position);
         if (idx < 0) {
             return null;
@@ -329,9 +342,26 @@ public final class Document {
             return null;
         }
 
+        boolean hasHash = false;
+        boolean hasDollar = false;
+        boolean hasDot = false;
         int startIdx = idx;
         while (startIdx >= 0) {
-            if (isIdChar(buffer.charAt(startIdx))) {
+            char c = buffer.charAt(startIdx);
+            if (isIdChar(c)) {
+                switch (c) {
+                    case '#':
+                        hasHash = true;
+                        break;
+                    case '$':
+                        hasDollar = true;
+                        break;
+                    case '.':
+                        hasDot = true;
+                        break;
+                    default:
+                        break;
+                }
                 startIdx -= 1;
             } else {
                 break;
@@ -340,14 +370,53 @@ public final class Document {
 
         int endIdx = idx;
         while (endIdx < buffer.length()) {
-            if (isIdChar(buffer.charAt(endIdx))) {
+            char c = buffer.charAt(endIdx);
+            if (isIdChar(c)) {
+                switch (c) {
+                    case '#':
+                        hasHash = true;
+                        break;
+                    case '$':
+                        hasDollar = true;
+                        break;
+                    case '.':
+                        hasDot = true;
+                        break;
+                    default:
+                        break;
+                }
+
                 endIdx += 1;
             } else {
                 break;
             }
         }
 
-        return CharBuffer.wrap(buffer, startIdx + 1, endIdx);
+        // TODO: This can be improved to do some extra validation, like if
+        //  there's more than 1 hash or $, its invalid. Additionally, we
+        //  should only give a type of *WITH_MEMBER if the position is on
+        //  the member itself. We will probably need to add some logic or
+        //  keep track of the member itself in order to properly match the
+        //  RELATIVE_WITH_MEMBER type in handlers.
+        DocumentId.Type type;
+        if (hasHash && hasDollar) {
+            type = DocumentId.Type.ABSOLUTE_WITH_MEMBER;
+        } else if (hasHash) {
+            type = DocumentId.Type.ABSOLUTE_ID;
+        } else if (hasDollar) {
+            type = DocumentId.Type.RELATIVE_WITH_MEMBER;
+        } else if (hasDot) {
+            type = DocumentId.Type.NAMESPACE;
+        } else {
+            type = DocumentId.Type.ID;
+        }
+
+        int actualStartIdx = startIdx + 1; // because we go past the actual start in the loop
+        CharBuffer wrapped = CharBuffer.wrap(buffer, actualStartIdx, endIdx); // endIdx here is non-inclusive
+        Position start = positionAtIndex(actualStartIdx);
+        Position end = positionAtIndex(endIdx - 1); // because we go pas the actual end in the loop
+        Range range = new Range(start, end);
+        return new DocumentId(type, wrapped, range);
     }
 
     private static boolean isIdChar(char c) {

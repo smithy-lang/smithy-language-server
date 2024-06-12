@@ -7,11 +7,12 @@ package software.amazon.smithy.lsp.handler;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
+import software.amazon.smithy.lsp.document.DocumentId;
 import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.document.DocumentPositionContext;
 import software.amazon.smithy.lsp.project.Project;
@@ -43,8 +44,8 @@ public final class DefinitionHandler {
         }
 
         Position position = params.getPosition();
-        String token = smithyFile.getDocument().copyId(position);
-        if (token == null) {
+        DocumentId id = smithyFile.getDocument().getDocumentIdAt(position);
+        if (id == null || id.borrowIdValue().length() == 0) {
             return Collections.emptyList();
         }
 
@@ -54,15 +55,10 @@ public final class DefinitionHandler {
         }
 
         Model model = modelResult.getResult().get();
-        Set<String> imports = smithyFile.getImports();
-        CharSequence namespace = smithyFile.getNamespace();
         DocumentPositionContext context = DocumentParser.forDocument(smithyFile.getDocument())
                 .determineContext(position);
         return contextualShapes(model, context)
-                .filter(shape -> Prelude.isPublicPreludeShape(shape)
-                        || shape.getId().getNamespace().contentEquals(namespace)
-                        || imports.contains(shape.getId().toString()))
-                .filter(shape -> shape.getId().getName().equals(token))
+                .filter(contextualMatcher(smithyFile, id))
                 .findFirst()
                 .map(Shape::getSourceLocation)
                 .map(LocationAdapter::fromSource)
@@ -70,7 +66,19 @@ public final class DefinitionHandler {
                 .orElse(Collections.emptyList());
     }
 
-    private Stream<Shape> contextualShapes(Model model, DocumentPositionContext context) {
+    private static Predicate<Shape> contextualMatcher(SmithyFile smithyFile, DocumentId id) {
+        String token = id.copyIdValue();
+        if (id.getType() == DocumentId.Type.ABSOLUTE_ID) {
+            return (shape) -> shape.getId().toString().equals(token);
+        } else {
+            return (shape) -> (Prelude.isPublicPreludeShape(shape)
+                               || shape.getId().getNamespace().contentEquals(smithyFile.getNamespace())
+                               || smithyFile.hasImport(shape.getId().toString()))
+                              && shape.getId().getName().equals(token);
+        }
+    }
+
+    private static Stream<Shape> contextualShapes(Model model, DocumentPositionContext context) {
         switch (context) {
             case TRAIT:
                 return model.getShapesWithTrait(TraitDefinition.class).stream();

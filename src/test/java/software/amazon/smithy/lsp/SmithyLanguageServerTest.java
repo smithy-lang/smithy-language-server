@@ -1397,6 +1397,7 @@ public class SmithyLanguageServerTest {
         assertThat(server.getProjects().getProject(uri).getModelResult().unwrap(), hasShapeWithId("com.foo#Foo"));
     }
 
+    // TODO: apparently flaky
     @Test
     public void addingDetachedFileWithInvalidSyntax() throws Exception {
         TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
@@ -1551,6 +1552,110 @@ public class SmithyLanguageServerTest {
         assertThat(server.getProjects().getDocument(uri), notNullValue());
         assertThat(server.getProjects().getProject(uri).getSmithyFile(uri), notNullValue());
         assertThat(server.getProjects().getProject(uri).getModelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
+    }
+
+    @Test
+    public void completionHoverDefinitionWithAbsoluteIds() throws Exception {
+        String modelText1 = "$version: \"2\"\n"
+                            + "namespace com.foo\n"
+                            + "use com.bar#Bar\n"
+                            + "@com.bar#baz\n"
+                            + "structure Foo {\n"
+                            + "    bar: com.bar#Bar\n"
+                            + "}\n";
+        String modelText2 = "$version: \"2\"\n"
+                            + "namespace com.bar\n"
+                            + "string Bar\n"
+                            + "string Bar2\n"
+                            + "@trait\n"
+                            + "structure baz {}\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String uri = workspace.getUri("model-0.smithy");
+
+        // use com.b
+        RequestBuilders.PositionRequest useTarget = RequestBuilders.positionRequest()
+                .uri(uri)
+                .line(2)
+                .character(8);
+        // @com.b
+        RequestBuilders.PositionRequest trait = RequestBuilders.positionRequest()
+                .uri(uri)
+                .line(3)
+                .character(2);
+        // bar: com.ba
+        RequestBuilders.PositionRequest memberTarget = RequestBuilders.positionRequest()
+                .uri(uri)
+                .line(5)
+                .character(14);
+
+        List<CompletionItem> useTargetCompletions = server.completion(useTarget.buildCompletion()).get().getLeft();
+        List<CompletionItem> traitCompletions = server.completion(trait.buildCompletion()).get().getLeft();
+        List<CompletionItem> memberTargetCompletions = server.completion(memberTarget.buildCompletion()).get().getLeft();
+
+        assertThat(useTargetCompletions, containsInAnyOrder(hasLabel("com.bar#Bar2"))); // won't match 'Bar' because its already imported
+        assertThat(traitCompletions, containsInAnyOrder(hasLabel("com.bar#baz")));
+        assertThat(memberTargetCompletions, containsInAnyOrder(hasLabel("com.bar#Bar"), hasLabel("com.bar#Bar2")));
+
+        List<? extends Location> useTargetLocations = server.definition(useTarget.buildDefinition()).get().getLeft();
+        List<? extends Location> traitLocations = server.definition(trait.buildDefinition()).get().getLeft();
+        List<? extends Location> memberTargetLocations = server.definition(memberTarget.buildDefinition()).get().getLeft();
+
+        String uri1 = workspace.getUri("model-1.smithy");
+
+        assertThat(useTargetLocations, hasSize(1));
+        assertThat(useTargetLocations.get(0).getUri(), equalTo(uri1));
+        assertThat(useTargetLocations.get(0).getRange().getStart(), equalTo(new Position(2, 0)));
+
+        assertThat(traitLocations, hasSize(1));
+        assertThat(traitLocations.get(0).getUri(), equalTo(uri1));
+        assertThat(traitLocations.get(0).getRange().getStart(), equalTo(new Position(5, 0)));
+
+        assertThat(memberTargetLocations, hasSize(1));
+        assertThat(memberTargetLocations.get(0).getUri(), equalTo(uri1));
+        assertThat(memberTargetLocations.get(0).getRange().getStart(), equalTo(new Position(2, 0)));
+
+        Hover useTargetHover = server.hover(useTarget.buildHover()).get();
+        Hover traitHover = server.hover(trait.buildHover()).get();
+        Hover memberTargetHover = server.hover(memberTarget.buildHover()).get();
+
+        assertThat(useTargetHover.getContents().getRight().getValue(), containsString("string Bar"));
+        assertThat(traitHover.getContents().getRight().getValue(), containsString("structure baz {}"));
+        assertThat(memberTargetHover.getContents().getRight().getValue(), containsString("string Bar"));
+    }
+
+    @Test
+    public void useCompletionDoesntAutoImport() throws Exception {
+        String modelText1 = "$version: \"2\"\n"
+                            + "namespace com.foo\n" ;
+        String modelText2 = "$version: \"2\"\n"
+                            + "namespace com.bar\n"
+                            + "string Bar\n";
+        TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String uri = workspace.getUri("model-0.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text(modelText1)
+                .build());
+        server.didChange(RequestBuilders.didChange()
+                .uri(uri)
+                .range(RangeAdapter.point(2, 0))
+                .text("use co")
+                .build());
+
+        List<CompletionItem> completions = server.completion(RequestBuilders.positionRequest()
+                .uri(uri)
+                .line(2)
+                .character(5)
+                .buildCompletion())
+                .get()
+                .getLeft();
+
+        assertThat(completions, containsInAnyOrder(hasLabel("com.bar#Bar")));
+        assertThat(completions.get(0).getAdditionalTextEdits(), nullValue());
     }
 
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {

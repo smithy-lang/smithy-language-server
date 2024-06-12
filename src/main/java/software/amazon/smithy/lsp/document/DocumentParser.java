@@ -344,6 +344,8 @@ public final class DocumentParser extends SimpleParser {
             return DocumentPositionContext.SHAPE_DEF;
         } else if (isMixin(position)) {
             return DocumentPositionContext.MIXIN;
+        } else if (isUseTarget(position)) {
+            return DocumentPositionContext.USE_TARGET;
         } else {
             return DocumentPositionContext.OTHER;
         }
@@ -382,7 +384,7 @@ public final class DocumentParser extends SimpleParser {
         }
 
         jumpToPosition(document.positionAtIndex(lastWithIndex));
-        if (!isSp(-1)) {
+        if (!isWs(-1)) {
             return false;
         }
         skip();
@@ -483,6 +485,35 @@ public final class DocumentParser extends SimpleParser {
         return position() >= idx;
     }
 
+    private boolean isUseTarget(Position position) {
+        int idx = document.indexOfPosition(position);
+        if (idx < 0) {
+            return false;
+        }
+        int lineStartIdx = document.indexOfLine(document.lineOfIndex(idx));
+
+        int useIdx = nextIndexOfWithOnlyLeadingWs("use", lineStartIdx, idx);
+        if (useIdx < 0) {
+            return false;
+        }
+
+        jumpToPosition(document.positionAtIndex(useIdx));
+
+        skip(); // u
+        skip(); // s
+        skip(); // e
+
+        if (!isSp()) {
+            return false;
+        }
+
+        sp();
+
+        skipShapeId();
+
+        return position() >= idx;
+    }
+
     private boolean jumpToPosition(Position position) {
         int idx = this.document.indexOfPosition(position);
         if (idx < 0) {
@@ -572,8 +603,17 @@ public final class DocumentParser extends SimpleParser {
         return is(' ') || is('\t');
     }
 
-    private boolean isSp(int offset) {
-        return is(' ', offset) || is('\t', offset);
+    private boolean isWs(int offset) {
+        char peeked = peek(offset);
+        switch (peeked) {
+            case '\n':
+            case '\r':
+            case ' ':
+            case '\t':
+                return true;
+            default:
+                return false;
+        }
     }
 
     private boolean isEof() {
@@ -634,7 +674,11 @@ public final class DocumentParser extends SimpleParser {
     }
 
     private int firstIndexOfWithOnlyLeadingWs(String s) {
-        int searchFrom = 0;
+        return nextIndexOfWithOnlyLeadingWs(s, 0, document.length());
+    }
+
+    private int nextIndexOfWithOnlyLeadingWs(String s, int start, int end) {
+        int searchFrom = start;
         int previousSearchFrom;
         do {
             int idx = document.nextIndexOf(s, searchFrom);
@@ -654,7 +698,7 @@ public final class DocumentParser extends SimpleParser {
             }
             previousSearchFrom = searchFrom;
             searchFrom = idx + 1;
-        } while (previousSearchFrom != searchFrom && searchFrom < document.length());
+        } while (previousSearchFrom != searchFrom && searchFrom < end);
         return -1;
     }
 

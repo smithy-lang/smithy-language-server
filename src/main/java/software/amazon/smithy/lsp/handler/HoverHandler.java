@@ -12,13 +12,14 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.Position;
+import software.amazon.smithy.lsp.document.DocumentId;
 import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.document.DocumentPositionContext;
 import software.amazon.smithy.lsp.project.Project;
@@ -55,9 +56,8 @@ public final class HoverHandler {
         }
 
         Position position = params.getPosition();
-        // TODO: Handle shape id
-        String token = smithyFile.getDocument().copyToken(position);
-        if (token == null) {
+        DocumentId id = smithyFile.getDocument().getDocumentIdAt(position);
+        if (id == null || id.borrowIdValue().length() == 0) {
             return hover;
         }
 
@@ -67,15 +67,10 @@ public final class HoverHandler {
         }
 
         Model model = modelResult.getResult().get();
-        Set<String> imports = smithyFile.getImports();
-        CharSequence namespace = smithyFile.getNamespace();
         DocumentPositionContext context = DocumentParser.forDocument(smithyFile.getDocument())
                 .determineContext(position);
         Optional<Shape> matchingShape = contextualShapes(model, context)
-                .filter(shape -> Prelude.isPublicPreludeShape(shape)
-                                 || shape.getId().getNamespace().contentEquals(namespace)
-                                 || imports.contains(shape.getId().toString()))
-                .filter(shape -> shape.getId().getName().equals(token))
+                .filter(contextualMatcher(smithyFile, id))
                 .findFirst();
 
         if (!matchingShape.isPresent()) {
@@ -118,7 +113,7 @@ public final class HoverHandler {
         }
 
         String serializedShape = serialized.get(path)
-                .substring(15)
+                .substring(15) // remove '$version: "2.0"'
                 .trim()
                 .replaceAll(quoteReplacement("\n\n"), "\n");
         int eol = serializedShape.indexOf('\n');
@@ -138,6 +133,18 @@ public final class HoverHandler {
         MarkupContent content = new MarkupContent("markdown", hoverContent.toString());
         hover.setContents(content);
         return hover;
+    }
+
+    private static Predicate<Shape> contextualMatcher(SmithyFile smithyFile, DocumentId id) {
+        String token = id.copyIdValue();
+        if (id.getType() == DocumentId.Type.ABSOLUTE_ID) {
+            return (shape) -> shape.getId().toString().equals(token);
+        } else {
+            return (shape) -> (Prelude.isPublicPreludeShape(shape)
+                               || shape.getId().getNamespace().contentEquals(smithyFile.getNamespace())
+                               || smithyFile.hasImport(shape.getId().toString()))
+                              && shape.getId().getName().equals(token);
+        }
     }
 
     private Stream<Shape> contextualShapes(Model model, DocumentPositionContext context) {

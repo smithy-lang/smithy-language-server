@@ -33,6 +33,11 @@ public enum DocumentPositionContext {
     MIXIN,
 
     /**
+     * Within the target (shape id) of a {@code use} statement.
+     */
+    USE_TARGET,
+
+    /**
      * An unknown or indeterminate position.
      */
     OTHER;

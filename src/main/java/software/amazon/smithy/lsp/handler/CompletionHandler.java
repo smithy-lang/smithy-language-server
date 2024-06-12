@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.CompletionContext;
 import org.eclipse.lsp4j.CompletionItem;
@@ -20,6 +21,8 @@ import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.CancelChecker;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import software.amazon.smithy.lsp.document.DocumentId;
 import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.document.DocumentPositionContext;
 import software.amazon.smithy.lsp.project.Project;
@@ -88,12 +91,11 @@ public final class CompletionHandler {
             return Collections.emptyList();
         }
 
-        String token = smithyFile.getDocument().copyToken(position);
-        if (token == null || token.isEmpty()) {
+        // TODO: Maybe we should only copy the token up to the current character
+        DocumentId id = smithyFile.getDocument().getDocumentIdAt(position);
+        if (id == null || id.borrowIdValue().length() == 0) {
             return Collections.emptyList();
         }
-        String matchToken = token.toLowerCase();
-
 
         if (cc.isCanceled()) {
             return Collections.emptyList();
@@ -110,20 +112,27 @@ public final class CompletionHandler {
             return Collections.emptyList();
         }
 
-        return contextualShapes(model, context)
-                .filter(shape -> shape.getId().getName().toLowerCase().startsWith(matchToken))
+        return contextualShapes(model, context, smithyFile)
+                .filter(contextualMatcher(id, context))
                 // TODO: Use mapMulti when we upgrade jdk>16
-                .collect(ArrayList::new, completionsFactory(context, model, smithyFile), ArrayList::addAll);
+                .collect(ArrayList::new, completionsFactory(context, model, smithyFile, id), ArrayList::addAll);
     }
 
     private static BiConsumer<ArrayList<CompletionItem>, Shape> completionsFactory(
             DocumentPositionContext context,
             Model model,
-            SmithyFile smithyFile
+            SmithyFile smithyFile,
+            DocumentId id
     ) {
         TraitBodyVisitor visitor = new TraitBodyVisitor(model);
+        boolean useFullId = context == DocumentPositionContext.USE_TARGET
+                            || id.getType() == DocumentId.Type.NAMESPACE
+                            || id.getType() == DocumentId.Type.ABSOLUTE_ID;
         return (acc, shape) -> {
-            String shapeName = shape.getId().getName();
+            String shapeLabel = useFullId
+                    ? shape.getId().toString()
+                    : shape.getId().getName();
+
             switch (context) {
                 case TRAIT:
                     String traitBody = shape.accept(visitor);
@@ -133,24 +142,21 @@ public final class CompletionHandler {
                     }
 
                     if (!traitBody.isEmpty()) {
-                        CompletionItem traitWithMembersItem = createCompletion(shapeName + "(" + traitBody + ")");
-                        addTextEdits(traitWithMembersItem, shape.getId(), smithyFile);
+                        CompletionItem traitWithMembersItem = createCompletion(
+                                shapeLabel + "(" + traitBody + ")", shape.getId(), smithyFile, useFullId, id);
                         acc.add(traitWithMembersItem);
                     }
-                    CompletionItem defaultCompletionItem;
-                    if (shape.isStructureShape() && !shape.members().isEmpty()) {
-                        defaultCompletionItem = createCompletion(shapeName + "()");
-                    } else {
-                        defaultCompletionItem = createCompletion(shapeName);
-                    }
-                    addTextEdits(defaultCompletionItem, shape.getId(), smithyFile);
+                    String defaultLabel = shape.isStructureShape() && !shape.members().isEmpty()
+                            ? shapeLabel + "()"
+                            : shapeLabel;
+                    CompletionItem defaultCompletionItem = createCompletion(
+                            defaultLabel, shape.getId(), smithyFile, useFullId, id);
                     acc.add(defaultCompletionItem);
                     break;
                 case MEMBER_TARGET:
                 case MIXIN:
-                    CompletionItem item = createCompletion(shapeName);
-                    addTextEdits(item, shape.getId(), smithyFile);
-                    acc.add(item);
+                case USE_TARGET:
+                    acc.add(createCompletion(shapeLabel, shape.getId(), smithyFile, useFullId, id));
                     break;
                 case SHAPE_DEF:
                 case OTHER:
@@ -193,7 +199,7 @@ public final class CompletionHandler {
         return null;
     }
 
-    private Stream<Shape> contextualShapes(Model model, DocumentPositionContext context) {
+    private static Stream<Shape> contextualShapes(Model model, DocumentPositionContext context, SmithyFile smithyFile) {
         switch (context) {
             case TRAIT:
                 return model.getShapesWithTrait(TraitDefinition.class).stream();
@@ -203,6 +209,11 @@ public final class CompletionHandler {
                         .filter(shape -> !shape.hasTrait(TraitDefinition.class));
             case MIXIN:
                 return model.getShapesWithTrait(MixinTrait.class).stream();
+            case USE_TARGET:
+                return model.shapes()
+                        .filter(shape -> !shape.isMemberShape())
+                        .filter(shape -> !shape.getId().getNamespace().contentEquals(smithyFile.getNamespace()))
+                        .filter(shape -> !smithyFile.hasImport(shape.getId().toString()));
             case SHAPE_DEF:
             case OTHER:
             default:
@@ -210,9 +221,31 @@ public final class CompletionHandler {
         }
     }
 
-    private static CompletionItem createCompletion(String label) {
+    private static Predicate<Shape> contextualMatcher(DocumentId id, DocumentPositionContext context) {
+        String matchToken = id.copyIdValue().toLowerCase();
+        if (context == DocumentPositionContext.USE_TARGET
+            || id.getType() == DocumentId.Type.NAMESPACE
+            || id.getType() == DocumentId.Type.ABSOLUTE_ID) {
+            return (shape) -> shape.getId().toString().toLowerCase().startsWith(matchToken);
+        } else {
+            return (shape) -> shape.getId().getName().toLowerCase().startsWith(matchToken);
+        }
+    }
+
+    private static CompletionItem createCompletion(
+            String label,
+            ShapeId shapeId,
+            SmithyFile smithyFile,
+            boolean useFullId,
+            DocumentId id
+    ) {
         CompletionItem completionItem = new CompletionItem(label);
         completionItem.setKind(CompletionItemKind.Class);
+        TextEdit textEdit = new TextEdit(id.getRange(), label);
+        completionItem.setTextEdit(Either.forLeft(textEdit));
+        if (!useFullId) {
+            addTextEdits(completionItem, shapeId, smithyFile);
+        }
         return completionItem;
     }
 
