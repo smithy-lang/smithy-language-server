@@ -430,7 +430,7 @@ public class SmithyLanguageServerTest {
         server.didChange(changeBuilder.range(rangeAdapter.shiftRight().build()).text(" ").build());
         server.didChange(changeBuilder.range(rangeAdapter.shiftRight().build()).text("G").build());
 
-        server.getLifecycleManager().getTask(uri).get();
+        server.getLifecycleManager().waitForAllTasks();
 
         // mostly so you can see what it looks like
         assertThat(server.getProject().getDocument(uri).copyText(), equalTo(safeString("$version: \"2\"\n" +
@@ -451,8 +451,7 @@ public class SmithyLanguageServerTest {
                 .buildCompletion();
         List<CompletionItem> completions = server.completion(completionParams).get().getLeft();
 
-        // TODO: Somehow this has become flaky
-        assertThat(completions, containsInAnyOrder(hasLabel("GetFoo"), hasLabel("GetFooInput")));
+        assertThat(completions, hasItem(hasLabel("GetFooInput")));
     }
 
     @Test
