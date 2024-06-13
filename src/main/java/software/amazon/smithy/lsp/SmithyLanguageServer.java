@@ -637,6 +637,10 @@ public class SmithyLanguageServer implements
                         break;
                 }
                 String symbolName = documentShape.shapeName().toString();
+                if (symbolName.isEmpty()) {
+                    LOGGER.warning("[DocumentSymbols] Empty shape name for " + documentShape);
+                    continue;
+                }
                 Range symbolRange = documentShape.range();
                 DocumentSymbol symbol = new DocumentSymbol(symbolName, symbolKind, symbolRange, symbolRange);
                 documentSymbols.add(Either.forRight(symbol));

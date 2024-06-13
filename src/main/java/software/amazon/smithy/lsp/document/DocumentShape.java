@@ -65,6 +65,16 @@ public final class DocumentShape {
         return Objects.hash(range, shapeName, kind);
     }
 
+    @Override
+    public String toString() {
+        return "DocumentShape{"
+               + "range=" + range
+               + ", shapeName=" + shapeName
+               + ", kind=" + kind
+               + ", targetReference=" + targetReference
+               + '}';
+    }
+
     public enum Kind {
         DefinedShape,
         DefinedMember,
