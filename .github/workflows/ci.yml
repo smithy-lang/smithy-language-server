@@ -12,6 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: Java ${{ matrix.java }} ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         java: [8, 11, 17]
         os: [ubuntu-latest, windows-latest, macos-latest]

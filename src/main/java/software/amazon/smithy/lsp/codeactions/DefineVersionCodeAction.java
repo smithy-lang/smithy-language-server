@@ -24,7 +24,6 @@ import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.WorkspaceEdit;
 
-
 public final class DefineVersionCodeAction {
     private static final int DEFAULT_VERSION = 1;
 

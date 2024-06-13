@@ -1,0 +1,8 @@
+{
+    "version": "1",
+    "maven": {
+        "dependencies": [
+            "software.amazon.smithy.lsp:not-smithy-language-server:0.0.1"
+        ]
+    }
+}

@@ -1,0 +1,72 @@
+/*
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package software.amazon.smithy.lsp.document;
+
+import java.nio.CharBuffer;
+import org.eclipse.lsp4j.Range;
+
+/**
+ * An inaccurate representation of an identifier within a model. It is
+ * inaccurate in the sense that the string value it references isn't
+ * necessarily a valid identifier, it just looks like an identifier.
+ */
+public final class DocumentId {
+    /**
+     * Represents the different kinds of identifiers that can be used to match.
+     */
+    public enum Type {
+        /**
+         * Just a shape name, no namespace or member.
+         */
+        ID,
+
+        /**
+         * Same as {@link Type#ID}, but with a namespace.
+         */
+        ABSOLUTE_ID,
+
+        /**
+         * Just a namespace - will have one or more {@code .}.
+         */
+        NAMESPACE,
+
+        /**
+         * Same as {@link Type#ABSOLUTE_ID}, but with a member - will have a {@code $}.
+         */
+        ABSOLUTE_WITH_MEMBER,
+
+        /**
+         * Same as {@link Type#ID}, but with a member - will have a {@code $}.
+         */
+        RELATIVE_WITH_MEMBER;
+    }
+
+    private final Type type;
+    private final CharBuffer buffer;
+    private final Range range;
+
+    DocumentId(Type type, CharBuffer buffer, Range range) {
+        this.type = type;
+        this.buffer = buffer;
+        this.range = range;
+    }
+
+    public Type getType() {
+        return type;
+    }
+
+    public String copyIdValue() {
+        return buffer.toString();
+    }
+
+    public CharBuffer borrowIdValue() {
+        return buffer;
+    }
+
+    public Range getRange() {
+        return range;
+    }
+}

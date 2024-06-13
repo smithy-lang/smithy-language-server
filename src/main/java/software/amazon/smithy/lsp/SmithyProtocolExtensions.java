@@ -21,6 +21,8 @@ import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest;
 import org.eclipse.lsp4j.jsonrpc.services.JsonSegment;
+import software.amazon.smithy.lsp.ext.serverstatus.ServerStatus;
+import software.amazon.smithy.lsp.ext.serverstatus.ServerStatusParams;
 
 /**
  * Interface for protocol extensions for Smithy.
@@ -33,4 +35,13 @@ public interface SmithyProtocolExtensions {
 
   @JsonRequest
   CompletableFuture<List<? extends Location>> selectorCommand(SelectorParams selectorParams);
+
+  /**
+   * Get a snapshot of the server's status, useful for debugging purposes.
+   *
+   * @param params Request parameters
+   * @return A future containing the server's status
+   */
+  @JsonRequest
+  CompletableFuture<ServerStatus> serverStatus(ServerStatusParams params);
 }
