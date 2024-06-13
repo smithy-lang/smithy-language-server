@@ -184,7 +184,7 @@ public final class CompletionHandler {
     }
 
     private static TextEdit getImportTextEdit(SmithyFile smithyFile, String importId) {
-        String insertText = "\n" + "use " + importId;
+        String insertText = System.lineSeparator() + "use " + importId;
         // We can only know where to put the import if there's already use statements, or a namespace
         if (smithyFile.getDocumentImports().isPresent()) {
             Range importsRange = smithyFile.getDocumentImports().get().importsRange();

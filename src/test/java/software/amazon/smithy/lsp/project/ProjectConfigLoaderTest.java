@@ -6,13 +6,13 @@
 package software.amazon.smithy.lsp.project;
 
 import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
+import static software.amazon.smithy.lsp.project.ProjectTest.toPath;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -24,7 +24,7 @@ public class ProjectConfigLoaderTest {
     @Test
     public void loadsConfigWithEnvVariable() {
         System.setProperty("FOO", "bar");
-        Path root = Paths.get(getClass().getResource("env-config").getPath());
+        Path root = toPath(getClass().getResource("env-config"));
         Result<ProjectConfig, List<Exception>> result = ProjectConfigLoader.loadFromRoot(root);
 
         assertThat(result.isOk(), is(true));
@@ -40,7 +40,7 @@ public class ProjectConfigLoaderTest {
 
     @Test
     public void loadsLegacyConfig() {
-        Path root = Paths.get(getClass().getResource("legacy-config").getPath());
+        Path root = toPath(getClass().getResource("legacy-config"));
         Result<ProjectConfig, List<Exception>> result = ProjectConfigLoader.loadFromRoot(root);
 
         assertThat(result.isOk(), is(true));
@@ -55,7 +55,7 @@ public class ProjectConfigLoaderTest {
 
     @Test
     public void prefersNonLegacyConfig() {
-        Path root = Paths.get(getClass().getResource("legacy-config-with-conflicts").getPath());
+        Path root = toPath(getClass().getResource("legacy-config-with-conflicts"));
         Result<ProjectConfig, List<Exception>> result = ProjectConfigLoader.loadFromRoot(root);
 
         assertThat(result.isOk(), is(true));
@@ -70,7 +70,7 @@ public class ProjectConfigLoaderTest {
 
     @Test
     public void mergesBuildExts() {
-        Path root = Paths.get(getClass().getResource("build-exts").getPath());
+        Path root = toPath(getClass().getResource("build-exts"));
         Result<ProjectConfig, List<Exception>> result = ProjectConfigLoader.loadFromRoot(root);
 
         assertThat(result.isOk(), is(true));

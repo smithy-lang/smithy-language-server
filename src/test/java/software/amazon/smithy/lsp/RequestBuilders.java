@@ -6,6 +6,7 @@
 package software.amazon.smithy.lsp;
 
 import java.net.URI;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -176,7 +177,7 @@ public final class RequestBuilders {
 
         public DidOpenTextDocumentParams build() {
             if (text == null) {
-                text = IoUtils.readUtf8File(URI.create(uri).getPath());
+                text = IoUtils.readUtf8File(Paths.get(URI.create(uri)));
             }
             return new DidOpenTextDocumentParams(new TextDocumentItem(uri, languageId, version, text));
         }

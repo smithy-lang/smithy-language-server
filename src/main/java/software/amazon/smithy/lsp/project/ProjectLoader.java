@@ -66,6 +66,7 @@ public final class ProjectLoader {
      * @return The loaded project
      */
     public static Project loadDetached(String uri, String text) {
+        LOGGER.info("Loading detached project at " + uri);
         String asPath = UriAdapter.toPath(uri);
         ValidatedResult<Model> modelResult = Model.assembler()
                 .addUnparsedModel(asPath, text)

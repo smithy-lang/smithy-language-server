@@ -21,9 +21,12 @@ import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithId;
 import static software.amazon.smithy.lsp.UtilMatchers.anOptionalOf;
 import static software.amazon.smithy.lsp.document.DocumentTest.string;
 
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.lsp.TestWorkspace;
@@ -43,7 +46,7 @@ import software.amazon.smithy.model.validation.ValidationEvent;
 public class ProjectTest {
     @Test
     public void loadsFlatProject() {
-        Path root = Paths.get(getClass().getResource("flat").getPath());
+        Path root = toPath(getClass().getResource("flat"));
         Project project = ProjectLoader.load(root).unwrap();
 
         assertThat(project.getRoot(), equalTo(root));
@@ -56,7 +59,7 @@ public class ProjectTest {
 
     @Test
     public void loadsProjectWithMavenDep() {
-        Path root = Paths.get(getClass().getResource("maven-dep").getPath());
+        Path root = toPath(getClass().getResource("maven-dep"));
         Project project = ProjectLoader.load(root).unwrap();
 
         assertThat(project.getRoot(), equalTo(root));
@@ -69,7 +72,7 @@ public class ProjectTest {
 
     @Test
     public void loadsProjectWithSubdir() {
-        Path root = Paths.get(getClass().getResource("subdirs").getPath());
+        Path root = toPath(getClass().getResource("subdirs"));
         Project project = ProjectLoader.load(root).unwrap();
 
         assertThat(project.getRoot(), equalTo(root));
@@ -77,10 +80,10 @@ public class ProjectTest {
                 root.resolve("model"),
                 root.resolve("model2")));
         assertThat(project.getSmithyFiles().keySet(), hasItems(
-                containsString("model/main.smithy"),
-                containsString("model/subdir/sub.smithy"),
-                containsString("model2/subdir2/sub2.smithy"),
-                containsString("model2/subdir2/subsubdir/subsub.smithy")));
+                equalTo(root.resolve("model/main.smithy").toString()),
+                equalTo(root.resolve("model/subdir/sub.smithy").toString()),
+                equalTo(root.resolve("model2/subdir2/sub2.smithy").toString()),
+                equalTo(root.resolve("model2/subdir2/subsubdir/subsub.smithy").toString())));
         assertThat(project.getModelResult().isBroken(), is(false));
         assertThat(project.getModelResult().unwrap(), hasShapeWithId("com.foo#Foo"));
         assertThat(project.getModelResult().unwrap(), hasShapeWithId("com.foo#Bar"));
@@ -89,7 +92,7 @@ public class ProjectTest {
 
     @Test
     public void loadsModelWithUnknownTrait() {
-        Path root = Paths.get(getClass().getResource("unknown-trait").getPath());
+        Path root = toPath(getClass().getResource("unknown-trait"));
         Project project = ProjectLoader.load(root).unwrap();
 
         assertThat(project.getRoot(), equalTo(root));
@@ -106,7 +109,7 @@ public class ProjectTest {
 
     @Test
     public void loadsWhenModelHasInvalidSyntax() {
-        Path root = Paths.get(getClass().getResource("invalid-syntax").getPath());
+        Path root = toPath(getClass().getResource("invalid-syntax"));
         Project project = ProjectLoader.load(root).unwrap();
 
         assertThat(project.getRoot(), equalTo(root));
@@ -140,7 +143,7 @@ public class ProjectTest {
 
     @Test
     public void loadsProjectWithMultipleNamespaces() {
-        Path root = Paths.get(getClass().getResource("multiple-namespaces").getPath());
+        Path root = toPath(getClass().getResource("multiple-namespaces"));
         Project project = ProjectLoader.load(root).unwrap();
 
         assertThat(project.getSources(), hasItem(root.resolve("model")));
@@ -176,7 +179,7 @@ public class ProjectTest {
 
     @Test
     public void loadsProjectWithExternalJars() {
-        Path root = Paths.get(getClass().getResource("external-jars").getPath());
+        Path root = toPath(getClass().getResource("external-jars"));
         Result<Project, List<Exception>> result = ProjectLoader.load(root);
 
         assertThat(result.isOk(), is(true));
@@ -200,7 +203,7 @@ public class ProjectTest {
 
     @Test
     public void failsLoadingInvalidSmithyBuildJson() {
-        Path root = Paths.get(getClass().getResource("broken/missing-version").getPath());
+        Path root = toPath(getClass().getResource("broken/missing-version"));
         Result<Project, List<Exception>> result = ProjectLoader.load(root);
 
         assertThat(result.isErr(), is(true));
@@ -208,7 +211,7 @@ public class ProjectTest {
 
     @Test
     public void failsLoadingUnparseableSmithyBuildJson() {
-        Path root = Paths.get(getClass().getResource("broken/parse-failure").getPath());
+        Path root = toPath(getClass().getResource("broken/parse-failure"));
         Result<Project, List<Exception>> result = ProjectLoader.load(root);
 
         assertThat(result.isErr(), is(true));
@@ -216,7 +219,7 @@ public class ProjectTest {
 
     @Test
     public void doesntFailLoadingProjectWithNonExistingSource() {
-        Path root = Paths.get(getClass().getResource("broken/source-doesnt-exist").getPath());
+        Path root = toPath(getClass().getResource("broken/source-doesnt-exist"));
         Result<Project, List<Exception>> result = ProjectLoader.load(root);
 
         assertThat(result.isErr(), is(false));
@@ -226,7 +229,7 @@ public class ProjectTest {
 
     @Test
     public void failsLoadingUnresolvableMavenDependency() {
-        Path root = Paths.get(getClass().getResource("broken/unresolvable-maven-dependency").getPath());
+        Path root = toPath(getClass().getResource("broken/unresolvable-maven-dependency"));
         Result<Project, List<Exception>> result = ProjectLoader.load(root);
 
         assertThat(result.isErr(), is(true));
@@ -234,7 +237,7 @@ public class ProjectTest {
 
     @Test
     public void failsLoadingUnresolvableProjectDependency() {
-        Path root = Paths.get(getClass().getResource("broken/unresolvable-maven-dependency").getPath());
+        Path root = toPath(getClass().getResource("broken/unresolvable-maven-dependency"));
         Result<Project, List<Exception>> result = ProjectLoader.load(root);
 
         assertThat(result.isErr(), is(true));
@@ -242,7 +245,7 @@ public class ProjectTest {
 
     @Test
     public void loadsProjectWithUnNormalizedDirs() {
-        Path root = Paths.get(getClass().getResource("unnormalized-dirs").getPath());
+        Path root = toPath(getClass().getResource("unnormalized-dirs"));
         Project project = ProjectLoader.load(root).unwrap();
 
         assertThat(project.getRoot(), equalTo(root));
@@ -255,7 +258,7 @@ public class ProjectTest {
                 equalTo(root.resolve("model/one.smithy").toString()),
                 equalTo(root.resolve("model2/two.smithy").toString()),
                 equalTo(root.resolve("model3/three.smithy").toString()),
-                containsString(root.resolve("smithy-test-traits.jar") + "!/META-INF/smithy/smithy.test.json")));
+                containsString("smithy-test-traits.jar!/META-INF/smithy/smithy.test.json")));
         assertThat(project.getDependencies(), hasItem(root.resolve("smithy-test-traits.jar")));
     }
 
@@ -520,6 +523,17 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
+        if (document == null) {
+            String smithyFilesPaths = String.join(System.lineSeparator(), project.getSmithyFiles().keySet());
+            String smithyFilesUris = project.getSmithyFiles().keySet().stream()
+                    .map(UriAdapter::toUri)
+                    .collect(Collectors.joining(System.lineSeparator()));
+            Logger logger = Logger.getLogger(getClass().getName());
+            logger.severe("Not found uri: " + uri);
+            logger.severe("Not found path: " + UriAdapter.toPath(uri));
+            logger.severe("PATHS: " + smithyFilesPaths);
+            logger.severe("URIS: " + smithyFilesUris);
+        }
         document.applyEdit(RangeAdapter.point(document.end()), "\n");
 
         project.updateModelWithoutValidating(uri);
@@ -591,5 +605,13 @@ public class ProjectTest {
         bar = project.getModelResult().unwrap().expectShape(ShapeId.from("com.foo#Bar"));
         assertThat(bar.hasTrait("tags"), is(true));
         assertThat(bar.expectTrait(TagsTrait.class).getTags(), containsInAnyOrder("bar"));
+    }
+
+    public static Path toPath(URL url) {
+        try {
+            return Paths.get(url.toURI());
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

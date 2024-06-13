@@ -33,7 +33,7 @@ public final class LspMatchers {
     }
 
     public static Matcher<TextEdit> makesEditedDocument(Document document, String expected) {
-        return new CustomTypeSafeMatcher<TextEdit>("the right edit") {
+        return new CustomTypeSafeMatcher<TextEdit>("makes an edited document " + expected) {
             @Override
             protected boolean matchesSafely(TextEdit item) {
                 Document copy = document.copy();

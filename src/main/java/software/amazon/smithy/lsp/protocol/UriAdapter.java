@@ -11,6 +11,7 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.logging.Logger;
 
 /**
@@ -28,7 +29,7 @@ public final class UriAdapter {
      */
     public static String toPath(String uri) {
         if (uri.startsWith("file://")) {
-            return uri.replaceFirst("file://", "");
+            return Paths.get(URI.create(uri)).toString();
         } else if (isSmithyJarFile(uri)) {
             String decoded = decode(uri);
             return fixJarScheme(decoded);
@@ -39,15 +40,15 @@ public final class UriAdapter {
     /**
      * @param path Path to convert to LSP URI
      * @return A URI representation of the given {@code path}, modified to have the
-     *  correct scheme for jars
+     *  correct scheme for our jars
      */
     public static String toUri(String path) {
-        if (path.startsWith("/")) {
-            return "file://" + path;
-        } else if (path.startsWith("jar:file")) {
+        if (path.startsWith("jar:file")) {
             return path.replaceFirst("jar:file", "smithyjar");
-        } else {
+        } else if (path.startsWith("smithyjar:")) {
             return path;
+        } else {
+            return Paths.get(path).toUri().toString();
         }
     }
 

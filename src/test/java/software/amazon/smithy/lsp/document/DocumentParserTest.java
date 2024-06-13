@@ -6,11 +6,13 @@
 package software.amazon.smithy.lsp.document;
 
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static software.amazon.smithy.lsp.document.DocumentTest.safeIndex;
+import static software.amazon.smithy.lsp.document.DocumentTest.safeString;
 import static software.amazon.smithy.lsp.document.DocumentTest.string;
 
 import java.util.Map;
@@ -32,7 +34,7 @@ public class DocumentParserTest {
                       "ghi\n" +
                       "\n" +
                       "\n";
-        DocumentParser parser = DocumentParser.forDocument(Document.of(text));
+        DocumentParser parser = DocumentParser.of(safeString(text));
         assertEquals(0, parser.position());
         assertEquals(1, parser.line());
         assertEquals(1, parser.column());
@@ -43,22 +45,22 @@ public class DocumentParserTest {
         assertEquals(1, parser.column());
 
         parser.jumpToLine(1);
-        assertEquals(4, parser.position());
+        assertEquals(safeIndex(4, 1), parser.position());
         assertEquals(2, parser.line());
         assertEquals(1, parser.column());
 
         parser.jumpToLine(2);
-        assertEquals(8, parser.position());
+        assertEquals(safeIndex(8, 2), parser.position());
         assertEquals(3, parser.line());
         assertEquals(1, parser.column());
 
         parser.jumpToLine(3);
-        assertEquals(12, parser.position());
+        assertEquals(safeIndex(12, 3), parser.position());
         assertEquals(4, parser.line());
         assertEquals(1, parser.column());
 
         parser.jumpToLine(4);
-        assertEquals(13, parser.position());
+        assertEquals(safeIndex(13, 4), parser.position());
         assertEquals(5, parser.line());
         assertEquals(1, parser.column());
     }
@@ -66,7 +68,7 @@ public class DocumentParserTest {
     @Test
     public void jumpsToSource() {
         String text = "abc\ndef\nghi\n";
-        DocumentParser parser = DocumentParser.of(text);
+        DocumentParser parser = DocumentParser.of(safeString(text));
         assertThat(parser.position(), is(0));
         assertThat(parser.line(), is(1));
         assertThat(parser.column(), is(1));
@@ -86,7 +88,7 @@ public class DocumentParserTest {
         assertThat(parser.column(), is(4));
         assertThat(parser.currentPosition(), equalTo(new Position(0, 3)));
 
-        ok = parser.jumpToSource(new SourceLocation("", 1, 5));
+        ok = parser.jumpToSource(new SourceLocation("", 1, 6));
         assertThat(ok, is(false));
         assertThat(parser.position(), is(3));
         assertThat(parser.line(), is(1));
@@ -95,7 +97,7 @@ public class DocumentParserTest {
 
         ok = parser.jumpToSource(new SourceLocation("", 2, 1));
         assertThat(ok, is(true));
-        assertThat(parser.position(), is(4));
+        assertThat(parser.position(), is(safeIndex(4, 1)));
         assertThat(parser.line(), is(2));
         assertThat(parser.column(), is(1));
         assertThat(parser.currentPosition(), equalTo(new Position(1, 0)));
@@ -105,7 +107,7 @@ public class DocumentParserTest {
 
         ok = parser.jumpToSource(new SourceLocation("", 3, 4));
         assertThat(ok, is(true));
-        assertThat(parser.position(), is(11));
+        assertThat(parser.position(), is(safeIndex(11, 2)));
         assertThat(parser.line(), is(3));
         assertThat(parser.column(), is(4));
         assertThat(parser.currentPosition(), equalTo(new Position(2, 3)));
@@ -113,17 +115,17 @@ public class DocumentParserTest {
 
     @Test
     public void getsDocumentNamespace() {
-        DocumentParser noNamespace = DocumentParser.of("abc\ndef\n");
-        DocumentParser incompleteNamespace = DocumentParser.of("abc\nnamespac");
-        DocumentParser incompleteNamespaceValue = DocumentParser.of("namespace ");
-        DocumentParser likeNamespace = DocumentParser.of("anamespace com.foo\n");
-        DocumentParser otherLikeNamespace = DocumentParser.of("namespacea com.foo");
-        DocumentParser namespaceAtEnd = DocumentParser.of("\n\nnamespace com.foo");
-        DocumentParser brokenNamespace = DocumentParser.of("\nname space com.foo\n");
-        DocumentParser commentedNamespace = DocumentParser.of("abc\n//namespace com.foo\n");
-        DocumentParser wsPrefixedNamespace = DocumentParser.of("abc\n    namespace com.foo\n");
-        DocumentParser notNamespace = DocumentParser.of("namespace !foo");
-        DocumentParser trailingComment = DocumentParser.of("namespace com.foo//foo\n");
+        DocumentParser noNamespace = DocumentParser.of(safeString("abc\ndef\n"));
+        DocumentParser incompleteNamespace = DocumentParser.of(safeString("abc\nnamespac"));
+        DocumentParser incompleteNamespaceValue = DocumentParser.of(safeString("namespace "));
+        DocumentParser likeNamespace = DocumentParser.of(safeString("anamespace com.foo\n"));
+        DocumentParser otherLikeNamespace = DocumentParser.of(safeString("namespacea com.foo"));
+        DocumentParser namespaceAtEnd = DocumentParser.of(safeString("\n\nnamespace com.foo"));
+        DocumentParser brokenNamespace = DocumentParser.of(safeString("\nname space com.foo\n"));
+        DocumentParser commentedNamespace = DocumentParser.of(safeString("abc\n//namespace com.foo\n"));
+        DocumentParser wsPrefixedNamespace = DocumentParser.of(safeString("abc\n    namespace com.foo\n"));
+        DocumentParser notNamespace = DocumentParser.of(safeString("namespace !foo"));
+        DocumentParser trailingComment = DocumentParser.of(safeString("namespace com.foo//foo\n"));
 
         assertThat(noNamespace.documentNamespace(), nullValue());
         assertThat(incompleteNamespace.documentNamespace(), nullValue());
@@ -143,15 +145,15 @@ public class DocumentParserTest {
 
     @Test
     public void getsDocumentImports() {
-        DocumentParser noImports = DocumentParser.of("abc\ndef\n");
-        DocumentParser incompleteImport = DocumentParser.of("abc\nus");
-        DocumentParser incompleteImportValue = DocumentParser.of("use ");
-        DocumentParser oneImport = DocumentParser.of("use com.foo#bar");
-        DocumentParser leadingWsImport = DocumentParser.of("    use com.foo#bar");
-        DocumentParser trailingCommentImport = DocumentParser.of("use com.foo#bar//foo");
-        DocumentParser commentedImport = DocumentParser.of("//use com.foo#bar");
-        DocumentParser multiImports = DocumentParser.of("use com.foo#bar\nuse com.foo#baz");
-        DocumentParser notImport = DocumentParser.of("usea com.foo#bar");
+        DocumentParser noImports = DocumentParser.of(safeString("abc\ndef\n"));
+        DocumentParser incompleteImport = DocumentParser.of(safeString("abc\nus"));
+        DocumentParser incompleteImportValue = DocumentParser.of(safeString("use "));
+        DocumentParser oneImport = DocumentParser.of(safeString("use com.foo#bar"));
+        DocumentParser leadingWsImport = DocumentParser.of(safeString("    use com.foo#bar"));
+        DocumentParser trailingCommentImport = DocumentParser.of(safeString("use com.foo#bar//foo"));
+        DocumentParser commentedImport = DocumentParser.of(safeString("//use com.foo#bar"));
+        DocumentParser multiImports = DocumentParser.of(safeString("use com.foo#bar\nuse com.foo#baz"));
+        DocumentParser notImport = DocumentParser.of(safeString("usea com.foo#bar"));
 
         assertThat(noImports.documentImports(), nullValue());
         assertThat(incompleteImport.documentImports(), nullValue());
@@ -164,11 +166,11 @@ public class DocumentParserTest {
         assertThat(notImport.documentImports(), nullValue());
 
         // Some of these aren't shape ids, but its ok
-        DocumentParser brokenImport = DocumentParser.of("use com.foo");
-        DocumentParser commentSeparatedImports = DocumentParser.of("use com.foo#bar //foo\nuse com.foo#baz\n//abc\nuse com.foo#foo");
-        DocumentParser oneBrokenImport = DocumentParser.of("use com.foo\nuse com.foo#bar");
-        DocumentParser innerBrokenImport = DocumentParser.of("use com.foo#bar\nuse com.foo\nuse com.foo#baz");
-        DocumentParser innerNotImport = DocumentParser.of("use com.foo#bar\nstring Foo\nuse com.foo#baz");
+        DocumentParser brokenImport = DocumentParser.of(safeString("use com.foo"));
+        DocumentParser commentSeparatedImports = DocumentParser.of(safeString("use com.foo#bar //foo\nuse com.foo#baz\n//abc\nuse com.foo#foo"));
+        DocumentParser oneBrokenImport = DocumentParser.of(safeString("use com.foo\nuse com.foo#bar"));
+        DocumentParser innerBrokenImport = DocumentParser.of(safeString("use com.foo#bar\nuse com.foo\nuse com.foo#baz"));
+        DocumentParser innerNotImport = DocumentParser.of(safeString("use com.foo#bar\nstring Foo\nuse com.foo#baz"));
         assertThat(brokenImport.documentImports().imports(), containsInAnyOrder("com.foo"));
         assertThat(commentSeparatedImports.documentImports().imports(), containsInAnyOrder("com.foo#bar", "com.foo#baz", "com.foo#foo"));
         assertThat(oneBrokenImport.documentImports().imports(), containsInAnyOrder("com.foo#bar", "com.foo"));
@@ -178,20 +180,20 @@ public class DocumentParserTest {
 
     @Test
     public void getsDocumentVersion() {
-        DocumentParser noVersion = DocumentParser.of("abc\ndef");
-        DocumentParser notVersion = DocumentParser.of("$versionNot: \"2\"");
-        DocumentParser noDollar = DocumentParser.of("version: \"2\"");
-        DocumentParser noColon = DocumentParser.of("$version \"2\"");
-        DocumentParser commented = DocumentParser.of("//$version: \"2\"");
-        DocumentParser leadingWs = DocumentParser.of("    $version: \"2\"");
-        DocumentParser leadingLines = DocumentParser.of("\n\n//abc\n$version: \"2\"");
-        DocumentParser notStringNode = DocumentParser.of("$version: 2");
-        DocumentParser trailingComment = DocumentParser.of("$version: \"2\"//abc");
-        DocumentParser trailingLine = DocumentParser.of("$version: \"2\"\n");
-        DocumentParser invalidNode = DocumentParser.of("$version: \"2");
-        DocumentParser notFirst = DocumentParser.of("$foo: \"bar\"\n// abc\n$version: \"2\"");
-        DocumentParser notSecond = DocumentParser.of("$foo: \"bar\"\n$bar: 1\n// abc\n$baz: 2\n    $version: \"2\"");
-        DocumentParser notFirstNoVersion = DocumentParser.of("$foo: \"bar\"\nfoo\n");
+        DocumentParser noVersion = DocumentParser.of(safeString("abc\ndef"));
+        DocumentParser notVersion = DocumentParser.of(safeString("$versionNot: \"2\""));
+        DocumentParser noDollar = DocumentParser.of(safeString("version: \"2\""));
+        DocumentParser noColon = DocumentParser.of(safeString("$version \"2\""));
+        DocumentParser commented = DocumentParser.of(safeString("//$version: \"2\""));
+        DocumentParser leadingWs = DocumentParser.of(safeString("    $version: \"2\""));
+        DocumentParser leadingLines = DocumentParser.of(safeString("\n\n//abc\n$version: \"2\""));
+        DocumentParser notStringNode = DocumentParser.of(safeString("$version: 2"));
+        DocumentParser trailingComment = DocumentParser.of(safeString("$version: \"2\"//abc"));
+        DocumentParser trailingLine = DocumentParser.of(safeString("$version: \"2\"\n"));
+        DocumentParser invalidNode = DocumentParser.of(safeString("$version: \"2"));
+        DocumentParser notFirst = DocumentParser.of(safeString("$foo: \"bar\"\n// abc\n$version: \"2\""));
+        DocumentParser notSecond = DocumentParser.of(safeString("$foo: \"bar\"\n$bar: 1\n// abc\n$baz: 2\n    $version: \"2\""));
+        DocumentParser notFirstNoVersion = DocumentParser.of(safeString("$foo: \"bar\"\nfoo\n"));
 
         assertThat(noVersion.documentVersion(), nullValue());
         assertThat(notVersion.documentVersion(), nullValue());
@@ -255,7 +257,7 @@ public class DocumentParserTest {
                 .filter(shape -> shape.getId().getNamespace().equals("com.foo"))
                 .collect(Collectors.toSet());
 
-        DocumentParser parser = DocumentParser.of(text);
+        DocumentParser parser = DocumentParser.of(safeString(text));
         Map<Position, DocumentShape> documentShapes = parser.documentShapes(shapes);
 
         DocumentShape fooDef = documentShapes.get(new Position(2, 7));

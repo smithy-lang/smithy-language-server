@@ -561,7 +561,9 @@ public final class Document {
         // Have to box sadly, unless there's some IntArray I'm not aware of. Maybe IntBuffer
         List<Integer> indicies = new ArrayList<>();
         indicies.add(0);
-        while ((next = buffer.indexOf(System.lineSeparator(), off)) != -1) {
+        // This works with \r\n line breaks by basically forgetting about the \r, since we don't actually
+        // care about the content of the line
+        while ((next = buffer.indexOf("\n", off)) != -1) {
             indicies.add(next + 1);
             off = next + 1;
             ++matchCount;

@@ -13,6 +13,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.hamcrest.CustomTypeSafeMatcher;
+import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.lsp.protocol.RangeAdapter;
@@ -22,7 +23,7 @@ public class DocumentTest {
     public void appliesTrailingReplacementEdit() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         Range editRange = new RangeAdapter()
                 .startLine(1)
@@ -34,17 +35,17 @@ public class DocumentTest {
 
         document.applyEdit(editRange, editText);
 
-        assertThat(document.copyText(), equalTo("abc\n" +
-                                                "deg"));
+        assertThat(document.copyText(), equalTo(safeString("abc\n" +
+                                                "deg")));
         assertThat(document.indexOfLine(0), equalTo(0));
-        assertThat(document.indexOfLine(1), equalTo(4));
+        assertThat(document.indexOfLine(1), equalTo(safeIndex(4, 1)));
     }
 
     @Test
     public void appliesAppendingEdit() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         Range editRange = new RangeAdapter()
                 .startLine(1)
@@ -56,17 +57,17 @@ public class DocumentTest {
 
         document.applyEdit(editRange, editText);
 
-        assertThat(document.copyText(), equalTo("abc\n" +
-                                                "defg"));
-        assertThat(document.indexOfLine(0), equalTo(0));
-        assertThat(document.indexOfLine(1), equalTo(4));
+        assertThat(document.copyText(), equalTo(safeString("abc\n" +
+                                                "defg")));
+        assertThat(document.indexOfLine(0), equalTo(safeIndex(0, 0)));
+        assertThat(document.indexOfLine(1), equalTo(safeIndex(4, 1)));
     }
 
     @Test
     public void appliesLeadingReplacementEdit() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         Range editRange = new RangeAdapter()
                 .startLine(0)
@@ -78,17 +79,17 @@ public class DocumentTest {
 
         document.applyEdit(editRange, editText);
 
-        assertThat(document.copyText(), equalTo("zbc\n" +
-                                                "def"));
+        assertThat(document.copyText(), equalTo(safeString("zbc\n" +
+                                                "def")));
         assertThat(document.indexOfLine(0), equalTo(0));
-        assertThat(document.indexOfLine(1), equalTo(4));
+        assertThat(document.indexOfLine(1), equalTo(safeIndex(4, 1)));
     }
 
     @Test
     public void appliesPrependingEdit() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         Range editRange = new RangeAdapter()
                 .startLine(0)
@@ -100,17 +101,17 @@ public class DocumentTest {
 
         document.applyEdit(editRange, editText);
 
-        assertThat(document.copyText(), equalTo("zabc\n" +
-                                                "def"));
+        assertThat(document.copyText(), equalTo(safeString("zabc\n" +
+                                                "def")));
         assertThat(document.indexOfLine(0), equalTo(0));
-        assertThat(document.indexOfLine(1), equalTo(5));
+        assertThat(document.indexOfLine(1), equalTo(safeIndex(5, 1)));
     }
 
     @Test
     public void appliesInnerReplacementEdit() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         Range editRange = new RangeAdapter()
                 .startLine(0)
@@ -118,21 +119,21 @@ public class DocumentTest {
                 .endLine(1)
                 .endCharacter(1)
                 .build();
-        String editText = "zy\n" +
-                       "x";
+        String editText = safeString("zy\n" +
+                       "x");
 
         document.applyEdit(editRange, editText);
 
-        assertThat(document.copyText(), equalTo("azy\n" +
-                                                "xef"));
+        assertThat(document.copyText(), equalTo(safeString("azy\n" +
+                                                "xef")));
         assertThat(document.indexOfLine(0), equalTo(0));
-        assertThat(document.indexOfLine(1), equalTo(4));
+        assertThat(document.indexOfLine(1), equalTo(safeIndex(4, 1)));
     }
 
     @Test
     public void appliesPrependingAndReplacingEdit() {
         String s = "abc";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         Range editRange = new RangeAdapter()
                 .startLine(0)
@@ -152,7 +153,7 @@ public class DocumentTest {
     public void appliesInsertionEdit() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         Range editRange = new RangeAdapter()
                 .startLine(0)
@@ -160,24 +161,24 @@ public class DocumentTest {
                 .endLine(0)
                 .endCharacter(2)
                 .build();
-        String editText = "zx\n" +
-                       "y";
+        String editText = safeString("zx\n" +
+                       "y");
 
         document.applyEdit(editRange, editText);
 
-        assertThat(document.copyText(), equalTo("abzx\n" +
+        assertThat(document.copyText(), equalTo(safeString("abzx\n" +
                                                 "yc\n" +
-                                                "def"));
+                                                "def")));
         assertThat(document.indexOfLine(0), equalTo(0));
-        assertThat(document.indexOfLine(1), equalTo(5));
-        assertThat(document.indexOfLine(2), equalTo(8));
+        assertThat(document.indexOfLine(1), equalTo(safeIndex(5, 1)));
+        assertThat(document.indexOfLine(2), equalTo(safeIndex(8, 2)));
     }
 
     @Test
     public void appliesDeletionEdit() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         Range editRange = new RangeAdapter()
                 .startLine(0)
@@ -189,10 +190,10 @@ public class DocumentTest {
 
         document.applyEdit(editRange, editText);
 
-        assertThat(document.copyText(), equalTo("bc\n" +
-                                                "def"));
+        assertThat(document.copyText(), equalTo(safeString("bc\n" +
+                                                "def")));
         assertThat(document.indexOfLine(0), equalTo(0));
-        assertThat(document.indexOfLine(1), equalTo(3));
+        assertThat(document.indexOfLine(1), equalTo(safeIndex(3, 1)));
     }
 
     @Test
@@ -200,49 +201,49 @@ public class DocumentTest {
         String s = "abc\n" +
                    "def\n" +
                    "hij\n";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         assertThat(document.indexOfLine(0), equalTo(0));
         assertThat(document.indexOfLine(-1), equalTo(-1));
-        assertThat(document.indexOfLine(1), equalTo(4));
-        assertThat(document.indexOfLine(2), equalTo(8));
-        assertThat(document.indexOfLine(3), equalTo(12));
+        assertThat(document.indexOfLine(1), equalTo(safeIndex(4, 1)));
+        assertThat(document.indexOfLine(2), equalTo(safeIndex(8, 2)));
+        assertThat(document.indexOfLine(3), equalTo(safeIndex(12, 3)));
         assertThat(document.indexOfLine(4), equalTo(-1));
     }
 
     @Test
     public void getsIndexOfPosition() {
-        Document document = Document.of("abc\ndef");
+        Document document = makeDocument("abc\ndef");
 
-        assertThat(Document.of("").indexOfPosition(new Position(0, 0)), is(-1));
-        assertThat(Document.of("").indexOfPosition(new Position(-1, 0)), is(-1));
+        assertThat(makeDocument("").indexOfPosition(new Position(0, 0)), is(-1));
+        assertThat(makeDocument("").indexOfPosition(new Position(-1, 0)), is(-1));
         assertThat(document.indexOfPosition(new Position(0, 0)), is(0));
         assertThat(document.indexOfPosition(new Position(0, 3)), is(3));
-        assertThat(document.indexOfPosition(new Position(1, 0)), is(4));
-        assertThat(document.indexOfPosition(new Position(1, 2)), is(6));
+        assertThat(document.indexOfPosition(new Position(1, 0)), is(safeIndex(4, 1)));
+        assertThat(document.indexOfPosition(new Position(1, 2)), is(safeIndex(6, 1)));
         assertThat(document.indexOfPosition(new Position(1, 3)), is(-1));
-        assertThat(document.indexOfPosition(new Position(0, 4)), is(-1));
+        assertThat(document.indexOfPosition(new Position(0, 6)), is(-1));
         assertThat(document.indexOfPosition(new Position(2, 0)), is(-1));
     }
 
     @Test
     public void getsPositionAtIndex() {
-        Document document = Document.of("abc\ndef\nhij\n");
+        Document document = makeDocument("abc\ndef\nhij\n");
 
-        assertThat(Document.of("").positionAtIndex(0), nullValue());
-        assertThat(Document.of("").positionAtIndex(-1), nullValue());
+        assertThat(makeDocument("").positionAtIndex(0), nullValue());
+        assertThat(makeDocument("").positionAtIndex(-1), nullValue());
         assertThat(document.positionAtIndex(0), equalTo(new Position(0, 0)));
         assertThat(document.positionAtIndex(3), equalTo(new Position(0, 3)));
-        assertThat(document.positionAtIndex(4), equalTo(new Position(1, 0)));
-        assertThat(document.positionAtIndex(11), equalTo(new Position(2, 3)));
-        assertThat(document.positionAtIndex(12), nullValue());
+        assertThat(document.positionAtIndex(safeIndex(4, 1)), equalTo(new Position(1, 0)));
+        assertThat(document.positionAtIndex(safeIndex(11, 2)), equalTo(new Position(2, 3)));
+        assertThat(document.positionAtIndex(safeIndex(12, 3)), nullValue());
     }
 
     @Test
     public void getsEnd() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         Position end = document.end();
 
@@ -254,7 +255,7 @@ public class DocumentTest {
     public void borrowsToken() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         CharSequence token = document.borrowToken(new Position(0, 2));
 
@@ -264,7 +265,7 @@ public class DocumentTest {
     @Test
     public void borrowsTokenWithNoWs() {
         String s = "abc";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         CharSequence token = document.borrowToken(new Position(0, 1));
 
@@ -275,7 +276,7 @@ public class DocumentTest {
     public void borrowsTokenAtStart() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         CharSequence token = document.borrowToken(new Position(0, 0));
 
@@ -286,7 +287,7 @@ public class DocumentTest {
     public void borrowsTokenAtEnd() {
         String s = "abc\n" +
                    "def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         CharSequence token = document.borrowToken(new Position(1, 2));
 
@@ -296,7 +297,7 @@ public class DocumentTest {
     @Test
     public void borrowsTokenAtBoundaryStart() {
         String s = "a bc d";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         CharSequence token = document.borrowToken(new Position(0, 2));
 
@@ -306,7 +307,7 @@ public class DocumentTest {
     @Test
     public void borrowsTokenAtBoundaryEnd() {
         String s = "a bc d";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         CharSequence token = document.borrowToken(new Position(0, 3));
 
@@ -316,7 +317,7 @@ public class DocumentTest {
     @Test
     public void doesntBorrowNonToken() {
         String s = "abc def";
-        Document document = Document.of(s);
+        Document document = makeDocument(s);
 
         CharSequence token = document.borrowToken(new Position(0, 3));
 
@@ -325,11 +326,11 @@ public class DocumentTest {
 
     @Test
     public void borrowsLine() {
-        Document document = Document.of("abc\n\ndef");
+        Document document = makeDocument("abc\n\ndef");
 
-        assertThat(Document.of("").borrowLine(0), string(""));
-        assertThat(document.borrowLine(0), string("abc\n"));
-        assertThat(document.borrowLine(1), string("\n"));
+        assertThat(makeDocument("").borrowLine(0), string(""));
+        assertThat(document.borrowLine(0), string(safeString("abc\n")));
+        assertThat(document.borrowLine(1), string(safeString("\n")));
         assertThat(document.borrowLine(2), string("def"));
         assertThat(document.borrowLine(-1), nullValue());
         assertThat(document.borrowLine(3), nullValue());
@@ -337,40 +338,40 @@ public class DocumentTest {
 
     @Test
     public void getsNextIndexOf() {
-        Document document = Document.of("abc\ndef");
+        Document document = makeDocument("abc\ndef");
 
-        assertThat(Document.of("").nextIndexOf("a", 0), is(-1));
+        assertThat(makeDocument("").nextIndexOf("a", 0), is(-1));
         assertThat(document.nextIndexOf("a", 0), is(0));
         assertThat(document.nextIndexOf("a", 1), is(-1));
         assertThat(document.nextIndexOf("abc", 0), is(0));
         assertThat(document.nextIndexOf("abc", 1), is(-1)); // doesn't match if match goes out of boundary
-        assertThat(document.nextIndexOf("\n", 3), is(3));
-        assertThat(document.nextIndexOf("f", 6), is(6));
-        assertThat(document.nextIndexOf("f", 7), is(-1)); // oob
+        assertThat(document.nextIndexOf(System.lineSeparator(), 3), is(3));
+        assertThat(document.nextIndexOf("f", safeIndex(6, 1)), is(safeIndex(6, 1)));
+        assertThat(document.nextIndexOf("f", safeIndex(7, 1)), is(-1)); // oob
     }
 
     @Test
     public void getsLastIndexOf() {
-        Document document = Document.of("abc\ndef");
+        Document document = makeDocument("abc\ndef");
 
-        assertThat(Document.of("").lastIndexOf("a", 1), is(-1));
+        assertThat(makeDocument("").lastIndexOf("a", 1), is(-1));
         assertThat(document.lastIndexOf("a", 0), is(0)); // start
         assertThat(document.lastIndexOf("a", 1), is(0));
-        assertThat(document.lastIndexOf("a", 6), is(0));
-        assertThat(document.lastIndexOf("f", 6), is(6));
-        assertThat(document.lastIndexOf("f", 7), is(6)); // oob
-        assertThat(document.lastIndexOf("\n", 3), is(3));
+        assertThat(document.lastIndexOf("a", safeIndex(6, 1)), is(0));
+        assertThat(document.lastIndexOf("f", safeIndex(6, 1)), is(safeIndex(6, 1)));
+        assertThat(document.lastIndexOf("f", safeIndex(7, 1)), is(safeIndex(6, 1))); // oob
+        assertThat(document.lastIndexOf(System.lineSeparator(), 3), is(3));
         assertThat(document.lastIndexOf("ab", 1), is(0));
         assertThat(document.lastIndexOf("ab", 0), is(0)); // can match even if match goes out of boundary
         assertThat(document.lastIndexOf("ab", -1), is(-1));
-        assertThat(document.lastIndexOf(" ", 8), is(-1)); // not found
+        assertThat(document.lastIndexOf(" ", safeIndex(8, 1)), is(-1)); // not found
     }
 
     @Test
     public void borrowsSpan() {
-        Document empty = Document.of("");
-        Document line = Document.of("abc");
-        Document multi = Document.of("abc\ndef\n\n");
+        Document empty = makeDocument("");
+        Document line = makeDocument("abc");
+        Document multi = makeDocument("abc\ndef\n\n");
 
         assertThat(empty.borrowSpan(0, 1), nullValue()); // empty
         assertThat(line.borrowSpan(-1, 1), nullValue()); // negative
@@ -378,43 +379,43 @@ public class DocumentTest {
         assertThat(line.borrowSpan(0, 1), string("a")); // one
         assertThat(line.borrowSpan(0, 3), string("abc")); // all
         assertThat(line.borrowSpan(0, 4), nullValue()); // oob
-        assertThat(multi.borrowSpan(0, 4), string("abc\n")); // with newline
-        assertThat(multi.borrowSpan(3, 5), string("\nd")); // inner
-        assertThat(multi.borrowSpan(5, 9), string("ef\n\n")); // up to end
+        assertThat(multi.borrowSpan(0, safeIndex(4, 1)), string(safeString("abc\n"))); // with newline
+        assertThat(multi.borrowSpan(3, safeIndex(5, 1)), string(safeString("\nd"))); // inner
+        assertThat(multi.borrowSpan(safeIndex(5, 1), safeIndex(9, 3)), string(safeString("ef\n\n"))); // up to end
     }
 
     @Test
     public void getsLineOfIndex() {
-        Document empty = Document.of("");
-        Document single = Document.of("abc");
-        Document twoLine = Document.of("abc\ndef");
-        Document leadingAndTrailingWs = Document.of("\nabc\n");
-        Document threeLine = Document.of("abc\ndef\nhij\n");
+        Document empty = makeDocument("");
+        Document single = makeDocument("abc");
+        Document twoLine = makeDocument("abc\ndef");
+        Document leadingAndTrailingWs = makeDocument("\nabc\n");
+        Document threeLine = makeDocument("abc\ndef\nhij\n");
 
         assertThat(empty.lineOfIndex(1), is(-1)); // oob
         assertThat(single.lineOfIndex(0), is(0)); // start
         assertThat(single.lineOfIndex(2), is(0)); // end
         assertThat(single.lineOfIndex(3), is(-1)); // oob
         assertThat(twoLine.lineOfIndex(1), is(0)); // first line
-        assertThat(twoLine.lineOfIndex(4), is(1)); // second line start
+        assertThat(twoLine.lineOfIndex(safeIndex(4, 1)), is(1)); // second line start
         assertThat(twoLine.lineOfIndex(3), is(0)); // new line
-        assertThat(twoLine.lineOfIndex(6), is(1)); // end
-        assertThat(twoLine.lineOfIndex(7), is(-1)); // oob
+        assertThat(twoLine.lineOfIndex(safeIndex(6, 1)), is(1)); // end
+        assertThat(twoLine.lineOfIndex(safeIndex(7, 1)), is(-1)); // oob
         assertThat(leadingAndTrailingWs.lineOfIndex(0), is(0)); // new line
-        assertThat(leadingAndTrailingWs.lineOfIndex(1), is(1)); // start of line
-        assertThat(leadingAndTrailingWs.lineOfIndex(4), is(1)); // new line
-        assertThat(threeLine.lineOfIndex(12), is(-1));
-        assertThat(threeLine.lineOfIndex(11), is(2));
+        assertThat(leadingAndTrailingWs.lineOfIndex(safeIndex(1, 1)), is(1)); // start of line
+        assertThat(leadingAndTrailingWs.lineOfIndex(safeIndex(4, 1)), is(1)); // new line
+        assertThat(threeLine.lineOfIndex(safeIndex(12, 3)), is(-1));
+        assertThat(threeLine.lineOfIndex(safeIndex(11, 2)), is(2));
     }
 
     @Test
     public void borrowsDocumentShapeId() {
-        Document empty = Document.of("");
-        Document notId = Document.of("?!&");
-        Document onlyId = Document.of("abc");
-        Document split = Document.of("abc.def hij");
-        Document technicallyBroken = Document.of("com.foo# com.foo$ com.foo. com$foo$bar com...foo $foo .foo #foo");
-        Document technicallyValid = Document.of("com.foo#bar com.foo#bar$baz com.foo foo#bar foo#bar$baz foo$bar");
+        Document empty = makeDocument("");
+        Document notId = makeDocument("?!&");
+        Document onlyId = makeDocument("abc");
+        Document split = makeDocument("abc.def hij");
+        Document technicallyBroken = makeDocument("com.foo# com.foo$ com.foo. com$foo$bar com...foo $foo .foo #foo");
+        Document technicallyValid = makeDocument("com.foo#bar com.foo#bar$baz com.foo foo#bar foo#bar$baz foo$bar");
 
         assertThat(empty.getDocumentIdAt(new Position(0, 0)), nullValue());
         assertThat(notId.getDocumentIdAt(new Position(0, 0)), nullValue());
@@ -449,11 +450,37 @@ public class DocumentTest {
         assertThat(technicallyValid.getDocumentIdAt(new Position(0, 56)), documentShapeId("foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
     }
 
+    // This is used to convert the character offset in a file that assumes a single character
+    // line break, and make that same offset safe with multi character line breaks.
+    //
+    // This is preferable to simply adjusting how we test Document because bugs in these low-level
+    // primitive methods will break a lot of stuff, so it's good to be exact.
+    public static int safeIndex(int standardOffset, int line) {
+        return standardOffset + (line * (System.lineSeparator().length() - 1));
+    }
+
+    // Makes a string literal with '\n' newline characters use the actual OS line separator.
+    // Don't use this if you didn't manually type out the '\n's.
+    // TODO: Remove this for textblocks
+    public static String safeString(String s) {
+        return s.replace("\n", System.lineSeparator());
+    }
+    
+    private static Document makeDocument(String s) {
+        return Document.of(safeString(s));
+    }
+
     public static Matcher<CharSequence> string(String other) {
         return new CustomTypeSafeMatcher<CharSequence>(other) {
             @Override
             protected boolean matchesSafely(CharSequence item) {
-                return other.equals(item.toString());
+                return other.replace("\n", "\\n").replace("\r", "\\r").equals(item.toString().replace("\n", "\\n").replace("\r", "\\r"));
+            }
+            @Override
+            public void describeMismatchSafely(CharSequence item, Description description) {
+                String o = other.replace("\n", "\\n").replace("\r", "\\r");
+                String it = item.toString().replace("\n", "\\n").replace("\r", "\\r");
+                equalTo(o).describeMismatch(it, description);
             }
         };
     }
