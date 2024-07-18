@@ -29,7 +29,7 @@ import org.eclipse.lsp4j.services.LanguageClient;
  * Wrapper around a delegate {@link LanguageClient} that provides convenience
  * methods and/or Smithy-specific language client features.
  */
-public class SmithyLanguageClient implements LanguageClient {
+public final class SmithyLanguageClient implements LanguageClient {
     private final LanguageClient delegate;
 
     SmithyLanguageClient(LanguageClient delegate) {

@@ -10,6 +10,9 @@ import org.hamcrest.CustomTypeSafeMatcher;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 
+/**
+ * Utility hamcrest matchers.
+ */
 public final class UtilMatchers {
     private UtilMatchers() {}
 

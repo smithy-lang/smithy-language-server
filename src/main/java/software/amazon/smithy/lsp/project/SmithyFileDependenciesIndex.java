@@ -41,13 +41,17 @@ import software.amazon.smithy.model.validation.ValidatedResult;
  * </ol>
  */
 final class SmithyFileDependenciesIndex {
-    static final SmithyFileDependenciesIndex EMPTY = new SmithyFileDependenciesIndex(
-            new HashMap<>(0), new HashMap<>(0), new HashMap<>(0), new HashMap<>(0));
-
     private final Map<String, Set<String>> filesToDependentFiles;
     private final Map<ShapeId, Set<String>> shapeIdsToDependenciesFiles;
     private final Map<String, Map<ShapeId, List<Trait>>> filesToTraitsTheyApply;
     private final Map<ShapeId, List<Trait>> shapesToAppliedTraitsInOtherFiles;
+
+    SmithyFileDependenciesIndex() {
+        this.filesToDependentFiles = new HashMap<>(0);
+        this.shapeIdsToDependenciesFiles = new HashMap<>(0);
+        this.filesToTraitsTheyApply = new HashMap<>(0);
+        this.shapesToAppliedTraitsInOtherFiles = new HashMap<>(0);
+    }
 
     private SmithyFileDependenciesIndex(
             Map<String, Set<String>> filesToDependentFiles,
@@ -80,7 +84,7 @@ final class SmithyFileDependenciesIndex {
     // TODO: Make this take care of metadata too
     static SmithyFileDependenciesIndex compute(ValidatedResult<Model> modelResult) {
         if (!modelResult.getResult().isPresent()) {
-            return EMPTY;
+            return new SmithyFileDependenciesIndex();
         }
 
         SmithyFileDependenciesIndex index = new SmithyFileDependenciesIndex(

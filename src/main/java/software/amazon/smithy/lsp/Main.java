@@ -60,14 +60,10 @@ public final class Main {
         return new InputStream() {
             @Override
             public int read() throws IOException {
-                return exitIfNegative(delegate.read());
-            }
-
-            int exitIfNegative(int result) {
+                int result = delegate.read();
                 if (result < 0) {
                     System.exit(0);
                 }
-
                 return result;
             }
         };

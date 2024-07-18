@@ -54,7 +54,7 @@ public final class DocumentId {
         this.range = range;
     }
 
-    public Type getType() {
+    public Type type() {
         return type;
     }
 
@@ -66,7 +66,7 @@ public final class DocumentId {
         return buffer;
     }
 
-    public Range getRange() {
+    public Range range() {
         return range;
     }
 }

@@ -48,21 +48,21 @@ public final class SmithyFile {
     /**
      * @return The path of this Smithy file
      */
-    public String getPath() {
+    public String path() {
         return path;
     }
 
     /**
      * @return The {@link Document} backing this Smithy file
      */
-    public Document getDocument() {
+    public Document document() {
         return document;
     }
 
     /**
      * @return The Shapes defined in this Smithy file
      */
-    public Set<Shape> getShapes() {
+    public Set<Shape> shapes() {
         return shapes;
     }
 
@@ -73,15 +73,15 @@ public final class SmithyFile {
     /**
      * @return This Smithy file's imports, if they exist
      */
-    public Optional<DocumentImports> getDocumentImports() {
+    public Optional<DocumentImports> documentImports() {
         return Optional.ofNullable(this.imports);
     }
 
     /**
      * @return The ids of shapes imported into this Smithy file
      */
-    public Set<String> getImports() {
-        return getDocumentImports()
+    public Set<String> imports() {
+        return documentImports()
                 .map(DocumentImports::imports)
                 .orElse(Collections.emptySet());
     }
@@ -89,14 +89,14 @@ public final class SmithyFile {
     /**
      * @return This Smithy file's namespace, if one exists
      */
-    public Optional<DocumentNamespace> getDocumentNamespace() {
+    public Optional<DocumentNamespace> documentNamespace() {
         return Optional.ofNullable(namespace);
     }
 
     /**
      * @return The shapes in this Smithy file, including referenced shapes
      */
-    public Collection<DocumentShape> getDocumentShapes() {
+    public Collection<DocumentShape> documentShapes() {
         if (documentShapes == null) {
             return Collections.emptyList();
         }
@@ -107,7 +107,7 @@ public final class SmithyFile {
      * @return A map of {@link Position} to the {@link DocumentShape} they are
      *  the starting position of
      */
-    public Map<Position, DocumentShape> getDocumentShapesByStartPosition() {
+    public Map<Position, DocumentShape> documentShapesByStartPosition() {
         if (documentShapes == null) {
             return Collections.emptyMap();
         }
@@ -117,8 +117,8 @@ public final class SmithyFile {
     /**
      * @return The string literal namespace of this Smithy file, or an empty string
      */
-    public CharSequence getNamespace() {
-        return getDocumentNamespace()
+    public CharSequence namespace() {
+        return documentNamespace()
                 .map(DocumentNamespace::namespace)
                 .orElse("");
     }
@@ -126,7 +126,7 @@ public final class SmithyFile {
     /**
      * @return This Smithy file's version, if it exists
      */
-    public Optional<DocumentVersion> getDocumentVersion() {
+    public Optional<DocumentVersion> documentVersion() {
         return Optional.ofNullable(documentVersion);
     }
 
@@ -135,7 +135,7 @@ public final class SmithyFile {
      * @return Whether {@code shapeId} is in this SmithyFile's imports
      */
     public boolean hasImport(String shapeId) {
-        if (imports == null) {
+        if (imports == null || imports.imports().isEmpty()) {
             return false;
         }
         return imports.imports().contains(shapeId);

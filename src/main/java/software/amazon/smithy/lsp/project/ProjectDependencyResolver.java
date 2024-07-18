@@ -46,9 +46,9 @@ final class ProjectDependencyResolver {
                     .stream()
                     .map(ResolvedArtifact::getPath)
                     .collect(Collectors.toCollection(ArrayList::new));
-            config.getDependencies().forEach((projectDependency) -> {
+            config.dependencies().forEach((projectDependency) -> {
                 // TODO: Not sure if this needs to check for existence
-                Path path = root.resolve(projectDependency.getPath()).normalize();
+                Path path = root.resolve(projectDependency.path()).normalize();
                 deps.add(path);
             });
             return deps;
@@ -57,10 +57,6 @@ final class ProjectDependencyResolver {
 
     // Taken (roughly) from smithy-cli ClasspathAction::resolveDependencies
     private static DependencyResolver create(ProjectConfig config) {
-        // DependencyResolver delegate = new MavenDependencyResolver(EnvironmentVariable.SMITHY_MAVEN_CACHE.get());
-        // long lastModified = config.getLastModifiedInMillis();
-        // DependencyResolver resolver = new FileCacheResolver(getCacheFile(config), lastModified, delegate);
-
         // TODO: Seeing what happens if we just don't use the file cache. When we do, at least for testing, the
         //  server writes a classpath.json to build/smithy/ which is used by all tests, messing everything up.
         DependencyResolver resolver = new MavenDependencyResolver(EnvironmentVariable.SMITHY_MAVEN_CACHE.get());
@@ -69,7 +65,7 @@ final class ProjectDependencyResolver {
         configuredRepositories.forEach(resolver::addRepository);
 
         // TODO: Support lock file ?
-        config.getMaven().ifPresent(maven -> maven.getDependencies().forEach(resolver::addDependency));
+        config.maven().ifPresent(maven -> maven.getDependencies().forEach(resolver::addDependency));
 
         return resolver;
     }
@@ -84,7 +80,7 @@ final class ProjectDependencyResolver {
 
     // Taken from smithy-cli BuildOptions::resolveOutput
     private static Path getOutputDirectory(ProjectConfig config) {
-        return config.getOutputDirectory()
+        return config.outputDirectory()
                 .map(Paths::get)
                 .orElseGet(SmithyBuild::getDefaultOutputDirectory);
     }
@@ -100,16 +96,13 @@ final class ProjectDependencyResolver {
             }
         }
 
-        Set<MavenRepository> configuredRepos = config.getMaven()
+        Set<MavenRepository> configuredRepos = config.maven()
                 .map(MavenConfig::getRepositories)
                 .orElse(Collections.emptySet());
 
         if (!configuredRepos.isEmpty()) {
             repositories.addAll(configuredRepos);
         } else if (envRepos == null) {
-//            LOGGER.finest(() -> String.format("maven.repositories is not defined in `smithy-build.json` and the %s "
-//                            + "environment variable is not set. Defaulting to Maven Central.",
-//                    EnvironmentVariable.SMITHY_MAVEN_REPOS));
             repositories.add(CENTRAL.get());
         }
         return repositories;

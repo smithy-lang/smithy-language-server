@@ -22,7 +22,13 @@ import org.eclipse.lsp4j.Range;
 import software.amazon.smithy.lsp.document.DocumentVersion;
 import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.protocol.RangeAdapter;
+import software.amazon.smithy.utils.SmithyInternalApi;
 
+/**
+ * Diagnostics for when a $version control statement hasn't been defined, or when
+ * it has been defined for IDL 1.0.
+ */
+@SmithyInternalApi
 public final class VersionDiagnostics {
     public static final String SMITHY_UPDATE_VERSION = "migrating-idl-1-to-2";
     public static final String SMITHY_DEFINE_VERSION = "define-idl-version";
@@ -49,7 +55,7 @@ public final class VersionDiagnostics {
      * @return Whether the given {@code smithyFile} has a version diagnostic
      */
     public static boolean hasVersionDiagnostic(SmithyFile smithyFile) {
-        return smithyFile.getDocumentVersion()
+        return smithyFile.documentVersion()
                 .map(documentVersion -> documentVersion.version().charAt(0) != '2')
                 .orElse(true);
     }
@@ -61,44 +67,24 @@ public final class VersionDiagnostics {
      */
     public static Diagnostic forSmithyFile(SmithyFile smithyFile) {
         // TODO: This can be cached
-        if (smithyFile.getDocumentVersion().isPresent()) {
-            DocumentVersion documentVersion = smithyFile.getDocumentVersion().get();
+        Diagnostic diagnostic = null;
+        if (smithyFile.documentVersion().isPresent()) {
+            DocumentVersion documentVersion = smithyFile.documentVersion().get();
             if (!documentVersion.version().toString().startsWith("2")) {
-                return updateVersion(documentVersion.range());
+                diagnostic = build(
+                        "You can upgrade to version 2.",
+                        SMITHY_UPDATE_VERSION,
+                        documentVersion.range());
+                diagnostic.setCodeDescription(SMITHY_UPDATE_VERSION_CODE_DIAGNOSTIC);
             }
-        } else if (smithyFile.getDocument() != null) {
-            int end = smithyFile.getDocument().lineEnd(0);
+        } else if (smithyFile.document() != null) {
+            int end = smithyFile.document().lineEnd(0);
             Range range = RangeAdapter.lineSpan(0, 0, end);
-            return defineVersion(range);
+            diagnostic = build(
+                    "You should define a version for your Smithy file.",
+                    SMITHY_DEFINE_VERSION,
+                    range);
         }
-        return null;
-    }
-
-    /**
-     * Build a diagnostic for an outdated Smithy version.
-     * @param range range where the $version statement is found
-     * @return a Diagnostic with a code that refer to the codeAction to take
-     */
-    static Diagnostic updateVersion(Range range) {
-        Diagnostic diag = build(
-                "You can upgrade to version 2.",
-                SMITHY_UPDATE_VERSION,
-                range
-        );
-        diag.setCodeDescription(SMITHY_UPDATE_VERSION_CODE_DIAGNOSTIC);
-        return diag;
-    }
-
-    /**
-     * Build a diagnostic for a missing Smithy version.
-     * @param range range where the $version is expected to be
-     * @return a Diagnostic with a code that refer to the codeAction to take
-     */
-    static Diagnostic defineVersion(Range range) {
-        return build(
-                "You should define a version for your Smithy file.",
-                SMITHY_DEFINE_VERSION,
-                range
-        );
+        return diagnostic;
     }
 }

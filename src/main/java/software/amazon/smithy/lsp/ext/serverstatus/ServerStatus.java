@@ -23,7 +23,7 @@ public class ServerStatus {
     /**
      * @return The open projects tracked by the server
      */
-    public List<OpenProject> getOpenProjects() {
+    public List<OpenProject> openProjects() {
         return openProjects;
     }
 }

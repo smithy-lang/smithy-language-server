@@ -72,17 +72,17 @@ public final class Project {
     /**
      * @return The path of the root directory of the project
      */
-    public Path getRoot() {
+    public Path root() {
         return root;
     }
 
     /**
      * @return The paths of all Smithy sources specified
      *  in this project's smithy build configuration files,
-     *  normalized and resolved against {@link #getRoot()}.
+     *  normalized and resolved against {@link #root()}.
      */
-    public List<Path> getSources() {
-        return config.getSources().stream()
+    public List<Path> sources() {
+        return config.sources().stream()
                 .map(root::resolve)
                 .map(Path::normalize)
                 .collect(Collectors.toList());
@@ -91,10 +91,10 @@ public final class Project {
     /**
      * @return The paths of all Smithy imports specified
      *  in this project's smithy build configuration files,
-     *  normalized and resolved against {@link #getRoot()}.
+     *  normalized and resolved against {@link #root()}.
      */
-    public List<Path> getImports() {
-        return config.getImports().stream()
+    public List<Path> imports() {
+        return config.imports().stream()
                 .map(root::resolve)
                 .map(Path::normalize)
                 .collect(Collectors.toList());
@@ -103,7 +103,7 @@ public final class Project {
     /**
      * @return The paths of all resolved dependencies
      */
-    public List<Path> getDependencies() {
+    public List<Path> dependencies() {
         return dependencies;
     }
 
@@ -111,14 +111,14 @@ public final class Project {
      * @return A map of paths to the {@link SmithyFile} at that path, containing
      *  all smithy files loaded in the project.
      */
-    public Map<String, SmithyFile> getSmithyFiles() {
+    public Map<String, SmithyFile> smithyFiles() {
         return this.smithyFiles;
     }
 
     /**
      * @return The latest result of loading this project
      */
-    public ValidatedResult<Model> getModelResult() {
+    public ValidatedResult<Model> modelResult() {
         return modelResult;
     }
 
@@ -133,7 +133,7 @@ public final class Project {
         if (smithyFile == null) {
             return null;
         }
-        return smithyFile.getDocument();
+        return smithyFile.document();
     }
 
     /**
@@ -242,7 +242,7 @@ public final class Project {
                 // Only add back stuff we aren't trying to remove.
                 // Only removed paths will have had their SmithyFile removed.
                 if (!removedPaths.contains(visitedPath)) {
-                    assembler.addUnparsedModel(visitedPath, smithyFiles.get(visitedPath).getDocument().copyText());
+                    assembler.addUnparsedModel(visitedPath, smithyFiles.get(visitedPath).document().copyText());
                 }
             }
         } else {
@@ -264,12 +264,12 @@ public final class Project {
         for (String visitedPath : visited) {
             if (!removedPaths.contains(visitedPath)) {
                 SmithyFile current = smithyFiles.get(visitedPath);
-                Set<Shape> updatedShapes = getFileShapes(visitedPath, smithyFiles.get(visitedPath).getShapes());
+                Set<Shape> updatedShapes = getFileShapes(visitedPath, smithyFiles.get(visitedPath).shapes());
                 // Only recompute the rest of the smithy file if it changed
                 if (changedPaths.contains(visitedPath)) {
                     // TODO: Could cache validation events
                     this.smithyFiles.put(visitedPath,
-                            ProjectLoader.buildSmithyFile(visitedPath, current.getDocument(), updatedShapes).build());
+                            ProjectLoader.buildSmithyFile(visitedPath, current.document(), updatedShapes).build());
                 } else {
                     current.setShapes(updatedShapes);
                 }
@@ -307,7 +307,7 @@ public final class Project {
 
         visited.add(path);
 
-        for (Shape shape : smithyFiles.get(path).getShapes()) {
+        for (Shape shape : smithyFiles.get(path).shapes()) {
             builder.removeShape(shape.getId());
 
             // This shape may have traits applied to it in other files,
@@ -379,7 +379,7 @@ public final class Project {
         private ValidatedResult<Model> modelResult;
         private Supplier<ModelAssembler> assemblerFactory = Model::assembler;
         private Map<String, Map<String, Node>> perFileMetadata = new HashMap<>();
-        private SmithyFileDependenciesIndex smithyFileDependenciesIndex = SmithyFileDependenciesIndex.EMPTY;
+        private SmithyFileDependenciesIndex smithyFileDependenciesIndex = new SmithyFileDependenciesIndex();
 
         private Builder() {
         }

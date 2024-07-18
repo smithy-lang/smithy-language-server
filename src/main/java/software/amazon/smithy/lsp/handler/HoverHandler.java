@@ -34,6 +34,9 @@ import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
+/**
+ * Handles hover requests.
+ */
 public final class HoverHandler {
     private final Project project;
 
@@ -56,18 +59,18 @@ public final class HoverHandler {
         }
 
         Position position = params.getPosition();
-        DocumentId id = smithyFile.getDocument().getDocumentIdAt(position);
+        DocumentId id = smithyFile.document().copyDocumentId(position);
         if (id == null || id.borrowIdValue().length() == 0) {
             return hover;
         }
 
-        ValidatedResult<Model> modelResult = project.getModelResult();
+        ValidatedResult<Model> modelResult = project.modelResult();
         if (!modelResult.getResult().isPresent()) {
             return hover;
         }
 
         Model model = modelResult.getResult().get();
-        DocumentPositionContext context = DocumentParser.forDocument(smithyFile.getDocument())
+        DocumentPositionContext context = DocumentParser.forDocument(smithyFile.document())
                 .determineContext(position);
         Optional<Shape> matchingShape = contextualShapes(model, context)
                 .filter(contextualMatcher(smithyFile, id))
@@ -137,11 +140,11 @@ public final class HoverHandler {
 
     private static Predicate<Shape> contextualMatcher(SmithyFile smithyFile, DocumentId id) {
         String token = id.copyIdValue();
-        if (id.getType() == DocumentId.Type.ABSOLUTE_ID) {
+        if (id.type() == DocumentId.Type.ABSOLUTE_ID) {
             return (shape) -> shape.getId().toString().equals(token);
         } else {
             return (shape) -> (Prelude.isPublicPreludeShape(shape)
-                               || shape.getId().getNamespace().contentEquals(smithyFile.getNamespace())
+                               || shape.getId().getNamespace().contentEquals(smithyFile.namespace())
                                || smithyFile.hasImport(shape.getId().toString()))
                               && shape.getId().getName().equals(token);
         }

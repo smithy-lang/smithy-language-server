@@ -417,37 +417,37 @@ public class DocumentTest {
         Document technicallyBroken = makeDocument("com.foo# com.foo$ com.foo. com$foo$bar com...foo $foo .foo #foo");
         Document technicallyValid = makeDocument("com.foo#bar com.foo#bar$baz com.foo foo#bar foo#bar$baz foo$bar");
 
-        assertThat(empty.getDocumentIdAt(new Position(0, 0)), nullValue());
-        assertThat(notId.getDocumentIdAt(new Position(0, 0)), nullValue());
-        assertThat(notId.getDocumentIdAt(new Position(0, 2)), nullValue());
-        assertThat(onlyId.getDocumentIdAt(new Position(0, 0)), documentShapeId("abc", DocumentId.Type.ID));
-        assertThat(onlyId.getDocumentIdAt(new Position(0, 2)), documentShapeId("abc", DocumentId.Type.ID));
-        assertThat(onlyId.getDocumentIdAt(new Position(0, 3)), nullValue());
-        assertThat(split.getDocumentIdAt(new Position(0, 0)), documentShapeId("abc.def", DocumentId.Type.NAMESPACE));
-        assertThat(split.getDocumentIdAt(new Position(0, 6)), documentShapeId("abc.def", DocumentId.Type.NAMESPACE));
-        assertThat(split.getDocumentIdAt(new Position(0, 7)), nullValue());
-        assertThat(split.getDocumentIdAt(new Position(0, 8)), documentShapeId("hij", DocumentId.Type.ID));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 0)), documentShapeId("com.foo#", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 3)), documentShapeId("com.foo#", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 7)), documentShapeId("com.foo#", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 9)), documentShapeId("com.foo$", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 16)), documentShapeId("com.foo$", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 18)), documentShapeId("com.foo.", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 25)), documentShapeId("com.foo.", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 27)), documentShapeId("com$foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 30)), documentShapeId("com$foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 37)), documentShapeId("com$foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 39)), documentShapeId("com...foo", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 43)), documentShapeId("com...foo", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 49)), documentShapeId("$foo", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 54)), documentShapeId(".foo", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyBroken.getDocumentIdAt(new Position(0, 59)), documentShapeId("#foo", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyValid.getDocumentIdAt(new Position(0, 0)), documentShapeId("com.foo#bar", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyValid.getDocumentIdAt(new Position(0, 12)), documentShapeId("com.foo#bar$baz", DocumentId.Type.ABSOLUTE_WITH_MEMBER));
-        assertThat(technicallyValid.getDocumentIdAt(new Position(0, 28)), documentShapeId("com.foo", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyValid.getDocumentIdAt(new Position(0, 36)), documentShapeId("foo#bar", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyValid.getDocumentIdAt(new Position(0, 44)), documentShapeId("foo#bar$baz", DocumentId.Type.ABSOLUTE_WITH_MEMBER));
-        assertThat(technicallyValid.getDocumentIdAt(new Position(0, 56)), documentShapeId("foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
+        assertThat(empty.copyDocumentId(new Position(0, 0)), nullValue());
+        assertThat(notId.copyDocumentId(new Position(0, 0)), nullValue());
+        assertThat(notId.copyDocumentId(new Position(0, 2)), nullValue());
+        assertThat(onlyId.copyDocumentId(new Position(0, 0)), documentShapeId("abc", DocumentId.Type.ID));
+        assertThat(onlyId.copyDocumentId(new Position(0, 2)), documentShapeId("abc", DocumentId.Type.ID));
+        assertThat(onlyId.copyDocumentId(new Position(0, 3)), nullValue());
+        assertThat(split.copyDocumentId(new Position(0, 0)), documentShapeId("abc.def", DocumentId.Type.NAMESPACE));
+        assertThat(split.copyDocumentId(new Position(0, 6)), documentShapeId("abc.def", DocumentId.Type.NAMESPACE));
+        assertThat(split.copyDocumentId(new Position(0, 7)), nullValue());
+        assertThat(split.copyDocumentId(new Position(0, 8)), documentShapeId("hij", DocumentId.Type.ID));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 0)), documentShapeId("com.foo#", DocumentId.Type.ABSOLUTE_ID));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 3)), documentShapeId("com.foo#", DocumentId.Type.ABSOLUTE_ID));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 7)), documentShapeId("com.foo#", DocumentId.Type.ABSOLUTE_ID));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 9)), documentShapeId("com.foo$", DocumentId.Type.RELATIVE_WITH_MEMBER));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 16)), documentShapeId("com.foo$", DocumentId.Type.RELATIVE_WITH_MEMBER));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 18)), documentShapeId("com.foo.", DocumentId.Type.NAMESPACE));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 25)), documentShapeId("com.foo.", DocumentId.Type.NAMESPACE));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 27)), documentShapeId("com$foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 30)), documentShapeId("com$foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 37)), documentShapeId("com$foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 39)), documentShapeId("com...foo", DocumentId.Type.NAMESPACE));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 43)), documentShapeId("com...foo", DocumentId.Type.NAMESPACE));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 49)), documentShapeId("$foo", DocumentId.Type.RELATIVE_WITH_MEMBER));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 54)), documentShapeId(".foo", DocumentId.Type.NAMESPACE));
+        assertThat(technicallyBroken.copyDocumentId(new Position(0, 59)), documentShapeId("#foo", DocumentId.Type.ABSOLUTE_ID));
+        assertThat(technicallyValid.copyDocumentId(new Position(0, 0)), documentShapeId("com.foo#bar", DocumentId.Type.ABSOLUTE_ID));
+        assertThat(technicallyValid.copyDocumentId(new Position(0, 12)), documentShapeId("com.foo#bar$baz", DocumentId.Type.ABSOLUTE_WITH_MEMBER));
+        assertThat(technicallyValid.copyDocumentId(new Position(0, 28)), documentShapeId("com.foo", DocumentId.Type.NAMESPACE));
+        assertThat(technicallyValid.copyDocumentId(new Position(0, 36)), documentShapeId("foo#bar", DocumentId.Type.ABSOLUTE_ID));
+        assertThat(technicallyValid.copyDocumentId(new Position(0, 44)), documentShapeId("foo#bar$baz", DocumentId.Type.ABSOLUTE_WITH_MEMBER));
+        assertThat(technicallyValid.copyDocumentId(new Position(0, 56)), documentShapeId("foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
     }
 
     // This is used to convert the character offset in a file that assumes a single character
@@ -489,7 +489,7 @@ public class DocumentTest {
         return new CustomTypeSafeMatcher<DocumentId>(other + " with type: " + type) {
             @Override
             protected boolean matchesSafely(DocumentId item) {
-                return other.equals(item.copyIdValue()) && item.getType() == type;
+                return other.equals(item.copyIdValue()) && item.type() == type;
             }
         };
     }

@@ -5,10 +5,16 @@
 
 package software.amazon.smithy.lsp.project;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import software.amazon.smithy.build.model.MavenConfig;
+import software.amazon.smithy.model.node.Node;
+import software.amazon.smithy.model.node.ObjectNode;
+import software.amazon.smithy.model.node.StringNode;
+import software.amazon.smithy.utils.IoUtils;
 
 /**
  * A complete view of all a project's configuration that is needed to load it,
@@ -40,35 +46,35 @@ final class ProjectConfig {
     /**
      * @return All explicitly configured sources
      */
-    public List<String> getSources() {
+    public List<String> sources() {
         return sources;
     }
 
     /**
      * @return All explicitly configured imports
      */
-    public List<String> getImports() {
+    public List<String> imports() {
         return imports;
     }
 
     /**
      * @return The configured output directory, if one is present
      */
-    public Optional<String> getOutputDirectory() {
+    public Optional<String> outputDirectory() {
         return Optional.ofNullable(outputDirectory);
     }
 
     /**
      * @return All configured external (non-maven) dependencies
      */
-    public List<ProjectDependency> getDependencies() {
+    public List<ProjectDependency> dependencies() {
         return dependencies;
     }
 
     /**
      * @return The Maven configuration, if present
      */
-    public Optional<MavenConfig> getMaven() {
+    public Optional<MavenConfig> maven() {
         return Optional.ofNullable(mavenConfig);
     }
 
@@ -80,6 +86,28 @@ final class ProjectConfig {
         MavenConfig mavenConfig;
 
         private Builder() {
+        }
+
+        static Builder load(Path path) {
+            String json = IoUtils.readUtf8File(path);
+            Node node = Node.parseJsonWithComments(json, path.toString());
+            ObjectNode objectNode = node.expectObjectNode();
+            ProjectConfig.Builder projectConfigBuilder = ProjectConfig.builder();
+            objectNode.getArrayMember("sources").ifPresent(arrayNode ->
+                    projectConfigBuilder.sources(arrayNode.getElementsAs(StringNode.class).stream()
+                            .map(StringNode::getValue)
+                            .collect(Collectors.toList())));
+            objectNode.getArrayMember("imports").ifPresent(arrayNode ->
+                    projectConfigBuilder.imports(arrayNode.getElementsAs(StringNode.class).stream()
+                            .map(StringNode::getValue)
+                            .collect(Collectors.toList())));
+            objectNode.getStringMember("outputDirectory").ifPresent(stringNode ->
+                    projectConfigBuilder.outputDirectory(stringNode.getValue()));
+            objectNode.getArrayMember("dependencies").ifPresent(arrayNode ->
+                    projectConfigBuilder.dependencies(arrayNode.getElements().stream()
+                            .map(ProjectDependency::fromNode)
+                            .collect(Collectors.toList())));
+            return projectConfigBuilder;
         }
 
         public Builder sources(List<String> sources) {

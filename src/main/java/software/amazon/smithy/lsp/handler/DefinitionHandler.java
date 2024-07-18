@@ -7,6 +7,7 @@ package software.amazon.smithy.lsp.handler;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.DefinitionParams;
@@ -23,8 +24,10 @@ import software.amazon.smithy.model.loader.Prelude;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.traits.MixinTrait;
 import software.amazon.smithy.model.traits.TraitDefinition;
-import software.amazon.smithy.model.validation.ValidatedResult;
 
+/**
+ * Handles go-to-definition requests.
+ */
 public final class DefinitionHandler {
     private final Project project;
 
@@ -44,18 +47,18 @@ public final class DefinitionHandler {
         }
 
         Position position = params.getPosition();
-        DocumentId id = smithyFile.getDocument().getDocumentIdAt(position);
+        DocumentId id = smithyFile.document().copyDocumentId(position);
         if (id == null || id.borrowIdValue().length() == 0) {
             return Collections.emptyList();
         }
 
-        ValidatedResult<Model> modelResult = project.getModelResult();
-        if (!modelResult.getResult().isPresent()) {
+        Optional<Model> modelResult = project.modelResult().getResult();
+        if (!modelResult.isPresent()) {
             return Collections.emptyList();
         }
 
-        Model model = modelResult.getResult().get();
-        DocumentPositionContext context = DocumentParser.forDocument(smithyFile.getDocument())
+        Model model = modelResult.get();
+        DocumentPositionContext context = DocumentParser.forDocument(smithyFile.document())
                 .determineContext(position);
         return contextualShapes(model, context)
                 .filter(contextualMatcher(smithyFile, id))
@@ -68,11 +71,11 @@ public final class DefinitionHandler {
 
     private static Predicate<Shape> contextualMatcher(SmithyFile smithyFile, DocumentId id) {
         String token = id.copyIdValue();
-        if (id.getType() == DocumentId.Type.ABSOLUTE_ID) {
+        if (id.type() == DocumentId.Type.ABSOLUTE_ID) {
             return (shape) -> shape.getId().toString().equals(token);
         } else {
             return (shape) -> (Prelude.isPublicPreludeShape(shape)
-                               || shape.getId().getNamespace().contentEquals(smithyFile.getNamespace())
+                               || shape.getId().getNamespace().contentEquals(smithyFile.namespace())
                                || smithyFile.hasImport(shape.getId().toString()))
                               && shape.getId().getName().equals(token);
         }

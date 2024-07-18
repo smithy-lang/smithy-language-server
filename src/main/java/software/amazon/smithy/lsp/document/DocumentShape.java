@@ -8,6 +8,13 @@ package software.amazon.smithy.lsp.document;
 import java.util.Objects;
 import org.eclipse.lsp4j.Range;
 
+/**
+ * A Shape definition OR reference within a document, including the range it occupies.
+ *
+ * <p>Shapes can be defined/referenced in various ways within a Smithy file, each
+ * corresponding to a specific {@link Kind}. For each kind, the range spans the
+ * shape name/id only.
+ */
 public final class DocumentShape {
     private final Range range;
     private final CharSequence shapeName;
@@ -75,6 +82,10 @@ public final class DocumentShape {
                + '}';
     }
 
+    /**
+     * The different kinds of {@link DocumentShape}s that can exist, corresponding to places
+     * that a shape definition or reference may appear. This is non-exhaustive (for now).
+     */
     public enum Kind {
         DefinedShape,
         DefinedMember,

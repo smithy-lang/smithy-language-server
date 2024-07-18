@@ -31,14 +31,14 @@ final class ProjectDependency {
     /**
      * @return The name of the dependency
      */
-    public String getName() {
+    public String name() {
         return name;
     }
 
     /**
      * @return The path of the dependency
      */
-    public String getPath() {
+    public String path() {
         return path;
     }
 }

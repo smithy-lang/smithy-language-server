@@ -9,15 +9,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Supplier;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.node.NodeMapper;
 import software.amazon.smithy.model.node.ObjectNode;
-import software.amazon.smithy.model.node.StringNode;
 import software.amazon.smithy.utils.IoUtils;
 
 /**
@@ -70,8 +67,7 @@ public final class ProjectConfigLoader {
     public static final String SMITHY_PROJECT = ".smithy-project.json";
 
     private static final Logger LOGGER = Logger.getLogger(ProjectConfigLoader.class.getName());
-    private static final Supplier<SmithyBuildConfig> DEFAULT_SMITHY_BUILD = () ->
-            SmithyBuildConfig.builder().version("1").build();
+    private static final SmithyBuildConfig DEFAULT_SMITHY_BUILD = SmithyBuildConfig.builder().version("1").build();
     private static final NodeMapper NODE_MAPPER = new NodeMapper();
 
     private ProjectConfigLoader() {
@@ -92,7 +88,7 @@ public final class ProjectConfigLoader {
             result.getErr().ifPresent(exceptions::add);
         } else {
             LOGGER.info("No smithy-build.json found at " + smithyBuildPath + ", defaulting to empty config.");
-            builder.merge(DEFAULT_SMITHY_BUILD.get());
+            builder.merge(DEFAULT_SMITHY_BUILD);
         }
 
         SmithyBuildExtensions.Builder extensionsBuilder = SmithyBuildExtensions.builder();
@@ -107,36 +103,17 @@ public final class ProjectConfigLoader {
         }
 
         ProjectConfig.Builder finalConfigBuilder = ProjectConfig.builder();
-         Path smithyProjectPath = workspaceRoot.resolve(SMITHY_PROJECT);
-         if (Files.isRegularFile(smithyProjectPath)) {
-             LOGGER.info("Loading .smithy-project.json from " + smithyProjectPath);
-             Result<ProjectConfig.Builder, Exception> result = Result.ofFallible(() -> {
-                 String json = IoUtils.readUtf8File(smithyProjectPath);
-                 Node node = Node.parseJsonWithComments(json, smithyProjectPath.toString());
-                 ObjectNode objectNode = node.expectObjectNode();
-                 ProjectConfig.Builder projectConfigBuilder = ProjectConfig.builder();
-                 objectNode.getArrayMember("sources").ifPresent(arrayNode ->
-                         projectConfigBuilder.sources(arrayNode.getElementsAs(StringNode.class).stream()
-                                 .map(StringNode::getValue)
-                                 .collect(Collectors.toList())));
-                 objectNode.getArrayMember("imports").ifPresent(arrayNode ->
-                         projectConfigBuilder.imports(arrayNode.getElementsAs(StringNode.class).stream()
-                                 .map(StringNode::getValue)
-                                 .collect(Collectors.toList())));
-                 objectNode.getStringMember("outputDirectory").ifPresent(stringNode ->
-                         projectConfigBuilder.outputDirectory(stringNode.getValue()));
-                 objectNode.getArrayMember("dependencies").ifPresent(arrayNode ->
-                         projectConfigBuilder.dependencies(arrayNode.getElements().stream()
-                                 .map(ProjectDependency::fromNode)
-                                 .collect(Collectors.toList())));
-                 return projectConfigBuilder;
-             });
-             if (result.isOk()) {
-                 finalConfigBuilder = result.unwrap();
-             } else {
-                 exceptions.add(result.unwrapErr());
-             }
-         }
+        Path smithyProjectPath = workspaceRoot.resolve(SMITHY_PROJECT);
+        if (Files.isRegularFile(smithyProjectPath)) {
+            LOGGER.info("Loading .smithy-project.json from " + smithyProjectPath);
+            Result<ProjectConfig.Builder, Exception> result = Result.ofFallible(() ->
+                    ProjectConfig.Builder.load(smithyProjectPath));
+            if (result.isOk()) {
+                finalConfigBuilder = result.unwrap();
+            } else {
+                exceptions.add(result.unwrapErr());
+            }
+        }
 
         if (!exceptions.isEmpty()) {
             return Result.err(exceptions);

@@ -28,7 +28,7 @@ public final class ProjectManager {
      *  {@link org.eclipse.lsp4j.services.LanguageServer#initialize(InitializeParams)}
      *  is called. If there's no smithy-build.json, this is just an empty project.
      */
-    public Project getMainProject() {
+    public Project mainProject() {
         return mainProject;
     }
 
@@ -45,7 +45,7 @@ public final class ProjectManager {
      *  to their own detached projects. These projects contain only the file that
      *  corresponds to the key in the map.
      */
-    public Map<String, Project> getDetachedProjects() {
+    public Map<String, Project> detachedProjects() {
         return detached;
     }
 
@@ -57,7 +57,7 @@ public final class ProjectManager {
         String path = UriAdapter.toPath(uri);
         if (isDetached(uri)) {
             return detached.get(uri);
-        }  else if (mainProject.getSmithyFiles().containsKey(path)) {
+        }  else if (mainProject.smithyFiles().containsKey(path)) {
             return mainProject;
         } else {
             // Note: In practice, this shouldn't really happen because the server shouldn't
@@ -77,7 +77,7 @@ public final class ProjectManager {
         // being placed in a detached project. Removing it here is basically
         // like removing it lazily, although it does feel a little hacky.
         String path = UriAdapter.toPath(uri);
-        if (mainProject.getSmithyFiles().containsKey(path) && detached.containsKey(uri)) {
+        if (mainProject.smithyFiles().containsKey(path) && detached.containsKey(uri)) {
             removeDetachedProject(uri);
         }
 
@@ -110,9 +110,9 @@ public final class ProjectManager {
      */
     public Document getDocument(String uri) {
         Project project = getProject(uri);
-        if (project != null) {
-            return project.getDocument(uri);
+        if (project == null) {
+            return null;
         }
-        return null;
+        return project.getDocument(uri);
     }
 }

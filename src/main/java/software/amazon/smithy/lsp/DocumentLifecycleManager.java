@@ -22,15 +22,12 @@ final class DocumentLifecycleManager {
     private final Map<String, CompletableFuture<Void>> tasks = new HashMap<>();
     private final Set<String> managedDocumentUris = new HashSet<>();
 
-    DocumentLifecycleManager() {
-    }
-
-    Set<String> getManagedDocuments() {
+    Set<String> managedDocuments() {
         return managedDocumentUris;
     }
 
     boolean isManaged(String uri) {
-        return getManagedDocuments().contains(uri);
+        return managedDocuments().contains(uri);
     }
 
     CompletableFuture<Void> getTask(String uri) {

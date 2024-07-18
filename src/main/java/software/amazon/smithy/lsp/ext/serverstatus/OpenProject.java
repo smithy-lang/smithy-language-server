@@ -32,14 +32,14 @@ public class OpenProject {
     /**
      * @return The root directory of the project
      */
-    public String getRoot() {
+    public String root() {
         return root;
     }
 
     /**
      * @return The list of all file URIs tracked by the project
      */
-    public List<String> getFiles() {
+    public List<String> files() {
         return files;
     }
 

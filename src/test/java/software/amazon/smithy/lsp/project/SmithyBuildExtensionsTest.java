@@ -37,12 +37,12 @@ public class SmithyBuildExtensionsTest {
         SmithyBuildExtensions result = builder.mavenDependencies(Arrays.asList("d1", "d2"))
                 .mavenRepositories(Arrays.asList("r1", "r2")).imports(Arrays.asList("i1", "i2")).merge(other).build();
 
-        MavenConfig mavenConfig = result.getMavenConfig();
+        MavenConfig mavenConfig = result.mavenConfig();
         assertThat(mavenConfig.getDependencies(), containsInAnyOrder("d1", "d2", "hello", "world"));
         List<String> urls = mavenConfig.getRepositories().stream()
                 .map(MavenRepository::getUrl)
                 .collect(Collectors.toList());
         assertThat(urls, containsInAnyOrder("r1", "r2", "hi", "there"));
-        assertThat(result.getImports(), containsInAnyOrder("i1", "i2", "i3", "i4"));
+        assertThat(result.imports(), containsInAnyOrder("i1", "i2", "i3", "i4"));
     }
 }

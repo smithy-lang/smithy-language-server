@@ -10,11 +10,13 @@ import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.Range;
 import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.protocol.RangeAdapter;
+import software.amazon.smithy.utils.SmithyInternalApi;
 
 /**
  * Diagnostics for when a Smithy file is not connected to a Smithy project via
  * smithy-build.json or other build file.
  */
+@SmithyInternalApi
 public final class DetachedDiagnostics {
     public static final String DETACHED_FILE = "detached-file";
 
@@ -28,17 +30,17 @@ public final class DetachedDiagnostics {
      *  associated with it)
      */
     public static Diagnostic forSmithyFile(SmithyFile smithyFile) {
-        if (smithyFile.getDocument() != null) {
-            int end = smithyFile.getDocument().lineEnd(0);
-            Range range = RangeAdapter.lineSpan(0, 0, end);
-            return new Diagnostic(
-                    range,
-                    "This file isn't attached to a project",
-                    DiagnosticSeverity.Warning,
-                    "smithy-language-server",
-                    DETACHED_FILE
-            );
+        if (smithyFile.document() == null) {
+            return null;
         }
-        return null;
+        int end = smithyFile.document().lineEnd(0);
+        Range range = RangeAdapter.lineSpan(0, 0, end);
+        return new Diagnostic(
+                range,
+                "This file isn't attached to a project",
+                DiagnosticSeverity.Warning,
+                "smithy-language-server",
+                DETACHED_FILE
+        );
     }
 }

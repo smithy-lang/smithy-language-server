@@ -46,11 +46,11 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
         lastModifiedInMillis = b.lastModifiedInMillis;
     }
 
-    public List<String> getImports() {
+    public List<String> imports() {
         return imports;
     }
 
-    public MavenConfig getMavenConfig() {
+    public MavenConfig mavenConfig() {
         return maven;
     }
 
@@ -86,8 +86,8 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
     public SmithyBuildConfig asSmithyBuildConfig() {
         return SmithyBuildConfig.builder()
                 .version("1")
-                .imports(getImports())
-                .maven(getMavenConfig())
+                .imports(imports())
+                .maven(mavenConfig())
                 .lastModifiedInMillis(getLastModifiedInMillis())
                 .build();
     }
@@ -115,16 +115,16 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
 
             List<String> dependencies = new ArrayList<>(maven.getDependencies());
             // Merge dependencies from other extension, preferring those defined on MavenConfig.
-            if (other.getMavenConfig().getDependencies().isEmpty()) {
+            if (other.mavenConfig().getDependencies().isEmpty()) {
                 dependencies.addAll(other.mavenDependencies);
             } else {
-                dependencies.addAll(other.getMavenConfig().getDependencies());
+                dependencies.addAll(other.mavenConfig().getDependencies());
             }
             mavenConfigBuilder.dependencies(dependencies);
 
             List<MavenRepository> repositories = new ArrayList<>(maven.getRepositories());
             // Merge repositories from other extension, preferring those defined on MavenConfig.
-            if (other.getMavenConfig().getRepositories().isEmpty()) {
+            if (other.mavenConfig().getRepositories().isEmpty()) {
                 repositories.addAll(other.mavenRepositories.stream()
                         .map(repo -> MavenRepository.builder().url(repo).build())
                         .collect(Collectors.toList()));

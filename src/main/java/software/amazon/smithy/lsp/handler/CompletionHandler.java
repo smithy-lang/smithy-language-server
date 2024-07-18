@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -47,6 +48,9 @@ import software.amazon.smithy.model.traits.MixinTrait;
 import software.amazon.smithy.model.traits.RequiredTrait;
 import software.amazon.smithy.model.traits.TraitDefinition;
 
+/**
+ * Handles completion requests.
+ */
 public final class CompletionHandler {
     // TODO: Handle keyword completions
     private static final List<String> KEYWORDS = Arrays.asList("bigDecimal", "bigInteger", "blob", "boolean", "byte",
@@ -70,11 +74,7 @@ public final class CompletionHandler {
     public List<CompletionItem> handle(CompletionParams params, CancelChecker cc) {
         String uri = params.getTextDocument().getUri();
         SmithyFile smithyFile = project.getSmithyFile(uri);
-        if (smithyFile == null) {
-            return Collections.emptyList();
-        }
-
-        if (cc.isCanceled()) {
+        if (smithyFile == null || cc.isCanceled()) {
             return Collections.emptyList();
         }
 
@@ -92,7 +92,7 @@ public final class CompletionHandler {
         }
 
         // TODO: Maybe we should only copy the token up to the current character
-        DocumentId id = smithyFile.getDocument().getDocumentIdAt(position);
+        DocumentId id = smithyFile.document().copyDocumentId(position);
         if (id == null || id.borrowIdValue().length() == 0) {
             return Collections.emptyList();
         }
@@ -101,11 +101,12 @@ public final class CompletionHandler {
             return Collections.emptyList();
         }
 
-        if (!project.getModelResult().getResult().isPresent()) {
+        Optional<Model> modelResul = project.modelResult().getResult();
+        if (!modelResul.isPresent()) {
             return Collections.emptyList();
         }
-        Model model = project.getModelResult().getResult().get();
-        DocumentPositionContext context = DocumentParser.forDocument(smithyFile.getDocument())
+        Model model = modelResul.get();
+        DocumentPositionContext context = DocumentParser.forDocument(smithyFile.document())
                 .determineContext(position);
 
         if (cc.isCanceled()) {
@@ -125,9 +126,7 @@ public final class CompletionHandler {
             DocumentId id
     ) {
         TraitBodyVisitor visitor = new TraitBodyVisitor(model);
-        boolean useFullId = context == DocumentPositionContext.USE_TARGET
-                            || id.getType() == DocumentId.Type.NAMESPACE
-                            || id.getType() == DocumentId.Type.ABSOLUTE_ID;
+        boolean useFullId = shouldMatchOnAbsoluteId(id, context);
         return (acc, shape) -> {
             String shapeLabel = useFullId
                     ? shape.getId().toString()
@@ -146,11 +145,12 @@ public final class CompletionHandler {
                                 shapeLabel + "(" + traitBody + ")", shape.getId(), smithyFile, useFullId, id);
                         acc.add(traitWithMembersItem);
                     }
-                    String defaultLabel = shape.isStructureShape() && !shape.members().isEmpty()
-                            ? shapeLabel + "()"
-                            : shapeLabel;
+
+                    if (shape.isStructureShape() && !shape.members().isEmpty()) {
+                        shapeLabel += "()";
+                    }
                     CompletionItem defaultCompletionItem = createCompletion(
-                            defaultLabel, shape.getId(), smithyFile, useFullId, id);
+                            shapeLabel, shape.getId(), smithyFile, useFullId, id);
                     acc.add(defaultCompletionItem);
                     break;
                 case MEMBER_TARGET:
@@ -169,7 +169,7 @@ public final class CompletionHandler {
     private static void addTextEdits(CompletionItem completionItem, ShapeId shapeId, SmithyFile smithyFile) {
         String importId = shapeId.toString();
         String importNamespace = shapeId.getNamespace();
-        CharSequence currentNamespace = smithyFile.getNamespace();
+        CharSequence currentNamespace = smithyFile.namespace();
 
         if (importNamespace.contentEquals(currentNamespace)
             || Prelude.isPreludeShape(shapeId)
@@ -186,12 +186,12 @@ public final class CompletionHandler {
     private static TextEdit getImportTextEdit(SmithyFile smithyFile, String importId) {
         String insertText = System.lineSeparator() + "use " + importId;
         // We can only know where to put the import if there's already use statements, or a namespace
-        if (smithyFile.getDocumentImports().isPresent()) {
-            Range importsRange = smithyFile.getDocumentImports().get().importsRange();
+        if (smithyFile.documentImports().isPresent()) {
+            Range importsRange = smithyFile.documentImports().get().importsRange();
             Range editRange = RangeAdapter.point(importsRange.getEnd());
             return new TextEdit(editRange, insertText);
-        } else if (smithyFile.getDocumentNamespace().isPresent()) {
-            Range namespaceStatementRange = smithyFile.getDocumentNamespace().get().statementRange();
+        } else if (smithyFile.documentNamespace().isPresent()) {
+            Range namespaceStatementRange = smithyFile.documentNamespace().get().statementRange();
             Range editRange = RangeAdapter.point(namespaceStatementRange.getEnd());
             return new TextEdit(editRange, insertText);
         }
@@ -212,7 +212,7 @@ public final class CompletionHandler {
             case USE_TARGET:
                 return model.shapes()
                         .filter(shape -> !shape.isMemberShape())
-                        .filter(shape -> !shape.getId().getNamespace().contentEquals(smithyFile.getNamespace()))
+                        .filter(shape -> !shape.getId().getNamespace().contentEquals(smithyFile.namespace()))
                         .filter(shape -> !smithyFile.hasImport(shape.getId().toString()));
             case SHAPE_DEF:
             case OTHER:
@@ -223,13 +223,17 @@ public final class CompletionHandler {
 
     private static Predicate<Shape> contextualMatcher(DocumentId id, DocumentPositionContext context) {
         String matchToken = id.copyIdValue().toLowerCase();
-        if (context == DocumentPositionContext.USE_TARGET
-            || id.getType() == DocumentId.Type.NAMESPACE
-            || id.getType() == DocumentId.Type.ABSOLUTE_ID) {
+        if (shouldMatchOnAbsoluteId(id, context)) {
             return (shape) -> shape.getId().toString().toLowerCase().startsWith(matchToken);
         } else {
             return (shape) -> shape.getId().getName().toLowerCase().startsWith(matchToken);
         }
+    }
+
+    private static boolean shouldMatchOnAbsoluteId(DocumentId id, DocumentPositionContext context) {
+        return context == DocumentPositionContext.USE_TARGET
+                || id.type() == DocumentId.Type.NAMESPACE
+                || id.type() == DocumentId.Type.ABSOLUTE_ID;
     }
 
     private static CompletionItem createCompletion(
@@ -241,7 +245,7 @@ public final class CompletionHandler {
     ) {
         CompletionItem completionItem = new CompletionItem(label);
         completionItem.setKind(CompletionItemKind.Class);
-        TextEdit textEdit = new TextEdit(id.getRange(), label);
+        TextEdit textEdit = new TextEdit(id.range(), label);
         completionItem.setTextEdit(Either.forLeft(textEdit));
         if (!useFullId) {
             addTextEdits(completionItem, shapeId, smithyFile);

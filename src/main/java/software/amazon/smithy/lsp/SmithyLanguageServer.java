@@ -18,6 +18,7 @@ package software.amazon.smithy.lsp;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 
 import com.google.gson.JsonObject;
+import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -96,7 +97,6 @@ import software.amazon.smithy.lsp.document.DocumentShape;
 import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.serverstatus.OpenProject;
 import software.amazon.smithy.lsp.ext.serverstatus.ServerStatus;
-import software.amazon.smithy.lsp.ext.serverstatus.ServerStatusParams;
 import software.amazon.smithy.lsp.handler.CompletionHandler;
 import software.amazon.smithy.lsp.handler.DefinitionHandler;
 import software.amazon.smithy.lsp.handler.FileWatcherRegistrationHandler;
@@ -145,7 +145,7 @@ public class SmithyLanguageServer implements
     private Severity minimumSeverity = Severity.WARNING;
     private boolean onlyReloadOnSave = false;
 
-    public SmithyLanguageServer() {
+    SmithyLanguageServer() {
     }
 
     SmithyLanguageServer(LanguageClient client, Project project) {
@@ -158,7 +158,7 @@ public class SmithyLanguageServer implements
     }
 
     Project getProject() {
-        return projects.getMainProject();
+        return projects.mainProject();
     }
 
     ProjectManager getProjects() {
@@ -172,14 +172,15 @@ public class SmithyLanguageServer implements
     @Override
     public void connect(LanguageClient client) {
         LOGGER.info("Connect");
-        Properties props = new Properties();
+        this.client = new SmithyLanguageClient(client);
         String message = "smithy-language-server";
         try {
+            Properties props = new Properties();
             props.load(SmithyLanguageServer.class.getClassLoader().getResourceAsStream("version.properties"));
             message += " version " + props.getProperty("version");
-        } catch (Exception ignored) {
+        } catch (IOException e) {
+            this.client.error("Failed to load smithy-language-server version: " + e);
         }
-        this.client = new SmithyLanguageClient(client);
         this.client.info(message + " started.");
     }
 
@@ -259,7 +260,7 @@ public class SmithyLanguageServer implements
         LOGGER.info("Initializing project at " + root);
         lifecycleManager.cancelAllTasks();
         Result<Project, List<Exception>> loadResult = ProjectLoader.load(
-                root, projects, lifecycleManager.getManagedDocuments());
+                root, projects, lifecycleManager.managedDocuments());
         if (loadResult.isOk()) {
             Project updatedProject = loadResult.unwrap();
             resolveDetachedProjects(updatedProject);
@@ -271,7 +272,7 @@ public class SmithyLanguageServer implements
             //  if we find a smithy-build.json, etc.
             // If we overwrite an existing project with an empty one, we lose track of the state of tracked
             // files. Instead, we will just keep the original project before the reload failure.
-            if (projects.getMainProject() == null) {
+            if (projects.mainProject() == null) {
                 projects.updateMainProject(Project.empty(root));
             }
 
@@ -293,8 +294,8 @@ public class SmithyLanguageServer implements
         // This is a project reload, so we need to resolve any added/removed files
         // that need to be moved to or from detached projects.
         if (getProject() != null) {
-            Set<String> currentProjectSmithyPaths = getProject().getSmithyFiles().keySet();
-            Set<String> updatedProjectSmithyPaths = updatedProject.getSmithyFiles().keySet();
+            Set<String> currentProjectSmithyPaths = getProject().smithyFiles().keySet();
+            Set<String> updatedProjectSmithyPaths = updatedProject.smithyFiles().keySet();
 
             Set<String> addedPaths = new HashSet<>(updatedProjectSmithyPaths);
             addedPaths.removeAll(currentProjectSmithyPaths);
@@ -310,7 +311,7 @@ public class SmithyLanguageServer implements
             for (String removedPath : removedPaths) {
                 String removedUri = UriAdapter.toUri(removedPath);
                 // Only move to a detached project if the file is managed
-                if (lifecycleManager.getManagedDocuments().contains(removedUri)) {
+                if (lifecycleManager.managedDocuments().contains(removedUri)) {
                     // Note: This should always be non-null, since we essentially got this from the current project
                     Document removedDocument = projects.getDocument(removedUri);
                     // The copy here is technically unnecessary, if we make ModelAssembler support borrowed strings
@@ -321,7 +322,7 @@ public class SmithyLanguageServer implements
     }
 
     private CompletableFuture<Void> registerSmithyFileWatchers() {
-        Project project = projects.getMainProject();
+        Project project = projects.mainProject();
         List<Registration> registrations = FileWatcherRegistrationHandler.getSmithyFileWatcherRegistrations(project);
         return client.registerCapability(new RegistrationParams(registrations));
     }
@@ -386,10 +387,10 @@ public class SmithyLanguageServer implements
             return completedFuture(Collections.emptyList());
         }
 
-        Project project = projects.getMainProject();
+        Project project = projects.mainProject();
         // TODO: Might also want to tell user if the model isn't loaded
         // TODO: Use proper location (source is just a point)
-        return completedFuture(project.getModelResult().getResult()
+        return completedFuture(project.modelResult().getResult()
                 .map(selector::select)
                 .map(shapes -> shapes.stream()
                         .map(Shape::getSourceLocation)
@@ -399,10 +400,10 @@ public class SmithyLanguageServer implements
     }
 
     @Override
-    public CompletableFuture<ServerStatus> serverStatus(ServerStatusParams params) {
+    public CompletableFuture<ServerStatus> serverStatus() {
         OpenProject openProject = new OpenProject(
-                UriAdapter.toUri(projects.getMainProject().getRoot().toString()),
-                projects.getMainProject().getSmithyFiles().keySet().stream()
+                UriAdapter.toUri(projects.mainProject().root().toString()),
+                projects.mainProject().smithyFiles().keySet().stream()
                         .map(UriAdapter::toUri)
                         .collect(Collectors.toList()),
                 false);
@@ -410,7 +411,7 @@ public class SmithyLanguageServer implements
         List<OpenProject> openProjects = new ArrayList<>();
         openProjects.add(openProject);
 
-        for (Map.Entry<String, Project> entry : projects.getDetachedProjects().entrySet()) {
+        for (Map.Entry<String, Project> entry : projects.detachedProjects().entrySet()) {
             openProjects.add(new OpenProject(
                     entry.getKey(),
                     Collections.singletonList(entry.getKey()),
@@ -452,13 +453,13 @@ public class SmithyLanguageServer implements
         if (changedBuildFiles) {
             client.info("Build files changed, reloading project");
             // TODO: Handle more granular updates to build files.
-            tryInitProject(projects.getMainProject().getRoot());
+            tryInitProject(projects.mainProject().root());
         } else {
             client.info("Project files changed, adding files "
                         + createdSmithyFiles + " and removing files " + deletedSmithyFiles);
             // We get this notification for watched files, which only includes project files,
             // so we don't need to resolve detached projects.
-            projects.getMainProject().updateFiles(createdSmithyFiles, deletedSmithyFiles);
+            projects.mainProject().updateFiles(createdSmithyFiles, deletedSmithyFiles);
         }
 
         // TODO: Update watchers based on specific changes
@@ -494,7 +495,7 @@ public class SmithyLanguageServer implements
             if (contentChangeEvent.getRange() != null) {
                 document.applyEdit(contentChangeEvent.getRange(), contentChangeEvent.getText());
             } else {
-                document.applyEdit(document.getFullRange(), contentChangeEvent.getText());
+                document.applyEdit(document.fullRange(), contentChangeEvent.getText());
             }
         }
 
@@ -521,7 +522,7 @@ public class SmithyLanguageServer implements
         String uri = params.getTextDocument().getUri();
 
         lifecycleManager.cancelTask(uri);
-        lifecycleManager.getManagedDocuments().add(uri);
+        lifecycleManager.managedDocuments().add(uri);
 
         String text = params.getTextDocument().getText();
         Document document = projects.getDocument(uri);
@@ -539,7 +540,7 @@ public class SmithyLanguageServer implements
         LOGGER.info("DidClose");
 
         String uri = params.getTextDocument().getUri();
-        lifecycleManager.getManagedDocuments().remove(uri);
+        lifecycleManager.managedDocuments().remove(uri);
 
         if (projects.isDetached(uri)) {
             // Only cancel tasks for detached projects, since we're dropping the project
@@ -606,7 +607,7 @@ public class SmithyLanguageServer implements
                 return Collections.emptyList();
             }
 
-            Collection<DocumentShape> documentShapes = smithyFile.getDocumentShapes();
+            Collection<DocumentShape> documentShapes = smithyFile.documentShapes();
             if (documentShapes.isEmpty()) {
                 return Collections.emptyList();
             }
@@ -690,13 +691,13 @@ public class SmithyLanguageServer implements
         IdlTokenizer tokenizer = IdlTokenizer.create(uri, document.borrowText());
         TokenTree tokenTree = TokenTree.of(tokenizer);
         String formatted = Formatter.format(tokenTree);
-        Range range = document.getFullRange();
+        Range range = document.fullRange();
         TextEdit edit = new TextEdit(range, formatted);
         return completedFuture(Collections.singletonList(edit));
     }
 
     private void sendFileDiagnosticsForManagedDocuments() {
-        for (String managedDocumentUri : lifecycleManager.getManagedDocuments()) {
+        for (String managedDocumentUri : lifecycleManager.managedDocuments()) {
             lifecycleManager.putOrComposeTask(managedDocumentUri, sendFileDiagnostics(managedDocumentUri));
         }
     }
@@ -725,7 +726,7 @@ public class SmithyLanguageServer implements
         SmithyFile smithyFile = project.getSmithyFile(uri);
         String path = UriAdapter.toPath(uri);
 
-        List<Diagnostic> diagnostics = project.getModelResult().getValidationEvents().stream()
+        List<Diagnostic> diagnostics = project.modelResult().getValidationEvents().stream()
                 .filter(validationEvent -> validationEvent.getSeverity().compareTo(minimumSeverity) >= 0)
                 .filter(validationEvent -> !UriAdapter.isJarFile(validationEvent.getSourceLocation().getFilename()))
                 .filter(validationEvent -> validationEvent.getSourceLocation().getFilename().equals(path))
@@ -752,7 +753,7 @@ public class SmithyLanguageServer implements
         if (validationEvent.getShapeId().isPresent() && smithyFile != null) {
             // Event is (probably) on a member target
             if (validationEvent.containsId("Target")) {
-                DocumentShape documentShape = smithyFile.getDocumentShapesByStartPosition()
+                DocumentShape documentShape = smithyFile.documentShapesByStartPosition()
                         .get(PositionAdapter.fromSourceLocation(sourceLocation));
                 boolean hasMemberTarget = documentShape != null
                         && documentShape.isKind(DocumentShape.Kind.DefinedMember)
@@ -762,7 +763,7 @@ public class SmithyLanguageServer implements
                 }
             }  else {
                 // Check if the event location is on a trait application
-                Range traitRange = DocumentParser.forDocument(smithyFile.getDocument()).traitIdRange(sourceLocation);
+                Range traitRange = DocumentParser.forDocument(smithyFile.document()).traitIdRange(sourceLocation);
                 if (traitRange != null) {
                     range = traitRange;
                 }

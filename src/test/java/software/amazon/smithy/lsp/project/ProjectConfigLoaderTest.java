@@ -29,8 +29,8 @@ public class ProjectConfigLoaderTest {
 
         assertThat(result.isOk(), is(true));
         ProjectConfig config = result.unwrap();
-        assertThat(config.getMaven().isPresent(), is(true));
-        MavenConfig mavenConfig = config.getMaven().get();
+        assertThat(config.maven().isPresent(), is(true));
+        MavenConfig mavenConfig = config.maven().get();
         assertThat(mavenConfig.getRepositories(), hasSize(1));
         MavenRepository repository = mavenConfig.getRepositories().stream().findFirst().get();
         assertThat(repository.getUrl(), containsString("example.com/maven/my_repo"));
@@ -45,8 +45,8 @@ public class ProjectConfigLoaderTest {
 
         assertThat(result.isOk(), is(true));
         ProjectConfig config = result.unwrap();
-        assertThat(config.getMaven().isPresent(), is(true));
-        MavenConfig mavenConfig = config.getMaven().get();
+        assertThat(config.maven().isPresent(), is(true));
+        MavenConfig mavenConfig = config.maven().get();
         assertThat(mavenConfig.getDependencies(), containsInAnyOrder("baz"));
         assertThat(mavenConfig.getRepositories().stream()
                         .map(MavenRepository::getUrl)
@@ -60,8 +60,8 @@ public class ProjectConfigLoaderTest {
 
         assertThat(result.isOk(), is(true));
         ProjectConfig config = result.unwrap();
-        assertThat(config.getMaven().isPresent(), is(true));
-        MavenConfig mavenConfig = config.getMaven().get();
+        assertThat(config.maven().isPresent(), is(true));
+        MavenConfig mavenConfig = config.maven().get();
         assertThat(mavenConfig.getDependencies(), containsInAnyOrder("dep1", "dep2"));
         assertThat(mavenConfig.getRepositories().stream()
                 .map(MavenRepository::getUrl)
@@ -75,6 +75,6 @@ public class ProjectConfigLoaderTest {
 
         assertThat(result.isOk(), is(true));
         ProjectConfig config = result.unwrap();
-        assertThat(config.getImports(), containsInAnyOrder(containsString("main.smithy"), containsString("other.smithy")));
+        assertThat(config.imports(), containsInAnyOrder(containsString("main.smithy"), containsString("other.smithy")));
     }
 }

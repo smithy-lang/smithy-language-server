@@ -150,7 +150,7 @@ public final class ProjectLoader {
 
         // Note: The model assembler can handle loading all smithy files in a directory, so there's some potential
         //  here for inconsistent behavior.
-        List<Path> allSmithyFilePaths = collectAllSmithyPaths(root, config.getSources(), config.getImports());
+        List<Path> allSmithyFilePaths = collectAllSmithyPaths(root, config.sources(), config.imports());
 
         Result<ValidatedResult<Model>, Exception> loadModelResult = Result.ofFallible(() -> {
             for (Path path : allSmithyFilePaths) {

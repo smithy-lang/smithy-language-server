@@ -148,4 +148,16 @@ public final class Result<T, E> {
         }
         return Result.ok(unwrap());
     }
+
+
+    /**
+     * A supplier that throws a checked exception.
+     *
+     * @param <T> The output of the supplier
+     * @param <E> The exception type that can be thrown
+     */
+    @FunctionalInterface
+    public interface ThrowingSupplier<T, E extends Exception> {
+        T get() throws E;
+    }
 }
