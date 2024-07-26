@@ -162,12 +162,10 @@ dependencies {
     implementation "software.amazon.smithy:smithy-model:[smithyVersion, 2.0["
     implementation "software.amazon.smithy:smithy-syntax:[smithyVersion, 2.0["
 
-
-    testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.0"
-    testImplementation "org.junit.jupiter:junit-jupiter-params:5.10.0"
+    testImplementation "org.junit.jupiter:junit-jupiter:5.10.0"
     testImplementation "org.hamcrest:hamcrest:2.1"
 
-    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.10.0"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
 
 tasks.withType(Javadoc).all {
@@ -203,7 +201,7 @@ classes {
 
 application {
     // Define the main class for the application.
-    mainClassName = "software.amazon.smithy.lsp.Main"
+    mainClass = "software.amazon.smithy.lsp.Main"
 }
 
 // ==== CheckStyle ====
