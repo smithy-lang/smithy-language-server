@@ -1,0 +1,8 @@
+{
+    "dependencies": [
+        {
+            "name": "smithy-test-traits",
+            "path": "./././/smithy-test-traits.jar"
+        }
+    ]
+}

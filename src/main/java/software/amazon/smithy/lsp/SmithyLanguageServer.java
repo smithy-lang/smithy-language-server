@@ -15,28 +15,75 @@
 
 package software.amazon.smithy.lsp;
 
+import static java.util.concurrent.CompletableFuture.completedFuture;
+
 import com.google.gson.JsonObject;
-import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import org.eclipse.lsp4j.CodeAction;
 import org.eclipse.lsp4j.CodeActionOptions;
+import org.eclipse.lsp4j.CodeActionParams;
+import org.eclipse.lsp4j.Command;
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionOptions;
+import org.eclipse.lsp4j.CompletionParams;
+import org.eclipse.lsp4j.DefinitionParams;
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.DidChangeConfigurationParams;
+import org.eclipse.lsp4j.DidChangeTextDocumentParams;
+import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
+import org.eclipse.lsp4j.DidCloseTextDocumentParams;
+import org.eclipse.lsp4j.DidOpenTextDocumentParams;
+import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.DocumentFormattingParams;
+import org.eclipse.lsp4j.DocumentSymbol;
+import org.eclipse.lsp4j.DocumentSymbolParams;
+import org.eclipse.lsp4j.FileChangeType;
+import org.eclipse.lsp4j.FileEvent;
+import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
+import org.eclipse.lsp4j.InitializedParams;
 import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.LocationLink;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
+import org.eclipse.lsp4j.ProgressParams;
+import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.Registration;
+import org.eclipse.lsp4j.RegistrationParams;
 import org.eclipse.lsp4j.ServerCapabilities;
+import org.eclipse.lsp4j.SymbolInformation;
+import org.eclipse.lsp4j.SymbolKind;
+import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
-import org.eclipse.lsp4j.WorkspaceFolder;
+import org.eclipse.lsp4j.TextEdit;
+import org.eclipse.lsp4j.Unregistration;
+import org.eclipse.lsp4j.UnregistrationParams;
+import org.eclipse.lsp4j.WorkDoneProgressBegin;
+import org.eclipse.lsp4j.WorkDoneProgressEnd;
+import org.eclipse.lsp4j.jsonrpc.CompletableFutures;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageClientAware;
@@ -44,156 +91,723 @@ import org.eclipse.lsp4j.services.LanguageServer;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
 import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
+import software.amazon.smithy.lsp.diagnostics.SmithyDiagnostics;
+import software.amazon.smithy.lsp.document.Document;
+import software.amazon.smithy.lsp.document.DocumentParser;
+import software.amazon.smithy.lsp.document.DocumentShape;
 import software.amazon.smithy.lsp.ext.LspLog;
-import software.amazon.smithy.utils.ListUtils;
+import software.amazon.smithy.lsp.ext.serverstatus.OpenProject;
+import software.amazon.smithy.lsp.ext.serverstatus.ServerStatus;
+import software.amazon.smithy.lsp.handler.CompletionHandler;
+import software.amazon.smithy.lsp.handler.DefinitionHandler;
+import software.amazon.smithy.lsp.handler.FileWatcherRegistrationHandler;
+import software.amazon.smithy.lsp.handler.HoverHandler;
+import software.amazon.smithy.lsp.project.Project;
+import software.amazon.smithy.lsp.project.ProjectConfigLoader;
+import software.amazon.smithy.lsp.project.ProjectLoader;
+import software.amazon.smithy.lsp.project.ProjectManager;
+import software.amazon.smithy.lsp.project.SmithyFile;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
+import software.amazon.smithy.lsp.util.Result;
+import software.amazon.smithy.model.SourceLocation;
+import software.amazon.smithy.model.loader.IdlTokenizer;
+import software.amazon.smithy.model.selector.Selector;
+import software.amazon.smithy.model.shapes.Shape;
+import software.amazon.smithy.model.validation.Severity;
+import software.amazon.smithy.model.validation.ValidationEvent;
+import software.amazon.smithy.syntax.Formatter;
+import software.amazon.smithy.syntax.TokenTree;
+import software.amazon.smithy.utils.IoUtils;
 
-public class SmithyLanguageServer implements LanguageServer, LanguageClientAware, SmithyProtocolExtensions {
-  File tempWorkspaceRoot;
-  private final Optional<LanguageClient> client = Optional.empty();
-  private File workspaceRoot;
-  private Optional<SmithyTextDocumentService> tds = Optional.empty();
+public class SmithyLanguageServer implements
+        LanguageServer, LanguageClientAware, SmithyProtocolExtensions, WorkspaceService, TextDocumentService {
+    private static final Logger LOGGER = Logger.getLogger(SmithyLanguageServer.class.getName());
+    private static final ServerCapabilities CAPABILITIES;
 
-  @Override
-  public CompletableFuture<Object> shutdown() {
-    return Utils.completableFuture(new Object());
-  }
-
-  private void loadSmithyBuild(File root) {
-    this.tds.ifPresent(tds -> tds.createProject(root));
-  }
-
-  @Override
-  public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
-    if (params.getRootUri() != null) {
-      try {
-        workspaceRoot = new File(new URI(params.getRootUri()));
-        loadSmithyBuild(workspaceRoot);
-      } catch (Exception e) {
-        LspLog.println("Failure trying to load extensions from workspace root: " + workspaceRoot.getAbsolutePath());
-        e.printStackTrace();
-      }
-    } else {
-      LspLog.println("Workspace root was null");
+    static {
+        ServerCapabilities capabilities = new ServerCapabilities();
+        capabilities.setTextDocumentSync(TextDocumentSyncKind.Incremental);
+        capabilities.setCodeActionProvider(new CodeActionOptions(SmithyCodeActions.all()));
+        capabilities.setDefinitionProvider(true);
+        capabilities.setDeclarationProvider(true);
+        capabilities.setCompletionProvider(new CompletionOptions(true, null));
+        capabilities.setHoverProvider(true);
+        capabilities.setDocumentFormattingProvider(true);
+        capabilities.setDocumentSymbolProvider(true);
+        CAPABILITIES = capabilities;
     }
 
-    if (params.getWorkspaceFolders() == null) {
-      try {
-        tempWorkspaceRoot = Files.createTempDirectory("smithy-lsp-workspace").toFile();
-        LspLog.println("Created temporary workspace root: " + tempWorkspaceRoot);
-        tempWorkspaceRoot.deleteOnExit();
-        WorkspaceFolder workspaceFolder = new WorkspaceFolder(tempWorkspaceRoot.toURI().toString());
-        params.setWorkspaceFolders(ListUtils.of(workspaceFolder));
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
+    private SmithyLanguageClient client;
+    private final ProjectManager projects = new ProjectManager();
+    private final DocumentLifecycleManager lifecycleManager = new DocumentLifecycleManager();
+    private Severity minimumSeverity = Severity.WARNING;
+    private boolean onlyReloadOnSave = false;
+
+    SmithyLanguageServer() {
     }
 
-    // TODO: Replace with a Gson Type Adapter if more config options are added beyond `logToFile`.
-    Object initializationOptions = params.getInitializationOptions();
-    if (initializationOptions instanceof JsonObject) {
-      JsonObject jsonObject = (JsonObject) initializationOptions;
-      if (jsonObject.has("logToFile")) {
-        String setting = jsonObject.get("logToFile").getAsString();
-        if (setting.equals("enabled")) {
-          LspLog.enable();
+    SmithyLanguageServer(LanguageClient client, Project project) {
+        this.client = new SmithyLanguageClient(client);
+        this.projects.updateMainProject(project);
+    }
+
+    SmithyLanguageClient getClient() {
+        return this.client;
+    }
+
+    Project getProject() {
+        return projects.mainProject();
+    }
+
+    ProjectManager getProjects() {
+        return projects;
+    }
+
+    DocumentLifecycleManager getLifecycleManager() {
+        return this.lifecycleManager;
+    }
+
+    @Override
+    public void connect(LanguageClient client) {
+        LOGGER.info("Connect");
+        this.client = new SmithyLanguageClient(client);
+        String message = "smithy-language-server";
+        try {
+            Properties props = new Properties();
+            props.load(Objects.requireNonNull(getClass().getClassLoader().getResourceAsStream("version.properties")));
+            message += " version " + props.getProperty("version");
+        } catch (IOException e) {
+            this.client.error("Failed to load smithy-language-server version: " + e);
         }
-      }
+        this.client.info(message + " started.");
     }
 
-    // TODO: This will break on multi-root workspaces
-    for (WorkspaceFolder ws : params.getWorkspaceFolders()) {
-      try {
-        File root = new File(new URI(ws.getUri()));
-        LspLog.setWorkspaceFolder(root);
-        loadSmithyBuild(root);
-      } catch (Exception e) {
-        LspLog.println("Error when loading workspace folder " + ws.toString() + ": " + e);
-        e.printStackTrace();
-      }
+    @Override
+    public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
+        LOGGER.info("Initialize");
+
+        // TODO: Use this to manage shutdown if the parent process exits, after upgrading jdk
+        // Optional.ofNullable(params.getProcessId())
+        //         .flatMap(ProcessHandle::of)
+        //         .ifPresent(processHandle -> {
+        //             processHandle.onExit().thenRun(this::exit);
+        //         });
+
+        // TODO: Replace with a Gson Type Adapter if more config options are added beyond `logToFile`.
+        Object initializationOptions = params.getInitializationOptions();
+        if (initializationOptions instanceof JsonObject) {
+            JsonObject jsonObject = (JsonObject) initializationOptions;
+            if (jsonObject.has("logToFile")) {
+                String setting = jsonObject.get("logToFile").getAsString();
+                if (setting.equals("enabled")) {
+                    LspLog.enable();
+                }
+            }
+            if (jsonObject.has("diagnostics.minimumSeverity")) {
+                String configuredMinimumSeverity = jsonObject.get("diagnostics.minimumSeverity").getAsString();
+                Optional<Severity> severity = Severity.fromString(configuredMinimumSeverity);
+                if (severity.isPresent()) {
+                    this.minimumSeverity = severity.get();
+                } else {
+                    client.error("Invalid value for 'diagnostics.minimumSeverity': " + configuredMinimumSeverity
+                                 + ".\nMust be one of " + Arrays.toString(Severity.values()));
+                }
+            }
+            if (jsonObject.has("onlyReloadOnSave")) {
+                this.onlyReloadOnSave = jsonObject.get("onlyReloadOnSave").getAsBoolean();
+                client.info("Configured only reload on save: " + this.onlyReloadOnSave);
+            }
+        }
+
+        Path root = null;
+        // TODO: Handle multiple workspaces
+        if (params.getWorkspaceFolders() != null && !params.getWorkspaceFolders().isEmpty()) {
+            String uri = params.getWorkspaceFolders().get(0).getUri();
+            root = Paths.get(URI.create(uri));
+        } else if (params.getRootUri() != null) {
+            String uri = params.getRootUri();
+            root = Paths.get(URI.create(uri));
+        } else if (params.getRootPath() != null) {
+            String uri = params.getRootPath();
+            root = Paths.get(URI.create(uri));
+        }
+
+        if (root != null) {
+            // TODO: Support this for other tasks. Need to create a progress token with the client
+            //  through createProgress.
+            Either<String, Integer> workDoneProgressToken = params.getWorkDoneToken();
+            if (workDoneProgressToken != null) {
+                WorkDoneProgressBegin notification = new WorkDoneProgressBegin();
+                notification.setTitle("Initializing");
+                client.notifyProgress(new ProgressParams(workDoneProgressToken, Either.forLeft(notification)));
+            }
+
+            tryInitProject(root);
+
+            if (workDoneProgressToken != null) {
+                WorkDoneProgressEnd notification = new WorkDoneProgressEnd();
+                client.notifyProgress(new ProgressParams(workDoneProgressToken, Either.forLeft(notification)));
+            }
+        }
+
+        LOGGER.info("Done initialize");
+        return completedFuture(new InitializeResult(CAPABILITIES));
     }
 
-    ServerCapabilities capabilities = new ServerCapabilities();
-    capabilities.setTextDocumentSync(TextDocumentSyncKind.Full);
-    capabilities.setCodeActionProvider(new CodeActionOptions(SmithyCodeActions.all()));
-    capabilities.setDefinitionProvider(true);
-    capabilities.setDeclarationProvider(true);
-    capabilities.setCompletionProvider(new CompletionOptions(true, null));
-    capabilities.setHoverProvider(true);
-    capabilities.setDocumentFormattingProvider(true);
-    capabilities.setDocumentSymbolProvider(true);
+    private void tryInitProject(Path root) {
+        LOGGER.info("Initializing project at " + root);
+        lifecycleManager.cancelAllTasks();
+        Result<Project, List<Exception>> loadResult = ProjectLoader.load(
+                root, projects, lifecycleManager.managedDocuments());
+        if (loadResult.isOk()) {
+            Project updatedProject = loadResult.unwrap();
+            resolveDetachedProjects(updatedProject);
+            projects.updateMainProject(loadResult.unwrap());
+            LOGGER.info("Initialized project at " + root);
+        } else {
+            LOGGER.severe("Init project failed");
+            // TODO: Maybe we just start with this anyways by default, and then add to it
+            //  if we find a smithy-build.json, etc.
+            // If we overwrite an existing project with an empty one, we lose track of the state of tracked
+            // files. Instead, we will just keep the original project before the reload failure.
+            if (projects.mainProject() == null) {
+                projects.updateMainProject(Project.empty(root));
+            }
 
-    return Utils.completableFuture(new InitializeResult(capabilities));
-  }
+            String baseMessage = "Failed to load Smithy project at " + root;
+            StringBuilder errorMessage = new StringBuilder(baseMessage).append(":");
+            for (Exception error : loadResult.unwrapErr()) {
+                errorMessage.append(System.lineSeparator());
+                errorMessage.append('\t');
+                errorMessage.append(error.getMessage());
+            }
+            client.error(errorMessage.toString());
 
-  @Override
-  public void exit() {
-    System.exit(0);
-  }
-
-  @Override
-  public WorkspaceService getWorkspaceService() {
-    return new SmithyWorkspaceService(this.tds);
-  }
-
-  @Override
-  public TextDocumentService getTextDocumentService() {
-    File temp = null;
-    try {
-      temp = Files.createTempDirectory("smithy-lsp").toFile();
-      LspLog.println("Created a temporary folder for file contents " + temp);
-      temp.deleteOnExit();
-    } catch (IOException e) {
-      LspLog.println("Failed to create a temporary folder " + e);
+            String showMessage = baseMessage + ". Check server logs to find out what went wrong.";
+            client.showMessage(new MessageParams(MessageType.Error, showMessage));
+        }
     }
-    SmithyTextDocumentService local = new SmithyTextDocumentService(this.client, temp);
-    tds = Optional.of(local);
-    return local;
-  }
 
-  @Override
-  public void connect(LanguageClient client) {
-    Properties props = new Properties();
-    String message = "Hello from smithy-language-server!";
-    try {
-      props.load(SmithyLanguageServer.class.getClassLoader().getResourceAsStream("version.properties"));
-      message = "Hello from smithy-language-server " + props.getProperty("version") + "!";
-    } catch (Exception e) {
-      LspLog.println("Could not read Language Server version: " + e);
+    private void resolveDetachedProjects(Project updatedProject) {
+        // This is a project reload, so we need to resolve any added/removed files
+        // that need to be moved to or from detached projects.
+        if (getProject() != null) {
+            Set<String> currentProjectSmithyPaths = getProject().smithyFiles().keySet();
+            Set<String> updatedProjectSmithyPaths = updatedProject.smithyFiles().keySet();
+
+            Set<String> addedPaths = new HashSet<>(updatedProjectSmithyPaths);
+            addedPaths.removeAll(currentProjectSmithyPaths);
+            for (String addedPath : addedPaths) {
+                String addedUri = LspAdapter.toUri(addedPath);
+                if (projects.isDetached(addedUri)) {
+                    projects.removeDetachedProject(addedUri);
+                }
+            }
+
+            Set<String> removedPaths = new HashSet<>(currentProjectSmithyPaths);
+            removedPaths.removeAll(updatedProjectSmithyPaths);
+            for (String removedPath : removedPaths) {
+                String removedUri = LspAdapter.toUri(removedPath);
+                // Only move to a detached project if the file is managed
+                if (lifecycleManager.managedDocuments().contains(removedUri)) {
+                    // Note: This should always be non-null, since we essentially got this from the current project
+                    Document removedDocument = projects.getDocument(removedUri);
+                    // The copy here is technically unnecessary, if we make ModelAssembler support borrowed strings
+                    projects.createDetachedProject(removedUri, removedDocument.copyText());
+                }
+            }
+        }
     }
-    tds.ifPresent(tds -> tds.setClient(client));
-    client.showMessage(new MessageParams(MessageType.Info, message));
-  }
 
-  @Override
-  public CompletableFuture<String> jarFileContents(TextDocumentIdentifier documentUri) {
-    String uri = documentUri.getUri();
-
-    try {
-      LspLog.println("Trying to resolve " + uri);
-      List<String> lines = Utils.jarFileContents(uri);
-      String contents = lines.stream().collect(Collectors.joining(System.lineSeparator()));
-      return CompletableFuture.completedFuture(contents);
-    } catch (IOException e) {
-      LspLog.println("Failed to resolve " + uri + " error: " + e);
-      CompletableFuture<String> future = new CompletableFuture<>();
-      future.completeExceptionally(e);
-      return future;
+    private CompletableFuture<Void> registerSmithyFileWatchers() {
+        Project project = projects.mainProject();
+        List<Registration> registrations = FileWatcherRegistrationHandler.getSmithyFileWatcherRegistrations(project);
+        return client.registerCapability(new RegistrationParams(registrations));
     }
-  }
 
-  @Override
-  public CompletableFuture<List<? extends Location>> selectorCommand(SelectorParams selectorParams) {
-    LspLog.println("Received selector Command: " + selectorParams.getExpression());
-    if (this.tds.isPresent()) {
-      Either<Exception, List<Location>> result = this.tds.get().runSelector(selectorParams.getExpression());
-      if (result.isRight()) {
-        List<Location> locations = result.getRight();
-        LspLog.println(String.format("Selector command found %s matching shapes.", locations.size()));
-        return CompletableFuture.completedFuture(locations);
-      } else {
-        LspLog.println("Resolve model validation errors and re-run selector command: " + result.getLeft());
-      }
+    private CompletableFuture<Void> unregisterSmithyFileWatchers() {
+        List<Unregistration> unregistrations = FileWatcherRegistrationHandler.getSmithyFileWatcherUnregistrations();
+        return client.unregisterCapability(new UnregistrationParams(unregistrations));
     }
-    return CompletableFuture.completedFuture(Collections.emptyList());
-  }
+
+    @Override
+    public void initialized(InitializedParams params) {
+        List<Registration> registrations = FileWatcherRegistrationHandler.getBuildFileWatcherRegistrations();
+        client.registerCapability(new RegistrationParams(registrations));
+        registerSmithyFileWatchers();
+    }
+
+    @Override
+    public WorkspaceService getWorkspaceService() {
+        return this;
+    }
+
+    @Override
+    public TextDocumentService getTextDocumentService() {
+        return this;
+    }
+
+    @Override
+    public CompletableFuture<Object> shutdown() {
+        // TODO: Cancel all in-progress requests
+        return completedFuture(new Object());
+    }
+
+    @Override
+    public void exit() {
+        System.exit(0);
+    }
+
+    @Override
+    public CompletableFuture<String> jarFileContents(TextDocumentIdentifier textDocumentIdentifier) {
+        LOGGER.info("JarFileContents");
+        String uri = textDocumentIdentifier.getUri();
+        Project project = projects.getProject(uri);
+        Document document = project.getDocument(uri);
+        if (document != null) {
+            return completedFuture(document.copyText());
+        } else {
+            // Technically this can throw if the uri is invalid
+            return completedFuture(IoUtils.readUtf8Url(LspAdapter.jarUrl(uri)));
+        }
+    }
+
+    // TODO: This doesn't really work for multiple projects
+    @Override
+    public CompletableFuture<List<? extends Location>> selectorCommand(SelectorParams selectorParams) {
+        LOGGER.info("SelectorCommand");
+        Selector selector;
+        try {
+            selector = Selector.parse(selectorParams.getExpression());
+        } catch (Exception e) {
+            LOGGER.info("Invalid selector");
+            // TODO: Respond with error somehow
+            return completedFuture(Collections.emptyList());
+        }
+
+        Project project = projects.mainProject();
+        // TODO: Might also want to tell user if the model isn't loaded
+        // TODO: Use proper location (source is just a point)
+        return completedFuture(project.modelResult().getResult()
+                .map(selector::select)
+                .map(shapes -> shapes.stream()
+                        .map(Shape::getSourceLocation)
+                        .map(LspAdapter::toLocation)
+                        .collect(Collectors.toList()))
+                .orElse(Collections.emptyList()));
+    }
+
+    @Override
+    public CompletableFuture<ServerStatus> serverStatus() {
+        OpenProject openProject = new OpenProject(
+                LspAdapter.toUri(projects.mainProject().root().toString()),
+                projects.mainProject().smithyFiles().keySet().stream()
+                        .map(LspAdapter::toUri)
+                        .collect(Collectors.toList()),
+                false);
+
+        List<OpenProject> openProjects = new ArrayList<>();
+        openProjects.add(openProject);
+
+        for (Map.Entry<String, Project> entry : projects.detachedProjects().entrySet()) {
+            openProjects.add(new OpenProject(
+                    entry.getKey(),
+                    Collections.singletonList(entry.getKey()),
+                    true));
+        }
+
+        return completedFuture(new ServerStatus(openProjects));
+    }
+
+    @Override
+    public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
+        LOGGER.info("DidChangeWatchedFiles");
+        // Smithy files were added or deleted to watched sources/imports (specified by smithy-build.json),
+        // or the smithy-build.json itself was changed
+        Set<String> createdSmithyFiles = new HashSet<>(params.getChanges().size());
+        Set<String> deletedSmithyFiles = new HashSet<>(params.getChanges().size());
+        boolean changedBuildFiles = false;
+        for (FileEvent event : params.getChanges()) {
+            String changedUri = event.getUri();
+            if (changedUri.endsWith(".smithy")) {
+                if (event.getType().equals(FileChangeType.Created)) {
+                    createdSmithyFiles.add(changedUri);
+                } else if (event.getType().equals(FileChangeType.Deleted)) {
+                    deletedSmithyFiles.add(changedUri);
+                }
+            } else if (changedUri.endsWith(ProjectConfigLoader.SMITHY_BUILD)
+                    || changedUri.endsWith(ProjectConfigLoader.SMITHY_PROJECT)) {
+                changedBuildFiles = true;
+            } else {
+                for (String extFile : ProjectConfigLoader.SMITHY_BUILD_EXTS) {
+                    if (changedUri.endsWith(extFile)) {
+                        changedBuildFiles = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (changedBuildFiles) {
+            client.info("Build files changed, reloading project");
+            // TODO: Handle more granular updates to build files.
+            tryInitProject(projects.mainProject().root());
+        } else {
+            client.info("Project files changed, adding files "
+                        + createdSmithyFiles + " and removing files " + deletedSmithyFiles);
+            // We get this notification for watched files, which only includes project files,
+            // so we don't need to resolve detached projects.
+            projects.mainProject().updateFiles(createdSmithyFiles, deletedSmithyFiles);
+        }
+
+        // TODO: Update watchers based on specific changes
+        unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
+
+        sendFileDiagnosticsForManagedDocuments();
+    }
+
+    @Override
+    public void didChangeConfiguration(DidChangeConfigurationParams params) {
+    }
+
+    @Override
+    public void didChange(DidChangeTextDocumentParams params) {
+        LOGGER.info("DidChange");
+
+        if (params.getContentChanges().isEmpty()) {
+            LOGGER.info("Received empty DidChange");
+            return;
+        }
+
+        String uri = params.getTextDocument().getUri();
+
+        lifecycleManager.cancelTask(uri);
+
+        Document document = projects.getDocument(uri);
+        if (document == null) {
+            client.unknownFileError(uri, "change");
+            return;
+        }
+
+        for (TextDocumentContentChangeEvent contentChangeEvent : params.getContentChanges()) {
+            if (contentChangeEvent.getRange() != null) {
+                document.applyEdit(contentChangeEvent.getRange(), contentChangeEvent.getText());
+            } else {
+                document.applyEdit(document.fullRange(), contentChangeEvent.getText());
+            }
+        }
+
+        if (!onlyReloadOnSave) {
+            // TODO: A consequence of this is that any existing validation events are cleared, which
+            //  is kinda annoying.
+            // Report any parse/shape/trait loading errors
+            Project project = projects.getProject(uri);
+            if (project == null) {
+                client.unknownFileError(uri, "change");
+                return;
+            }
+            CompletableFuture<Void> future = CompletableFuture
+                    .runAsync(() -> project.updateModelWithoutValidating(uri))
+                    .thenComposeAsync(unused -> sendFileDiagnostics(uri));
+            lifecycleManager.putTask(uri, future);
+        }
+    }
+
+    @Override
+    public void didOpen(DidOpenTextDocumentParams params) {
+        LOGGER.info("DidOpen");
+
+        String uri = params.getTextDocument().getUri();
+
+        lifecycleManager.cancelTask(uri);
+        lifecycleManager.managedDocuments().add(uri);
+
+        String text = params.getTextDocument().getText();
+        Document document = projects.getDocument(uri);
+        if (document != null) {
+            document.applyEdit(null, text);
+        } else {
+            projects.createDetachedProject(uri, text);
+        }
+
+        lifecycleManager.putTask(uri, sendFileDiagnostics(uri));
+    }
+
+    @Override
+    public void didClose(DidCloseTextDocumentParams params) {
+        LOGGER.info("DidClose");
+
+        String uri = params.getTextDocument().getUri();
+        lifecycleManager.managedDocuments().remove(uri);
+
+        if (projects.isDetached(uri)) {
+            // Only cancel tasks for detached projects, since we're dropping the project
+            lifecycleManager.cancelTask(uri);
+            projects.removeDetachedProject(uri);
+        }
+
+        // TODO: Clear diagnostics? Can do this by sending an empty list
+    }
+
+    @Override
+    public void didSave(DidSaveTextDocumentParams params) {
+        LOGGER.info("DidSave");
+
+        String uri = params.getTextDocument().getUri();
+        lifecycleManager.cancelTask(uri);
+        if (!projects.isTracked(uri)) {
+            // TODO: Could also load a detached project here, but I don't know how this would
+            //  actually happen in practice
+            client.unknownFileError(uri, "save");
+            return;
+        }
+
+        Project project = projects.getProject(uri);
+        if (params.getText() != null) {
+            Document document = project.getDocument(uri);
+            document.applyEdit(null, params.getText());
+        }
+
+        CompletableFuture<Void> future = CompletableFuture
+                .runAsync(() -> project.updateAndValidateModel(uri))
+                .thenCompose(unused -> sendFileDiagnostics(uri));
+        lifecycleManager.putTask(uri, future);
+    }
+
+    @Override
+    public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams params) {
+        LOGGER.info("Completion");
+
+        String uri = params.getTextDocument().getUri();
+        if (!projects.isTracked(uri)) {
+            client.unknownFileError(uri, "completion");
+            return completedFuture(Either.forLeft(Collections.emptyList()));
+        }
+
+        Project project = projects.getProject(uri);
+        SmithyFile smithyFile = project.getSmithyFile(uri);
+        return CompletableFutures.computeAsync((cc) -> {
+            CompletionHandler handler = new CompletionHandler(project, smithyFile);
+            return Either.forLeft(handler.handle(params, cc));
+        });
+    }
+
+    @Override
+    public CompletableFuture<CompletionItem> resolveCompletionItem(CompletionItem unresolved) {
+        LOGGER.info("ResolveCompletion");
+        // TODO: Use this to add the import when a completion item is selected, if its expensive
+        return completedFuture(unresolved);
+    }
+
+    @Override
+    public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>>
+    documentSymbol(DocumentSymbolParams params) {
+        LOGGER.info("DocumentSymbol");
+        String uri = params.getTextDocument().getUri();
+        if (!projects.isTracked(uri)) {
+            client.unknownFileError(uri, "document symbol");
+            return completedFuture(Collections.emptyList());
+        }
+
+        Project project = projects.getProject(uri);
+        SmithyFile smithyFile = project.getSmithyFile(uri);
+
+        return CompletableFutures.computeAsync((cc) -> {
+            if (smithyFile == null) {
+                return Collections.emptyList();
+            }
+
+            Collection<DocumentShape> documentShapes = smithyFile.documentShapes();
+            if (documentShapes.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            if (cc.isCanceled()) {
+                return Collections.emptyList();
+            }
+
+            List<Either<SymbolInformation, DocumentSymbol>> documentSymbols = new ArrayList<>(documentShapes.size());
+            for (DocumentShape documentShape : documentShapes) {
+                if (cc.isCanceled()) {
+                    client.info("canceled document symbols");
+                    return Collections.emptyList();
+                }
+                SymbolKind symbolKind;
+                switch (documentShape.kind()) {
+                    case Inline:
+                        // No shape name in the document text, so no symbol
+                        continue;
+                    case DefinedMember:
+                    case Elided:
+                        symbolKind = SymbolKind.Property;
+                        break;
+                    case DefinedShape:
+                    case Targeted:
+                    default:
+                        symbolKind = SymbolKind.Class;
+                        break;
+                }
+                String symbolName = documentShape.shapeName().toString();
+                if (symbolName.isEmpty()) {
+                    LOGGER.warning("[DocumentSymbols] Empty shape name for " + documentShape);
+                    continue;
+                }
+                Range symbolRange = documentShape.range();
+                DocumentSymbol symbol = new DocumentSymbol(symbolName, symbolKind, symbolRange, symbolRange);
+                documentSymbols.add(Either.forRight(symbol));
+            }
+
+            return documentSymbols;
+        });
+    }
+
+    @Override
+    public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>>
+    definition(DefinitionParams params) {
+        LOGGER.info("Definition");
+
+        String uri = params.getTextDocument().getUri();
+        if (!projects.isTracked(uri)) {
+            client.unknownFileError(uri, "definition");
+            return completedFuture(Either.forLeft(Collections.emptyList()));
+        }
+
+        Project project = projects.getProject(uri);
+        SmithyFile smithyFile = project.getSmithyFile(uri);
+        List<Location> locations = new DefinitionHandler(project, smithyFile).handle(params);
+        return completedFuture(Either.forLeft(locations));
+    }
+
+    @Override
+    public CompletableFuture<Hover> hover(HoverParams params) {
+        LOGGER.info("Hover");
+
+        String uri = params.getTextDocument().getUri();
+        if (!projects.isTracked(uri)) {
+            client.unknownFileError(uri, "hover");
+            return completedFuture(HoverHandler.emptyContents());
+        }
+
+        Project project = projects.getProject(uri);
+        SmithyFile smithyFile = project.getSmithyFile(uri);
+
+        // TODO: Abstract away passing minimum severity
+        Hover hover = new HoverHandler(project, smithyFile).handle(params, minimumSeverity);
+        return completedFuture(hover);
+    }
+
+    @Override
+    public CompletableFuture<List<Either<Command, CodeAction>>> codeAction(CodeActionParams params) {
+        List<Either<Command, CodeAction>> versionCodeActions =
+                SmithyCodeActions.versionCodeActions(params).stream()
+                        .map(Either::<Command, CodeAction>forRight)
+                        .collect(Collectors.toList());
+        return completedFuture(versionCodeActions);
+    }
+
+    @Override
+    public CompletableFuture<List<? extends TextEdit>> formatting(DocumentFormattingParams params) {
+        LOGGER.info("Formatting");
+        String uri = params.getTextDocument().getUri();
+        Project project = projects.getProject(uri);
+        Document document = project.getDocument(uri);
+        if (document == null) {
+            return completedFuture(Collections.emptyList());
+        }
+
+        IdlTokenizer tokenizer = IdlTokenizer.create(uri, document.borrowText());
+        TokenTree tokenTree = TokenTree.of(tokenizer);
+        String formatted = Formatter.format(tokenTree);
+        Range range = document.fullRange();
+        TextEdit edit = new TextEdit(range, formatted);
+        return completedFuture(Collections.singletonList(edit));
+    }
+
+    private void sendFileDiagnosticsForManagedDocuments() {
+        for (String managedDocumentUri : lifecycleManager.managedDocuments()) {
+            lifecycleManager.putOrComposeTask(managedDocumentUri, sendFileDiagnostics(managedDocumentUri));
+        }
+    }
+
+    private CompletableFuture<Void> sendFileDiagnostics(String uri) {
+        return CompletableFuture.runAsync(() -> {
+            List<Diagnostic> diagnostics = getFileDiagnostics(uri);
+            PublishDiagnosticsParams publishDiagnosticsParams = new PublishDiagnosticsParams(uri, diagnostics);
+            client.publishDiagnostics(publishDiagnosticsParams);
+        });
+    }
+
+    List<Diagnostic> getFileDiagnostics(String uri) {
+        if (LspAdapter.isJarFile(uri) || LspAdapter.isSmithyJarFile(uri)) {
+            // Don't send diagnostics to jar files since they can't be edited
+            // and diagnostics could be misleading.
+            return Collections.emptyList();
+        }
+
+        if (!projects.isTracked(uri)) {
+            client.unknownFileError(uri, "diagnostics");
+        }
+
+        Project project = projects.getProject(uri);
+        SmithyFile smithyFile = project.getSmithyFile(uri);
+        String path = LspAdapter.toPath(uri);
+
+        List<Diagnostic> diagnostics = project.modelResult().getValidationEvents().stream()
+                .filter(validationEvent -> validationEvent.getSeverity().compareTo(minimumSeverity) >= 0)
+                .filter(validationEvent -> validationEvent.getSourceLocation().getFilename().equals(path))
+                .map(validationEvent -> toDiagnostic(validationEvent, smithyFile))
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        Diagnostic versionDiagnostic = SmithyDiagnostics.versionDiagnostic(smithyFile);
+        if (versionDiagnostic != null) {
+            diagnostics.add(versionDiagnostic);
+        }
+
+        if (projects.isDetached(uri)) {
+            diagnostics.add(SmithyDiagnostics.detachedDiagnostic(smithyFile));
+        }
+
+        return diagnostics;
+    }
+
+    private static Diagnostic toDiagnostic(ValidationEvent validationEvent, SmithyFile smithyFile) {
+        DiagnosticSeverity severity = toDiagnosticSeverity(validationEvent.getSeverity());
+        SourceLocation sourceLocation = validationEvent.getSourceLocation();
+
+        // TODO: Improve location of diagnostics
+        Range range = LspAdapter.lineOffset(LspAdapter.toPosition(sourceLocation));
+        if (validationEvent.getShapeId().isPresent() && smithyFile != null) {
+            // Event is (probably) on a member target
+            if (validationEvent.containsId("Target")) {
+                DocumentShape documentShape = smithyFile.documentShapesByStartPosition()
+                        .get(LspAdapter.toPosition(sourceLocation));
+                if (documentShape != null && documentShape.hasMemberTarget()) {
+                    range = documentShape.targetReference().range();
+                }
+            }  else {
+                // Check if the event location is on a trait application
+                Range traitRange = DocumentParser.forDocument(smithyFile.document()).traitIdRange(sourceLocation);
+                if (traitRange != null) {
+                    range = traitRange;
+                }
+            }
+        }
+
+        String message = validationEvent.getId() + ": " + validationEvent.getMessage();
+        return new Diagnostic(range, message, severity, "Smithy");
+    }
+
+    private static DiagnosticSeverity toDiagnosticSeverity(Severity severity) {
+        switch (severity) {
+            case ERROR:
+            case DANGER:
+                return  DiagnosticSeverity.Error;
+            case WARNING:
+                return DiagnosticSeverity.Warning;
+            case NOTE:
+                return DiagnosticSeverity.Information;
+            default:
+                return DiagnosticSeverity.Hint;
+        }
+    }
 }

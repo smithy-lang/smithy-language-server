@@ -15,23 +15,30 @@
 
 package software.amazon.smithy.lsp;
 
-import java.util.Collections;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.hasSize;
+import static software.amazon.smithy.lsp.SmithyLanguageServerTest.initFromWorkspace;
+
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 import org.eclipse.lsp4j.CodeAction;
 import org.eclipse.lsp4j.CodeActionContext;
 import org.eclipse.lsp4j.CodeActionParams;
+import org.eclipse.lsp4j.CodeActionTriggerKind;
+import org.eclipse.lsp4j.Command;
+import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.Position;
-import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
-import org.junit.Test;
-import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
-import software.amazon.smithy.lsp.diagnostics.VersionDiagnostics;
-import software.amazon.smithy.lsp.ext.Harness;
-import software.amazon.smithy.lsp.ext.model.SmithyBuildExtensions;
-import software.amazon.smithy.utils.MapUtils;
-
-import static org.junit.Assert.assertEquals;
+import org.eclipse.lsp4j.TextEdit;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.junit.jupiter.api.Test;
+import software.amazon.smithy.lsp.diagnostics.SmithyDiagnostics;
+import software.amazon.smithy.lsp.document.Document;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 
 /**
  * This test suite test the generation of the correct {@link CodeAction} given {@link CodeActionParams}
@@ -39,74 +46,137 @@ import static org.junit.Assert.assertEquals;
  * some content in it.
  */
 public class SmithyVersionRefactoringTest {
-
     @Test
-    public void noVersionCodeAction() throws Exception {
-        String filename = "no-version.smithy";
+    public void noVersionDiagnostic() throws Exception {
+        String model = "namespace com.foo\n" +
+                       "string Foo\n";
+        TestWorkspace workspace = TestWorkspace.singleModel(model);
+        StubClient client = new StubClient();
+        SmithyLanguageServer server = initFromWorkspace(workspace, client);
+        String uri = workspace.getUri("main.smithy");
 
-        Map<String, String> files = MapUtils.ofEntries(
-            MapUtils.entry(filename, "namespace test")
-        );
+        server.didOpen(new RequestBuilders.DidOpen().uri(uri).text(model).build());
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
-            Range range0 = new Range(new Position(0, 0), new Position(0, 0));
+        List<Diagnostic> diagnostics = server.getFileDiagnostics(uri);
+        List<String> codes = diagnostics.stream()
+                .filter(d -> d.getCode().isLeft())
+                .map(d -> d.getCode().getLeft())
+                .collect(Collectors.toList());
+        assertThat(codes, hasItem(SmithyDiagnostics.DEFINE_VERSION));
 
-            CodeActionParams params = new CodeActionParams(
-                new TextDocumentIdentifier(hs.file(filename).toURI().toString()),
-                range0,
-                new CodeActionContext(VersionDiagnostics.createVersionDiagnostics(hs.file(filename), Collections.emptyMap()))
-            );
-            List<CodeAction> result = SmithyCodeActions.versionCodeActions(params);
-            assertEquals(1, result.size());
-            assertEquals("Define the Smithy version", result.get(0).getTitle());
-            // range is (0,0)
-            assertEquals(range0, result.get(0).getEdit().getChanges().values().stream().findFirst().get().get(0).getRange());
-        }
+        List<Diagnostic> defineVersionDiagnostics = diagnostics.stream()
+                .filter(d -> d.getCode().isLeft())
+                .filter(d -> d.getCode().getLeft().equals(SmithyDiagnostics.DEFINE_VERSION))
+                .collect(Collectors.toList());
+        assertThat(defineVersionDiagnostics, hasSize(1));
+
+        Diagnostic diagnostic = defineVersionDiagnostics.get(0);
+        assertThat(diagnostic.getRange().getStart(), equalTo(new Position(0, 0)));
+        assertThat(diagnostic.getRange().getEnd(), equalTo(new Position(0, 17)));
+        CodeActionContext context = new CodeActionContext(diagnostics);
+        context.setTriggerKind(CodeActionTriggerKind.Automatic);
+        CodeActionParams codeActionParams = new CodeActionParams(
+                new TextDocumentIdentifier(uri),
+                LspAdapter.point(0, 3),
+                context);
+        List<Either<Command, CodeAction>> response = server.codeAction(codeActionParams).get();
+        assertThat(response, hasSize(1));
+        CodeAction action = response.get(0).getRight();
+        assertThat(action.getEdit().getChanges(), hasKey(uri));
+        List<TextEdit> edits = action.getEdit().getChanges().get(uri);
+        assertThat(edits, hasSize(1));
+        TextEdit edit = edits.get(0);
+        Document document = server.getProject().getDocument(uri);
+        document.applyEdit(edit.getRange(), edit.getNewText());
+        assertThat(document.copyText(), equalTo("$version: \"1\"\n" +
+                                                "\n" +
+                                                "namespace com.foo\n" +
+                                                "string Foo\n"));
     }
 
     @Test
-    public void outdatedVersionCodeAction() throws Exception {
-        String filename = "old-version.smithy";
+    public void oldVersionDiagnostic() throws Exception {
+        String model = "$version: \"1\"\n" +
+                       "namespace com.foo\n" +
+                       "string Foo\n";
+        TestWorkspace workspace = TestWorkspace.singleModel(model);
+        StubClient client = new StubClient();
+        SmithyLanguageServer server = initFromWorkspace(workspace, client);
+        String uri = workspace.getUri("main.smithy");
 
-        Map<String, String> files = MapUtils.ofEntries(
-            MapUtils.entry(filename, "$version: \"1\"\nnamespace test2")
-        );
+        server.didOpen(new RequestBuilders.DidOpen().uri(uri).text(model).build());
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
-            Range range0 = new Range(new Position(0, 0), new Position(0, 0));
+        List<Diagnostic> diagnostics = server.getFileDiagnostics(uri);
+        List<String> codes = diagnostics.stream()
+                .filter(d -> d.getCode().isLeft())
+                .map(d -> d.getCode().getLeft())
+                .collect(Collectors.toList());
+        assertThat(codes, hasItem(SmithyDiagnostics.UPDATE_VERSION));
 
-            Range firstLineRange = new Range(new Position(0, 0), new Position(0, 13));
-            CodeActionParams params = new CodeActionParams(
-                new TextDocumentIdentifier(hs.file(filename).toURI().toString()),
-                range0,
-                new CodeActionContext(VersionDiagnostics.createVersionDiagnostics(hs.file(filename), Collections.emptyMap()))
-            );
-            List<CodeAction> result = SmithyCodeActions.versionCodeActions(params);
-            assertEquals(1, result.size());
-            assertEquals("Update the Smithy version to 2", result.get(0).getTitle());
-            // range is where the diagnostic is found
-            assertEquals(firstLineRange, result.get(0).getEdit().getChanges().values().stream().findFirst().get().get(0).getRange());
-        }
+        List<Diagnostic> updateVersionDiagnostics = diagnostics.stream()
+                .filter(d -> d.getCode().isLeft())
+                .filter(d -> d.getCode().getLeft().equals(SmithyDiagnostics.UPDATE_VERSION))
+                .collect(Collectors.toList());
+        assertThat(updateVersionDiagnostics, hasSize(1));
+
+        Diagnostic diagnostic = updateVersionDiagnostics.get(0);
+        assertThat(diagnostic.getRange().getStart(), equalTo(new Position(0, 0)));
+        assertThat(diagnostic.getRange().getEnd(), equalTo(new Position(0, 13)));
+        CodeActionContext context = new CodeActionContext(diagnostics);
+        context.setTriggerKind(CodeActionTriggerKind.Automatic);
+        CodeActionParams codeActionParams = new CodeActionParams(
+                new TextDocumentIdentifier(uri),
+                LspAdapter.point(0, 3),
+                context);
+        List<Either<Command, CodeAction>> response = server.codeAction(codeActionParams).get();
+        assertThat(response, hasSize(1));
+        CodeAction action = response.get(0).getRight();
+        assertThat(action.getEdit().getChanges(), hasKey(uri));
+        List<TextEdit> edits = action.getEdit().getChanges().get(uri);
+        assertThat(edits, hasSize(1));
+        TextEdit edit = edits.get(0);
+        Document document = server.getProject().getDocument(uri);
+        document.applyEdit(edit.getRange(), edit.getNewText());
+        assertThat(document.copyText(), equalTo("$version: \"2\"\n" +
+                                                "namespace com.foo\n" +
+                                                "string Foo\n"));
     }
 
     @Test
-    public void correctVersionCodeAction() throws Exception {
-        String filename = "version.smithy";
+    public void mostRecentVersion() {
+        String model = "$version: \"2\"\n" +
+                       "namespace com.foo\n" +
+                       "string Foo\n";
+        TestWorkspace workspace = TestWorkspace.singleModel(model);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+        String uri = workspace.getUri("main.smithy");
 
-        Map<String, String> files = MapUtils.ofEntries(
-            MapUtils.entry(filename, "$version: \"2\"\nnamespace test2")
-        );
+        server.didOpen(new RequestBuilders.DidOpen().uri(uri).text(model).build());
 
-        try (Harness hs = Harness.create(SmithyBuildExtensions.builder().build(), files)) {
-            Range range0 = new Range(new Position(0, 0), new Position(0, 0));
+        List<Diagnostic> diagnostics = server.getFileDiagnostics(uri);
+        List<String> codes = diagnostics.stream()
+                .filter(d -> d.getCode().isLeft())
+                .map(d -> d.getCode().getLeft())
+                .filter(c -> c.equals(SmithyDiagnostics.DEFINE_VERSION)
+                    || c.equals(SmithyDiagnostics.UPDATE_VERSION))
+                .collect(Collectors.toList());
+        assertThat(codes, hasSize(0));
+    }
 
-            CodeActionParams params = new CodeActionParams(
-                new TextDocumentIdentifier(hs.file(filename).toURI().toString()),
-                range0,
-                new CodeActionContext(VersionDiagnostics.createVersionDiagnostics(hs.file(filename), Collections.emptyMap()))
-            );
-            List<CodeAction> result = SmithyCodeActions.versionCodeActions(params);
-            assertEquals(0, result.size());
-        }
+    @Test
+    public void noShapes() {
+        String model = "namespace com.foo\n";
+        TestWorkspace workspace = TestWorkspace.singleModel(model);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+        String uri = workspace.getUri("main.smithy");
+
+        server.didOpen(new RequestBuilders.DidOpen().uri(uri).text(model).build());
+
+        List<Diagnostic> diagnostics = server.getFileDiagnostics(uri);
+        List<String> codes = diagnostics.stream()
+                .filter(d -> d.getCode().isLeft())
+                .map(d -> d.getCode().getLeft())
+                .collect(Collectors.toList());
+        assertThat(codes, containsInAnyOrder(SmithyDiagnostics.DEFINE_VERSION));
     }
 }

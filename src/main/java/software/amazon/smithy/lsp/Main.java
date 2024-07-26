@@ -15,6 +15,7 @@
 
 package software.amazon.smithy.lsp;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
@@ -39,7 +40,11 @@ public final class Main {
      */
     public static Optional<Exception> launch(InputStream in, OutputStream out) {
         SmithyLanguageServer server = new SmithyLanguageServer();
-        Launcher<LanguageClient> launcher = LSPLauncher.createServerLauncher(server, in, out);
+        Launcher<LanguageClient> launcher = LSPLauncher.createServerLauncher(
+                server,
+                exitOnClose(in),
+                out);
+
         LanguageClient client = launcher.getRemoteProxy();
 
         server.connect(client);
@@ -49,6 +54,19 @@ public final class Main {
         } catch (Exception e) {
             return Optional.of(e);
         }
+    }
+
+    private static InputStream exitOnClose(InputStream delegate) {
+        return new InputStream() {
+            @Override
+            public int read() throws IOException {
+                int result = delegate.read();
+                if (result < 0) {
+                    System.exit(0);
+                }
+                return result;
+            }
+        };
     }
 
     /**
