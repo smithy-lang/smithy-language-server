@@ -21,7 +21,7 @@ import software.amazon.smithy.model.node.NodeMapper;
 /**
  * Sets up a temporary directory containing a Smithy project
  */
-public class TestWorkspace {
+public final class TestWorkspace {
     private static final NodeMapper MAPPER = new NodeMapper();
     private final Path root;
     private SmithyBuildConfig config;

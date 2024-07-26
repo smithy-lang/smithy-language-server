@@ -55,6 +55,10 @@ public final class DocumentShape {
         return this.kind.equals(other);
     }
 
+    public boolean hasMemberTarget() {
+        return isKind(Kind.DefinedMember) && targetReference() != null;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

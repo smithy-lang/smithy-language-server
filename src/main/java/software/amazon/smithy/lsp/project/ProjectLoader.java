@@ -32,7 +32,7 @@ import software.amazon.smithy.lsp.document.DocumentNamespace;
 import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.document.DocumentShape;
 import software.amazon.smithy.lsp.document.DocumentVersion;
-import software.amazon.smithy.lsp.protocol.UriAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.ModelAssembler;
@@ -67,7 +67,7 @@ public final class ProjectLoader {
      */
     public static Project loadDetached(String uri, String text) {
         LOGGER.info("Loading detached project at " + uri);
-        String asPath = UriAdapter.toPath(uri);
+        String asPath = LspAdapter.toPath(uri);
         ValidatedResult<Model> modelResult = Model.assembler()
                 .addUnparsedModel(asPath, text)
                 .assemble();
@@ -85,8 +85,8 @@ public final class ProjectLoader {
         Map<String, SmithyFile> smithyFiles = computeSmithyFiles(sources, modelResult, (filePath) -> {
             // NOTE: isSmithyJarFile and isJarFile typically take in a URI (filePath is a path), but
             // the model stores jar paths as URIs
-            if (UriAdapter.isSmithyJarFile(filePath) || UriAdapter.isJarFile(filePath)) {
-                return Document.of(IoUtils.readUtf8Url(UriAdapter.jarUrl(filePath)));
+            if (LspAdapter.isSmithyJarFile(filePath) || LspAdapter.isJarFile(filePath)) {
+                return Document.of(IoUtils.readUtf8Url(LspAdapter.jarUrl(filePath)));
             } else if (filePath.equals(asPath)) {
                 return Document.of(text);
             } else {
@@ -156,7 +156,7 @@ public final class ProjectLoader {
             for (Path path : allSmithyFilePaths) {
                 if (!managedDocuments.isEmpty()) {
                     String pathString = path.toString();
-                    String uri = UriAdapter.toUri(pathString);
+                    String uri = LspAdapter.toUri(pathString);
                     if (managedDocuments.contains(uri)) {
                         assembler.addUnparsedModel(pathString, projects.getDocument(uri).copyText());
                     } else {
@@ -190,13 +190,13 @@ public final class ProjectLoader {
         Map<String, SmithyFile> smithyFiles = computeSmithyFiles(allSmithyFilePaths, modelResult, (filePath) -> {
             // NOTE: isSmithyJarFile and isJarFile typically take in a URI (filePath is a path), but
             // the model stores jar paths as URIs
-            if (UriAdapter.isSmithyJarFile(filePath) || UriAdapter.isJarFile(filePath)) {
+            if (LspAdapter.isSmithyJarFile(filePath) || LspAdapter.isJarFile(filePath)) {
                 // Technically this can throw
-                return Document.of(IoUtils.readUtf8Url(UriAdapter.jarUrl(filePath)));
+                return Document.of(IoUtils.readUtf8Url(LspAdapter.jarUrl(filePath)));
             }
             // TODO: We recompute uri from path and vice-versa very frequently,
             //  maybe we can cache it.
-            String uri = UriAdapter.toUri(filePath);
+            String uri = LspAdapter.toUri(filePath);
             if (managedDocuments.contains(uri)) {
                 return projects.getDocument(uri);
             }

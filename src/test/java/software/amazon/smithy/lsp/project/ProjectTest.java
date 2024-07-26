@@ -31,8 +31,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.lsp.TestWorkspace;
 import software.amazon.smithy.lsp.document.Document;
-import software.amazon.smithy.lsp.protocol.RangeAdapter;
-import software.amazon.smithy.lsp.protocol.UriAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.Shape;
@@ -121,7 +120,7 @@ public class ProjectTest {
         assertThat(eventIds, hasItem("Model"));
 
         assertThat(project.smithyFiles().keySet(), hasItem(containsString("main.smithy")));
-        SmithyFile main = project.getSmithyFile(UriAdapter.toUri(root.resolve("main.smithy").toString()));
+        SmithyFile main = project.getSmithyFile(LspAdapter.toUri(root.resolve("main.smithy").toString()));
         assertThat(main, not(nullValue()));
         assertThat(main.document(), not(nullValue()));
         assertThat(main.namespace(), string("com.foo"));
@@ -150,7 +149,7 @@ public class ProjectTest {
         assertThat(project.modelResult().getValidationEvents(), empty());
         assertThat(project.smithyFiles().keySet(), hasItems(containsString("a.smithy"), containsString("b.smithy")));
 
-        SmithyFile a = project.getSmithyFile(UriAdapter.toUri(root.resolve("model/a.smithy").toString()));
+        SmithyFile a = project.getSmithyFile(LspAdapter.toUri(root.resolve("model/a.smithy").toString()));
         assertThat(a.document(), not(nullValue()));
         assertThat(a.namespace(), string("a"));
         List<String> aShapeIds = a.shapes().stream()
@@ -163,7 +162,7 @@ public class ProjectTest {
                 .collect(Collectors.toList());
         assertThat(aDocumentShapeNames, hasItems("Hello", "name", "String"));
 
-        SmithyFile b = project.getSmithyFile(UriAdapter.toUri(root.resolve("model/b.smithy").toString()));
+        SmithyFile b = project.getSmithyFile(LspAdapter.toUri(root.resolve("model/b.smithy").toString()));
         assertThat(b.document(), not(nullValue()));
         assertThat(b.namespace(), string("b"));
         List<String> bShapeIds = b.shapes().stream()
@@ -280,7 +279,7 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
-        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+        document.applyEdit(LspAdapter.point(document.end()), "\n");
 
         project.updateModelWithoutValidating(uri);
 
@@ -307,7 +306,7 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
-        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+        document.applyEdit(LspAdapter.point(document.end()), "\n");
 
         project.updateModelWithoutValidating(uri);
 
@@ -341,7 +340,7 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
-        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+        document.applyEdit(LspAdapter.point(document.end()), "\n");
 
         project.updateModelWithoutValidating(uri);
 
@@ -376,7 +375,7 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
-        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+        document.applyEdit(LspAdapter.point(document.end()), "\n");
 
         project.updateModelWithoutValidating(uri);
 
@@ -408,7 +407,7 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
-        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+        document.applyEdit(LspAdapter.point(document.end()), "\n");
 
         project.updateModelWithoutValidating(uri);
 
@@ -435,7 +434,7 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
-        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+        document.applyEdit(LspAdapter.point(document.end()), "\n");
 
         project.updateModelWithoutValidating(uri);
 
@@ -462,7 +461,7 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
-        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+        document.applyEdit(LspAdapter.point(document.end()), "\n");
 
         project.updateModelWithoutValidating(uri);
 
@@ -490,7 +489,7 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
-        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+        document.applyEdit(LspAdapter.point(document.end()), "\n");
 
         project.updateModelWithoutValidating(uri);
 
@@ -526,15 +525,15 @@ public class ProjectTest {
         if (document == null) {
             String smithyFilesPaths = String.join(System.lineSeparator(), project.smithyFiles().keySet());
             String smithyFilesUris = project.smithyFiles().keySet().stream()
-                    .map(UriAdapter::toUri)
+                    .map(LspAdapter::toUri)
                     .collect(Collectors.joining(System.lineSeparator()));
             Logger logger = Logger.getLogger(getClass().getName());
             logger.severe("Not found uri: " + uri);
-            logger.severe("Not found path: " + UriAdapter.toPath(uri));
+            logger.severe("Not found path: " + LspAdapter.toPath(uri));
             logger.severe("PATHS: " + smithyFilesPaths);
             logger.severe("URIS: " + smithyFilesUris);
         }
-        document.applyEdit(RangeAdapter.point(document.end()), "\n");
+        document.applyEdit(LspAdapter.point(document.end()), "\n");
 
         project.updateModelWithoutValidating(uri);
 
@@ -568,7 +567,7 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
-        document.applyEdit(RangeAdapter.lineSpan(2, 0, document.lineEnd(2)), "");
+        document.applyEdit(LspAdapter.lineSpan(2, 0, document.lineEnd(2)), "");
 
         project.updateModelWithoutValidating(uri);
 
@@ -598,7 +597,7 @@ public class ProjectTest {
 
         String uri = workspace.getUri("model-0.smithy");
         Document document = project.getDocument(uri);
-        document.applyEdit(RangeAdapter.lineSpan(2, 0, document.lineEnd(2)), "");
+        document.applyEdit(LspAdapter.lineSpan(2, 0, document.lineEnd(2)), "");
 
         project.updateModelWithoutValidating(uri);
 

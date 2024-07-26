@@ -30,6 +30,9 @@ import software.amazon.smithy.lsp.util.Result;
  * <p>Resolving a {@link ProjectDependency} is as simple as getting its path
  * relative to the project root, but is done here in order to be loaded the
  * same way as Maven dependencies.
+ * TODO: There are some things in here taken from smithy-cli. Should figure out
+ *  if we can expose them through smithy-cli instead of duplicating them here to
+ *  avoid drift.
  */
 final class ProjectDependencyResolver {
     // Taken from smithy-cli ConfigurationUtils

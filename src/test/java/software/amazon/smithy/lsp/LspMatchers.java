@@ -14,6 +14,9 @@ import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import software.amazon.smithy.lsp.document.Document;
 
+/**
+ * Hamcrest matchers for LSP4J types.
+ */
 public final class LspMatchers {
     private LspMatchers() {}
 

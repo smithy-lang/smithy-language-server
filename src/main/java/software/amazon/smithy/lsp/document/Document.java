@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
-import software.amazon.smithy.lsp.protocol.RangeAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 
 /**
  * In-memory representation of a text document, indexed by line, which can
@@ -76,7 +76,7 @@ public final class Document {
      * @return The range of the document, from (0, 0) to {@link #end()}
      */
     public Range fullRange() {
-        return RangeAdapter.offset(end());
+        return LspAdapter.offset(end());
     }
 
     /**

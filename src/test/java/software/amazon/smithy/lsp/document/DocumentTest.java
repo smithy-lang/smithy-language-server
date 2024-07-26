@@ -16,7 +16,7 @@ import org.hamcrest.CustomTypeSafeMatcher;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.junit.jupiter.api.Test;
-import software.amazon.smithy.lsp.protocol.RangeAdapter;
+import software.amazon.smithy.lsp.protocol.RangeBuilder;
 
 public class DocumentTest {
     @Test
@@ -25,7 +25,7 @@ public class DocumentTest {
                    "def";
         Document document = makeDocument(s);
 
-        Range editRange = new RangeAdapter()
+        Range editRange = new RangeBuilder()
                 .startLine(1)
                 .startCharacter(2)
                 .endLine(1)
@@ -47,7 +47,7 @@ public class DocumentTest {
                    "def";
         Document document = makeDocument(s);
 
-        Range editRange = new RangeAdapter()
+        Range editRange = new RangeBuilder()
                 .startLine(1)
                 .startCharacter(3)
                 .endLine(1)
@@ -69,7 +69,7 @@ public class DocumentTest {
                    "def";
         Document document = makeDocument(s);
 
-        Range editRange = new RangeAdapter()
+        Range editRange = new RangeBuilder()
                 .startLine(0)
                 .startCharacter(0)
                 .endLine(0)
@@ -91,7 +91,7 @@ public class DocumentTest {
                    "def";
         Document document = makeDocument(s);
 
-        Range editRange = new RangeAdapter()
+        Range editRange = new RangeBuilder()
                 .startLine(0)
                 .startCharacter(0)
                 .endLine(0)
@@ -113,7 +113,7 @@ public class DocumentTest {
                    "def";
         Document document = makeDocument(s);
 
-        Range editRange = new RangeAdapter()
+        Range editRange = new RangeBuilder()
                 .startLine(0)
                 .startCharacter(1)
                 .endLine(1)
@@ -135,7 +135,7 @@ public class DocumentTest {
         String s = "abc";
         Document document = makeDocument(s);
 
-        Range editRange = new RangeAdapter()
+        Range editRange = new RangeBuilder()
                 .startLine(0)
                 .startCharacter(0)
                 .endLine(0)
@@ -155,7 +155,7 @@ public class DocumentTest {
                    "def";
         Document document = makeDocument(s);
 
-        Range editRange = new RangeAdapter()
+        Range editRange = new RangeBuilder()
                 .startLine(0)
                 .startCharacter(2)
                 .endLine(0)
@@ -180,7 +180,7 @@ public class DocumentTest {
                    "def";
         Document document = makeDocument(s);
 
-        Range editRange = new RangeAdapter()
+        Range editRange = new RangeBuilder()
                 .startLine(0)
                 .startCharacter(0)
                 .endLine(0)

@@ -36,9 +36,9 @@ import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.junit.jupiter.api.Test;
-import software.amazon.smithy.lsp.diagnostics.VersionDiagnostics;
+import software.amazon.smithy.lsp.diagnostics.SmithyDiagnostics;
 import software.amazon.smithy.lsp.document.Document;
-import software.amazon.smithy.lsp.protocol.RangeAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 
 /**
  * This test suite test the generation of the correct {@link CodeAction} given {@link CodeActionParams}
@@ -62,11 +62,11 @@ public class SmithyVersionRefactoringTest {
                 .filter(d -> d.getCode().isLeft())
                 .map(d -> d.getCode().getLeft())
                 .collect(Collectors.toList());
-        assertThat(codes, hasItem(VersionDiagnostics.SMITHY_DEFINE_VERSION));
+        assertThat(codes, hasItem(SmithyDiagnostics.DEFINE_VERSION));
 
         List<Diagnostic> defineVersionDiagnostics = diagnostics.stream()
                 .filter(d -> d.getCode().isLeft())
-                .filter(d -> d.getCode().getLeft().equals(VersionDiagnostics.SMITHY_DEFINE_VERSION))
+                .filter(d -> d.getCode().getLeft().equals(SmithyDiagnostics.DEFINE_VERSION))
                 .collect(Collectors.toList());
         assertThat(defineVersionDiagnostics, hasSize(1));
 
@@ -77,7 +77,7 @@ public class SmithyVersionRefactoringTest {
         context.setTriggerKind(CodeActionTriggerKind.Automatic);
         CodeActionParams codeActionParams = new CodeActionParams(
                 new TextDocumentIdentifier(uri),
-                RangeAdapter.point(0, 3),
+                LspAdapter.point(0, 3),
                 context);
         List<Either<Command, CodeAction>> response = server.codeAction(codeActionParams).get();
         assertThat(response, hasSize(1));
@@ -111,11 +111,11 @@ public class SmithyVersionRefactoringTest {
                 .filter(d -> d.getCode().isLeft())
                 .map(d -> d.getCode().getLeft())
                 .collect(Collectors.toList());
-        assertThat(codes, hasItem(VersionDiagnostics.SMITHY_UPDATE_VERSION));
+        assertThat(codes, hasItem(SmithyDiagnostics.UPDATE_VERSION));
 
         List<Diagnostic> updateVersionDiagnostics = diagnostics.stream()
                 .filter(d -> d.getCode().isLeft())
-                .filter(d -> d.getCode().getLeft().equals(VersionDiagnostics.SMITHY_UPDATE_VERSION))
+                .filter(d -> d.getCode().getLeft().equals(SmithyDiagnostics.UPDATE_VERSION))
                 .collect(Collectors.toList());
         assertThat(updateVersionDiagnostics, hasSize(1));
 
@@ -126,7 +126,7 @@ public class SmithyVersionRefactoringTest {
         context.setTriggerKind(CodeActionTriggerKind.Automatic);
         CodeActionParams codeActionParams = new CodeActionParams(
                 new TextDocumentIdentifier(uri),
-                RangeAdapter.point(0, 3),
+                LspAdapter.point(0, 3),
                 context);
         List<Either<Command, CodeAction>> response = server.codeAction(codeActionParams).get();
         assertThat(response, hasSize(1));
@@ -157,8 +157,8 @@ public class SmithyVersionRefactoringTest {
         List<String> codes = diagnostics.stream()
                 .filter(d -> d.getCode().isLeft())
                 .map(d -> d.getCode().getLeft())
-                .filter(c -> c.equals(VersionDiagnostics.SMITHY_DEFINE_VERSION)
-                    || c.equals(VersionDiagnostics.SMITHY_UPDATE_VERSION))
+                .filter(c -> c.equals(SmithyDiagnostics.DEFINE_VERSION)
+                    || c.equals(SmithyDiagnostics.UPDATE_VERSION))
                 .collect(Collectors.toList());
         assertThat(codes, hasSize(0));
     }
@@ -177,6 +177,6 @@ public class SmithyVersionRefactoringTest {
                 .filter(d -> d.getCode().isLeft())
                 .map(d -> d.getCode().getLeft())
                 .collect(Collectors.toList());
-        assertThat(codes, containsInAnyOrder(VersionDiagnostics.SMITHY_DEFINE_VERSION));
+        assertThat(codes, containsInAnyOrder(SmithyDiagnostics.DEFINE_VERSION));
     }
 }

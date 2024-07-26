@@ -101,9 +101,9 @@ public final class FileWatcherRegistrationHandler {
         if (!glob.endsWith(".smithy") && !glob.endsWith(".json")) {
             // we have a directory
             if (glob.endsWith("/")) {
-                glob = glob + "**";
+                glob = glob + "**/*.{smithy,json}";
             } else {
-                glob = glob + "/**";
+                glob = glob + "/**/*.{smithy,json}";
             }
         }
         // Watch the absolute path, either a directory or file

@@ -17,6 +17,9 @@ import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
+/**
+ * Hamcrest matchers for Smithy library types.
+ */
 public final class SmithyMatchers {
     private SmithyMatchers() {}
 

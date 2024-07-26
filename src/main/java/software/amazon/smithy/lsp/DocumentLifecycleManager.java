@@ -39,6 +39,7 @@ final class DocumentLifecycleManager {
             CompletableFuture<Void> task = tasks.get(uri);
             if (!task.isDone()) {
                 task.cancel(true);
+                tasks.remove(uri);
             }
         }
     }
@@ -59,6 +60,7 @@ final class DocumentLifecycleManager {
         for (CompletableFuture<Void> task : tasks.values()) {
             task.cancel(true);
         }
+        tasks.clear();
     }
 
     void waitForAllTasks() throws ExecutionException, InterruptedException {

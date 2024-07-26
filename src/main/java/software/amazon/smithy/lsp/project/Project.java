@@ -18,7 +18,7 @@ import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import software.amazon.smithy.lsp.document.Document;
-import software.amazon.smithy.lsp.protocol.UriAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.loader.ModelAssembler;
@@ -128,7 +128,7 @@ public final class Project {
      *  it exists in this project, otherwise {@code null}
      */
     public Document getDocument(String uri) {
-        String path = UriAdapter.toPath(uri);
+        String path = LspAdapter.toPath(uri);
         SmithyFile smithyFile = smithyFiles.get(path);
         if (smithyFile == null) {
             return null;
@@ -142,7 +142,7 @@ public final class Project {
      *  it exists in this project, otherwise {@code null}
      */
     public SmithyFile getSmithyFile(String uri) {
-        String path = UriAdapter.toPath(uri);
+        String path = LspAdapter.toPath(uri);
         return smithyFiles.get(path);
     }
 
@@ -214,7 +214,7 @@ public final class Project {
             Model.Builder builder = prepBuilderForReload(currentModel);
 
             for (String uri : removeUris) {
-                String path = UriAdapter.toPath(uri);
+                String path = LspAdapter.toPath(uri);
                 removedPaths.add(path);
 
                 removeFileForReload(assembler, builder, path, visited);
@@ -226,7 +226,7 @@ public final class Project {
             }
 
             for (String uri : changeUris) {
-                String path = UriAdapter.toPath(uri);
+                String path = LspAdapter.toPath(uri);
                 changedPaths.add(path);
 
                 removeFileForReload(assembler, builder, path, visited);
@@ -250,7 +250,7 @@ public final class Project {
         }
 
         for (String uri : addUris) {
-            assembler.addImport(UriAdapter.toPath(uri));
+            assembler.addImport(LspAdapter.toPath(uri));
         }
 
         if (!validate) {
@@ -277,7 +277,7 @@ public final class Project {
         }
 
         for (String uri : addUris) {
-            String path = UriAdapter.toPath(uri);
+            String path = LspAdapter.toPath(uri);
             Set<Shape> fileShapes = getFileShapes(path, Collections.emptySet());
             Document document = Document.of(IoUtils.readUtf8File(path));
             SmithyFile smithyFile = ProjectLoader.buildSmithyFile(path, document, fileShapes)

@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.junit.jupiter.api.Test;
-import software.amazon.smithy.lsp.protocol.RangeAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.shapes.Shape;
@@ -133,14 +133,14 @@ public class DocumentParserTest {
         assertThat(likeNamespace.documentNamespace(), nullValue());
         assertThat(otherLikeNamespace.documentNamespace(), nullValue());
         assertThat(namespaceAtEnd.documentNamespace().namespace().toString(), equalTo("com.foo"));
-        assertThat(namespaceAtEnd.documentNamespace().statementRange(), equalTo(RangeAdapter.of(2, 0, 2, 17)));
+        assertThat(namespaceAtEnd.documentNamespace().statementRange(), equalTo(LspAdapter.of(2, 0, 2, 17)));
         assertThat(brokenNamespace.documentNamespace(), nullValue());
         assertThat(commentedNamespace.documentNamespace(), nullValue());
         assertThat(wsPrefixedNamespace.documentNamespace().namespace().toString(), equalTo("com.foo"));
-        assertThat(wsPrefixedNamespace.documentNamespace().statementRange(), equalTo(RangeAdapter.of(1, 4, 1, 21)));
+        assertThat(wsPrefixedNamespace.documentNamespace().statementRange(), equalTo(LspAdapter.of(1, 4, 1, 21)));
         assertThat(notNamespace.documentNamespace(), nullValue());
         assertThat(trailingComment.documentNamespace().namespace().toString(), equalTo("com.foo"));
-        assertThat(trailingComment.documentNamespace().statementRange(), equalTo(RangeAdapter.of(0, 0, 0, 22)));
+        assertThat(trailingComment.documentNamespace().statementRange(), equalTo(LspAdapter.of(0, 0, 0, 22)));
     }
 
     @Test

@@ -23,7 +23,7 @@ import java.util.function.Predicate;
 import org.eclipse.lsp4j.CodeAction;
 import org.eclipse.lsp4j.CodeActionParams;
 import org.eclipse.lsp4j.Diagnostic;
-import software.amazon.smithy.lsp.diagnostics.VersionDiagnostics;
+import software.amazon.smithy.lsp.diagnostics.SmithyDiagnostics;
 
 public final class SmithyCodeActions {
     public static final String SMITHY_UPDATE_VERSION = "smithyUpdateVersion";
@@ -56,12 +56,12 @@ public final class SmithyCodeActions {
 
         String fileUri = params.getTextDocument().getUri();
         boolean defineVersion = params.getContext().getDiagnostics().stream()
-                .anyMatch(diagnosticCodePredicate(VersionDiagnostics.SMITHY_DEFINE_VERSION));
+                .anyMatch(diagnosticCodePredicate(SmithyDiagnostics.DEFINE_VERSION));
         if (defineVersion) {
             actions.add(DefineVersionCodeAction.build(fileUri));
         }
         Optional<Diagnostic> updateVersionDiagnostic = params.getContext().getDiagnostics().stream()
-                .filter(diagnosticCodePredicate(VersionDiagnostics.SMITHY_UPDATE_VERSION)).findFirst();
+                .filter(diagnosticCodePredicate(SmithyDiagnostics.UPDATE_VERSION)).findFirst();
         if (updateVersionDiagnostic.isPresent()) {
             actions.add(
                 UpdateVersionCodeAction.build(fileUri, updateVersionDiagnostic.get().getRange())

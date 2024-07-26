@@ -54,6 +54,18 @@ public final class SmithyLanguageClient implements LanguageClient {
         delegate.logMessage(new MessageParams(MessageType.Error, message));
     }
 
+    /**
+     * Log a {@link MessageType#Error} message on the client, specifically for
+     * situations where a file is requested but isn't known to the server.
+     *
+     * @param uri LSP URI of the file that was requested.
+     * @param source Reason for requesting the file.
+     */
+    public void unknownFileError(String uri, String source) {
+        delegate.logMessage(new MessageParams(
+                MessageType.Error, "attempted to get file for " + source + " that isn't tracked: " + uri));
+    }
+
     @Override
     public CompletableFuture<ApplyWorkspaceEditResponse> applyEdit(ApplyWorkspaceEditParams params) {
         return delegate.applyEdit(params);

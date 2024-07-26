@@ -39,9 +39,20 @@ import software.amazon.smithy.model.validation.ValidationEvent;
  */
 public final class HoverHandler {
     private final Project project;
+    private final SmithyFile smithyFile;
 
-    public HoverHandler(Project project) {
+    public HoverHandler(Project project, SmithyFile smithyFile) {
         this.project = project;
+        this.smithyFile = smithyFile;
+    }
+
+    /**
+     * @return A {@link Hover} instance with empty markdown content.
+     */
+    public static Hover emptyContents() {
+        Hover hover = new Hover();
+        hover.setContents(new MarkupContent("markdown", ""));
+        return hover;
     }
 
     /**
@@ -50,14 +61,7 @@ public final class HoverHandler {
      * @return The hover content
      */
     public Hover handle(HoverParams params, Severity minimumSeverity) {
-        Hover hover = new Hover();
-        hover.setContents(new MarkupContent("markdown", ""));
-        String uri = params.getTextDocument().getUri();
-        SmithyFile smithyFile = project.getSmithyFile(uri);
-        if (smithyFile == null) {
-            return hover;
-        }
-
+        Hover hover = emptyContents();
         Position position = params.getPosition();
         DocumentId id = smithyFile.document().copyDocumentId(position);
         if (id == null || id.borrowIdValue().length() == 0) {

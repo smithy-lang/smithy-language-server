@@ -11,8 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
-import software.amazon.smithy.lsp.protocol.PositionAdapter;
-import software.amazon.smithy.lsp.protocol.RangeAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.loader.ParserUtils;
 import software.amazon.smithy.model.node.Node;
@@ -251,7 +250,7 @@ public final class DocumentParser extends SimpleParser {
         if (node.isStringNode()) {
             String version = node.expectStringNode().getValue();
             int end = nodeStartCharacter + version.length() + 2; // ?
-            Range range = RangeAdapter.of(start.getLine(), start.getCharacter(), start.getLine(), end);
+            Range range = LspAdapter.of(start.getLine(), start.getCharacter(), start.getLine(), end);
             return new DocumentVersion(range, version);
         }
         return null;
@@ -281,7 +280,7 @@ public final class DocumentParser extends SimpleParser {
             skip();
         }
 
-        return new Range(PositionAdapter.fromSourceLocation(sourceLocation), currentPosition());
+        return new Range(LspAdapter.toPosition(sourceLocation), currentPosition());
     }
 
     /**

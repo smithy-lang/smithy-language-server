@@ -28,7 +28,7 @@ import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.document.DocumentPositionContext;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.SmithyFile;
-import software.amazon.smithy.lsp.protocol.RangeAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.Prelude;
 import software.amazon.smithy.model.shapes.BlobShape;
@@ -62,9 +62,11 @@ public final class CompletionHandler {
             "timestamp", "union", "update", "use", "value", "version");
 
     private final Project project;
+    private final SmithyFile smithyFile;
 
-    public CompletionHandler(Project project) {
+    public CompletionHandler(Project project, SmithyFile smithyFile) {
         this.project = project;
+        this.smithyFile = smithyFile;
     }
 
     /**
@@ -72,9 +74,11 @@ public final class CompletionHandler {
      * @return A list of possible completions
      */
     public List<CompletionItem> handle(CompletionParams params, CancelChecker cc) {
-        String uri = params.getTextDocument().getUri();
-        SmithyFile smithyFile = project.getSmithyFile(uri);
-        if (smithyFile == null || cc.isCanceled()) {
+        // TODO: This method has to check for cancellation before using shared resources,
+        //  and before performing expensive operations. If we have to change this, or do
+        //  the same type of thing elsewhere, it would be nice to have some type of state
+        //  machine abstraction or similar to make sure cancellation is properly checked.
+        if (cc.isCanceled()) {
             return Collections.emptyList();
         }
 
@@ -101,11 +105,11 @@ public final class CompletionHandler {
             return Collections.emptyList();
         }
 
-        Optional<Model> modelResul = project.modelResult().getResult();
-        if (!modelResul.isPresent()) {
+        Optional<Model> modelResult = project.modelResult().getResult();
+        if (!modelResult.isPresent()) {
             return Collections.emptyList();
         }
-        Model model = modelResul.get();
+        Model model = modelResult.get();
         DocumentPositionContext context = DocumentParser.forDocument(smithyFile.document())
                 .determineContext(position);
 
@@ -188,11 +192,11 @@ public final class CompletionHandler {
         // We can only know where to put the import if there's already use statements, or a namespace
         if (smithyFile.documentImports().isPresent()) {
             Range importsRange = smithyFile.documentImports().get().importsRange();
-            Range editRange = RangeAdapter.point(importsRange.getEnd());
+            Range editRange = LspAdapter.point(importsRange.getEnd());
             return new TextEdit(editRange, insertText);
         } else if (smithyFile.documentNamespace().isPresent()) {
             Range namespaceStatementRange = smithyFile.documentNamespace().get().statementRange();
-            Range editRange = RangeAdapter.point(namespaceStatementRange.getEnd());
+            Range editRange = LspAdapter.point(namespaceStatementRange.getEnd());
             return new TextEdit(editRange, insertText);
         }
 
@@ -309,6 +313,7 @@ public final class CompletionHandler {
 
         @Override
         public String timestampShape(TimestampShape shape) {
+            // TODO: Handle timestampFormat (which could indicate a numeric default)
             return "\"\"";
         }
 

@@ -18,7 +18,7 @@ import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.document.DocumentPositionContext;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.SmithyFile;
-import software.amazon.smithy.lsp.protocol.LocationAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.Prelude;
 import software.amazon.smithy.model.shapes.Shape;
@@ -30,9 +30,11 @@ import software.amazon.smithy.model.traits.TraitDefinition;
  */
 public final class DefinitionHandler {
     private final Project project;
+    private final SmithyFile smithyFile;
 
-    public DefinitionHandler(Project project) {
+    public DefinitionHandler(Project project, SmithyFile smithyFile) {
         this.project = project;
+        this.smithyFile = smithyFile;
     }
 
     /**
@@ -40,12 +42,6 @@ public final class DefinitionHandler {
      * @return A list of possible definition locations
      */
     public List<Location> handle(DefinitionParams params) {
-        String uri = params.getTextDocument().getUri();
-        SmithyFile smithyFile = project.getSmithyFile(uri);
-        if (smithyFile == null) {
-            return Collections.emptyList();
-        }
-
         Position position = params.getPosition();
         DocumentId id = smithyFile.document().copyDocumentId(position);
         if (id == null || id.borrowIdValue().length() == 0) {
@@ -64,7 +60,7 @@ public final class DefinitionHandler {
                 .filter(contextualMatcher(smithyFile, id))
                 .findFirst()
                 .map(Shape::getSourceLocation)
-                .map(LocationAdapter::fromSource)
+                .map(LspAdapter::toLocation)
                 .map(Collections::singletonList)
                 .orElse(Collections.emptyList());
     }

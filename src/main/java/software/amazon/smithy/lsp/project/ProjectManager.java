@@ -9,7 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 import org.eclipse.lsp4j.InitializeParams;
 import software.amazon.smithy.lsp.document.Document;
-import software.amazon.smithy.lsp.protocol.UriAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 
 /**
  * Manages open projects tracked by the server.
@@ -54,7 +54,7 @@ public final class ProjectManager {
      * @return The project the given {@code uri} belongs to
      */
     public Project getProject(String uri) {
-        String path = UriAdapter.toPath(uri);
+        String path = LspAdapter.toPath(uri);
         if (isDetached(uri)) {
             return detached.get(uri);
         }  else if (mainProject.smithyFiles().containsKey(path)) {
@@ -68,6 +68,17 @@ public final class ProjectManager {
     }
 
     /**
+     * Note: This is equivalent to {@code getProject(uri) == null}. If this is true,
+     * there is also a corresponding {@link SmithyFile} in {@link Project#getSmithyFile(String)}.
+     *
+     * @param uri The URI of the file to check
+     * @return True if the given URI corresponds to a file tracked by the server
+     */
+    public boolean isTracked(String uri) {
+        return getProject(uri) != null;
+    }
+
+    /**
      * @param uri The URI of the file to check
      * @return Whether the given {@code uri} is of a file in a detached project
      */
@@ -76,7 +87,7 @@ public final class ProjectManager {
         // but was opened before the project loaded. This would result in it
         // being placed in a detached project. Removing it here is basically
         // like removing it lazily, although it does feel a little hacky.
-        String path = UriAdapter.toPath(uri);
+        String path = LspAdapter.toPath(uri);
         if (mainProject.smithyFiles().containsKey(path) && detached.containsKey(uri)) {
             removeDetachedProject(uri);
         }

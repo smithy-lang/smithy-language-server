@@ -25,20 +25,19 @@ import software.amazon.smithy.model.validation.ValidatedResult;
  * shapes, and traits.
  *
  * <p>This is specifically for the following scenarios:
- * <ol>
- * <li>A file applies traits to shapes in other files. If that file changes, the
- *    applied traits need to be removed before the file is reloaded, so there
- *    aren't duplicate traits.</li>
- * <li>A file has shapes with traits applied in other files. If that file changes,
- *    the traits need to be re-applied when the model is re-assembled, so they
- *    aren't lost.</li>
- * <li>Either 1 or 2, but specifically with list traits, which are merged via
- *    <a href="https://smithy.io/2.0/spec/model.html#trait-conflict-resolution">
- *        trait conflict resolution
- *    </a>. For these traits, all files that contain parts of the list trait must
- *    be fully reloaded, since we can only remove the whole trait, not parts of it.
- *    </li>
- * </ol>
+ * <dl>
+ *   <dt>A file applies traits to shapes in other files</dt>
+ *   <dd>If that file changes, the applied traits need to be removed before the
+ *   file is reloaded, so there aren't duplicate traits.</dd>
+ *   <dt>A file has shapes with traits applied in other files</dt>
+ *   <dd>If that file changes, the traits need to be re-applied when the model is
+ *   re-assembled, so they aren't lost.</dd>
+ *   <dt>Either 1 or 2, but specifically with list traits</dt>
+ *   <dd>List traits are merged via <a href="https://smithy.io/2.0/spec/model.html#trait-conflict-resolution">
+ *   trait conflict resolution </a>. For these traits, all files that contain
+ *   parts of the list trait must be fully reloaded, since we can only remove
+ *   the whole trait, not parts of it.</dd>
+ * </dl>
  */
 final class SmithyFileDependenciesIndex {
     private final Map<String, Set<String>> filesToDependentFiles;

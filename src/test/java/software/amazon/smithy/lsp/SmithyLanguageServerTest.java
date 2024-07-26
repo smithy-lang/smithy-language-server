@@ -64,7 +64,8 @@ import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.MavenConfig;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.document.Document;
-import software.amazon.smithy.lsp.protocol.RangeAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
+import software.amazon.smithy.lsp.protocol.RangeBuilder;
 import software.amazon.smithy.model.node.ArrayNode;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.shapes.Shape;
@@ -155,7 +156,7 @@ public class SmithyLanguageServerTest {
         DidChangeTextDocumentParams changeParams = new RequestBuilders.DidChange()
                 .uri(uri)
                 .version(2)
-                .range(new RangeAdapter()
+                .range(new RangeBuilder()
                         .startLine(3)
                         .startCharacter(15)
                         .endLine(3)
@@ -411,7 +412,7 @@ public class SmithyLanguageServerTest {
                 .build();
         server.didOpen(openParams);
 
-        RangeAdapter rangeAdapter = new RangeAdapter()
+        RangeBuilder rangeBuilder = new RangeBuilder()
                 .startLine(7)
                 .startCharacter(18)
                 .endLine(7)
@@ -419,16 +420,16 @@ public class SmithyLanguageServerTest {
         RequestBuilders.DidChange changeBuilder = new RequestBuilders.DidChange().uri(uri);
 
         // Add new line and leading spaces
-        server.didChange(changeBuilder.range(rangeAdapter.build()).text(safeString("\n    ")).build());
+        server.didChange(changeBuilder.range(rangeBuilder.build()).text(safeString("\n    ")).build());
         // add 'input: G'
-        server.didChange(changeBuilder.range(rangeAdapter.shiftNewLine().shiftRight(4).build()).text("i").build());
-        server.didChange(changeBuilder.range(rangeAdapter.shiftRight().build()).text("n").build());
-        server.didChange(changeBuilder.range(rangeAdapter.shiftRight().build()).text("p").build());
-        server.didChange(changeBuilder.range(rangeAdapter.shiftRight().build()).text("u").build());
-        server.didChange(changeBuilder.range(rangeAdapter.shiftRight().build()).text("t").build());
-        server.didChange(changeBuilder.range(rangeAdapter.shiftRight().build()).text(":").build());
-        server.didChange(changeBuilder.range(rangeAdapter.shiftRight().build()).text(" ").build());
-        server.didChange(changeBuilder.range(rangeAdapter.shiftRight().build()).text("G").build());
+        server.didChange(changeBuilder.range(rangeBuilder.shiftNewLine().shiftRight(4).build()).text("i").build());
+        server.didChange(changeBuilder.range(rangeBuilder.shiftRight().build()).text("n").build());
+        server.didChange(changeBuilder.range(rangeBuilder.shiftRight().build()).text("p").build());
+        server.didChange(changeBuilder.range(rangeBuilder.shiftRight().build()).text("u").build());
+        server.didChange(changeBuilder.range(rangeBuilder.shiftRight().build()).text("t").build());
+        server.didChange(changeBuilder.range(rangeBuilder.shiftRight().build()).text(":").build());
+        server.didChange(changeBuilder.range(rangeBuilder.shiftRight().build()).text(" ").build());
+        server.didChange(changeBuilder.range(rangeBuilder.shiftRight().build()).text("G").build());
 
         server.getLifecycleManager().waitForAllTasks();
 
@@ -447,7 +448,7 @@ public class SmithyLanguageServerTest {
         // input: G
         CompletionParams completionParams = new RequestBuilders.PositionRequest()
                 .uri(uri)
-                .position(rangeAdapter.shiftRight().build().getStart())
+                .position(rangeBuilder.shiftRight().build().getStart())
                 .buildCompletion();
         List<CompletionItem> completions = server.completion(completionParams).get().getLeft();
 
@@ -475,7 +476,7 @@ public class SmithyLanguageServerTest {
         DidChangeTextDocumentParams didChangeParams = new RequestBuilders.DidChange()
                 .uri(uri)
                 .text("@http(method:\"\", uri: \"\")\n")
-                .range(RangeAdapter.point(3, 0))
+                .range(LspAdapter.point(3, 0))
                 .build();
         server.didChange(didChangeParams);
 
@@ -518,7 +519,7 @@ public class SmithyLanguageServerTest {
         assertThat(initialLocation.getUri(), equalTo(uri));
         assertThat(initialLocation.getRange().getStart(), equalTo(new Position(7, 0)));
 
-        RangeAdapter range = new RangeAdapter()
+        RangeBuilder range = new RangeBuilder()
                 .startLine(5)
                 .startCharacter(1)
                 .endLine(5)
@@ -618,7 +619,7 @@ public class SmithyLanguageServerTest {
                 .text(model)
                 .build());
 
-        RangeAdapter range = new RangeAdapter()
+        RangeBuilder range = new RangeBuilder()
                 .startLine(6)
                 .startCharacter(0)
                 .endLine(6)
@@ -687,7 +688,7 @@ public class SmithyLanguageServerTest {
                 .text(model)
                 .build());
 
-        RangeAdapter range = new RangeAdapter()
+        RangeBuilder range = new RangeBuilder()
                 .startLine(6)
                 .startCharacter(13)
                 .endLine(6)
@@ -882,7 +883,7 @@ public class SmithyLanguageServerTest {
                 .build());
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
-                .range(RangeAdapter.origin())
+                .range(LspAdapter.origin())
                 .text("$")
                 .build());
 
@@ -1078,7 +1079,7 @@ public class SmithyLanguageServerTest {
                 .build());
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
-                .range(RangeAdapter.lineSpan(8, 0, 0))
+                .range(LspAdapter.lineSpan(8, 0, 0))
                 .text(safeString("\nstring Baz\n"))
                 .build());
         server.didSave(RequestBuilders.didSave()
@@ -1095,7 +1096,7 @@ public class SmithyLanguageServerTest {
 
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
-                .range(RangeAdapter.of(2, 0, 3, 0)) // removing the first 'foo' metadata
+                .range(LspAdapter.of(2, 0, 3, 0)) // removing the first 'foo' metadata
                 .text("")
                 .build());
 
@@ -1181,7 +1182,7 @@ public class SmithyLanguageServerTest {
 
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
-                .range(RangeAdapter.point(3, 0))
+                .range(LspAdapter.point(3, 0))
                 .text(safeString("string Bar\n"))
                 .build());
 
@@ -1222,7 +1223,7 @@ public class SmithyLanguageServerTest {
                 .build());
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
-                .range(RangeAdapter.point(3, 0))
+                .range(LspAdapter.point(3, 0))
                 .text(safeString("string Bar\n"))
                 .build());
 
@@ -1385,7 +1386,7 @@ public class SmithyLanguageServerTest {
 
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
-                .range(RangeAdapter.origin())
+                .range(LspAdapter.origin())
                 .text(safeString("$version: \"2\"\nnamespace com.foo\n"))
                 .build());
 
@@ -1435,17 +1436,17 @@ public class SmithyLanguageServerTest {
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
                 .text(safeString("$version: \"2\"\n"))
-                .range(RangeAdapter.origin())
+                .range(LspAdapter.origin())
                 .build());
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
                 .text(safeString("namespace com.foo\n"))
-                .range(RangeAdapter.point(1, 0))
+                .range(LspAdapter.point(1, 0))
                 .build());
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
                 .text(safeString("string Foo\n"))
-                .range(RangeAdapter.point(2, 0))
+                .range(LspAdapter.point(2, 0))
                 .build());
 
         server.getLifecycleManager().waitForAllTasks();
@@ -1476,7 +1477,7 @@ public class SmithyLanguageServerTest {
                 .build());
         server.didChange(RequestBuilders.didChange()
                 .uri(uri2)
-                .range(RangeAdapter.of(3, 23, 3, 24))
+                .range(LspAdapter.of(3, 23, 3, 24))
                 .text("2")
                 .build());
 
@@ -1495,7 +1496,7 @@ public class SmithyLanguageServerTest {
                 .build());
         server.didChange(RequestBuilders.didChange()
                 .uri(uri1)
-                .range(RangeAdapter.point(3, 0))
+                .range(LspAdapter.point(3, 0))
                 .text(safeString("string Another\n"))
                 .build());
 
@@ -1546,7 +1547,7 @@ public class SmithyLanguageServerTest {
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
                 .text(safeString("$version: \"2\"\nnamespace com.foo\nstring Foo\n"))
-                .range(RangeAdapter.origin())
+                .range(LspAdapter.origin())
                 .build());
         server.getLifecycleManager().waitForAllTasks();
 
@@ -1644,7 +1645,7 @@ public class SmithyLanguageServerTest {
                 .build());
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
-                .range(RangeAdapter.point(2, 0))
+                .range(LspAdapter.point(2, 0))
                 .text("use co")
                 .build());
 

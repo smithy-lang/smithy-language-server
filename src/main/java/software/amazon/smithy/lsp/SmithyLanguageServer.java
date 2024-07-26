@@ -23,11 +23,13 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
@@ -89,8 +91,7 @@ import org.eclipse.lsp4j.services.LanguageServer;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
 import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
-import software.amazon.smithy.lsp.diagnostics.DetachedDiagnostics;
-import software.amazon.smithy.lsp.diagnostics.VersionDiagnostics;
+import software.amazon.smithy.lsp.diagnostics.SmithyDiagnostics;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.document.DocumentShape;
@@ -106,10 +107,7 @@ import software.amazon.smithy.lsp.project.ProjectConfigLoader;
 import software.amazon.smithy.lsp.project.ProjectLoader;
 import software.amazon.smithy.lsp.project.ProjectManager;
 import software.amazon.smithy.lsp.project.SmithyFile;
-import software.amazon.smithy.lsp.protocol.LocationAdapter;
-import software.amazon.smithy.lsp.protocol.PositionAdapter;
-import software.amazon.smithy.lsp.protocol.RangeAdapter;
-import software.amazon.smithy.lsp.protocol.UriAdapter;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.loader.IdlTokenizer;
@@ -176,7 +174,7 @@ public class SmithyLanguageServer implements
         String message = "smithy-language-server";
         try {
             Properties props = new Properties();
-            props.load(SmithyLanguageServer.class.getClassLoader().getResourceAsStream("version.properties"));
+            props.load(Objects.requireNonNull(getClass().getClassLoader().getResourceAsStream("version.properties")));
             message += " version " + props.getProperty("version");
         } catch (IOException e) {
             this.client.error("Failed to load smithy-language-server version: " + e);
@@ -212,7 +210,7 @@ public class SmithyLanguageServer implements
                     this.minimumSeverity = severity.get();
                 } else {
                     client.error("Invalid value for 'diagnostics.minimumSeverity': " + configuredMinimumSeverity
-                            + ".\nMust be one of 'NOTE', 'WARNING', 'DANGER', 'ERROR'");
+                                 + ".\nMust be one of " + Arrays.toString(Severity.values()));
                 }
             }
             if (jsonObject.has("onlyReloadOnSave")) {
@@ -300,7 +298,7 @@ public class SmithyLanguageServer implements
             Set<String> addedPaths = new HashSet<>(updatedProjectSmithyPaths);
             addedPaths.removeAll(currentProjectSmithyPaths);
             for (String addedPath : addedPaths) {
-                String addedUri = UriAdapter.toUri(addedPath);
+                String addedUri = LspAdapter.toUri(addedPath);
                 if (projects.isDetached(addedUri)) {
                     projects.removeDetachedProject(addedUri);
                 }
@@ -309,7 +307,7 @@ public class SmithyLanguageServer implements
             Set<String> removedPaths = new HashSet<>(currentProjectSmithyPaths);
             removedPaths.removeAll(updatedProjectSmithyPaths);
             for (String removedPath : removedPaths) {
-                String removedUri = UriAdapter.toUri(removedPath);
+                String removedUri = LspAdapter.toUri(removedPath);
                 // Only move to a detached project if the file is managed
                 if (lifecycleManager.managedDocuments().contains(removedUri)) {
                     // Note: This should always be non-null, since we essentially got this from the current project
@@ -370,7 +368,7 @@ public class SmithyLanguageServer implements
             return completedFuture(document.copyText());
         } else {
             // Technically this can throw if the uri is invalid
-            return completedFuture(IoUtils.readUtf8Url(UriAdapter.jarUrl(uri)));
+            return completedFuture(IoUtils.readUtf8Url(LspAdapter.jarUrl(uri)));
         }
     }
 
@@ -394,7 +392,7 @@ public class SmithyLanguageServer implements
                 .map(selector::select)
                 .map(shapes -> shapes.stream()
                         .map(Shape::getSourceLocation)
-                        .map(LocationAdapter::fromSource)
+                        .map(LspAdapter::toLocation)
                         .collect(Collectors.toList()))
                 .orElse(Collections.emptyList()));
     }
@@ -402,9 +400,9 @@ public class SmithyLanguageServer implements
     @Override
     public CompletableFuture<ServerStatus> serverStatus() {
         OpenProject openProject = new OpenProject(
-                UriAdapter.toUri(projects.mainProject().root().toString()),
+                LspAdapter.toUri(projects.mainProject().root().toString()),
                 projects.mainProject().smithyFiles().keySet().stream()
-                        .map(UriAdapter::toUri)
+                        .map(LspAdapter::toUri)
                         .collect(Collectors.toList()),
                 false);
 
@@ -487,7 +485,7 @@ public class SmithyLanguageServer implements
 
         Document document = projects.getDocument(uri);
         if (document == null) {
-            client.error("Attempted to change document the server isn't tracking: " + uri);
+            client.unknownFileError(uri, "change");
             return;
         }
 
@@ -505,7 +503,7 @@ public class SmithyLanguageServer implements
             // Report any parse/shape/trait loading errors
             Project project = projects.getProject(uri);
             if (project == null) {
-                client.error("Attempted to update a file the server isn't tracking: " + uri);
+                client.unknownFileError(uri, "change");
                 return;
             }
             CompletableFuture<Void> future = CompletableFuture
@@ -557,20 +555,19 @@ public class SmithyLanguageServer implements
 
         String uri = params.getTextDocument().getUri();
         lifecycleManager.cancelTask(uri);
-        if (params.getText() != null) {
-            Project project = projects.getProject(uri);
-            Document document = project.getDocument(uri);
-            if (document == null) {
-                // TODO: Could also load a detached project here, but I don't know how this would
-                //  actually happen in practice
-                client.error("Attempted to save document not tracked by server: " + uri);
-                return;
-            }
-
-            document.applyEdit(null, params.getText());
+        if (!projects.isTracked(uri)) {
+            // TODO: Could also load a detached project here, but I don't know how this would
+            //  actually happen in practice
+            client.unknownFileError(uri, "save");
+            return;
         }
 
         Project project = projects.getProject(uri);
+        if (params.getText() != null) {
+            Document document = project.getDocument(uri);
+            document.applyEdit(null, params.getText());
+        }
+
         CompletableFuture<Void> future = CompletableFuture
                 .runAsync(() -> project.updateAndValidateModel(uri))
                 .thenCompose(unused -> sendFileDiagnostics(uri));
@@ -580,9 +577,17 @@ public class SmithyLanguageServer implements
     @Override
     public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams params) {
         LOGGER.info("Completion");
-        Project project = projects.getProject(params.getTextDocument().getUri());
+
+        String uri = params.getTextDocument().getUri();
+        if (!projects.isTracked(uri)) {
+            client.unknownFileError(uri, "completion");
+            return completedFuture(Either.forLeft(Collections.emptyList()));
+        }
+
+        Project project = projects.getProject(uri);
+        SmithyFile smithyFile = project.getSmithyFile(uri);
         return CompletableFutures.computeAsync((cc) -> {
-            CompletionHandler handler = new CompletionHandler(project);
+            CompletionHandler handler = new CompletionHandler(project, smithyFile);
             return Either.forLeft(handler.handle(params, cc));
         });
     }
@@ -599,6 +604,11 @@ public class SmithyLanguageServer implements
     documentSymbol(DocumentSymbolParams params) {
         LOGGER.info("DocumentSymbol");
         String uri = params.getTextDocument().getUri();
+        if (!projects.isTracked(uri)) {
+            client.unknownFileError(uri, "document symbol");
+            return completedFuture(Collections.emptyList());
+        }
+
         Project project = projects.getProject(uri);
         SmithyFile smithyFile = project.getSmithyFile(uri);
 
@@ -655,17 +665,34 @@ public class SmithyLanguageServer implements
     public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>>
     definition(DefinitionParams params) {
         LOGGER.info("Definition");
-        Project project = projects.getProject(params.getTextDocument().getUri());
-        List<Location> locations = new DefinitionHandler(project).handle(params);
+
+        String uri = params.getTextDocument().getUri();
+        if (!projects.isTracked(uri)) {
+            client.unknownFileError(uri, "definition");
+            return completedFuture(Either.forLeft(Collections.emptyList()));
+        }
+
+        Project project = projects.getProject(uri);
+        SmithyFile smithyFile = project.getSmithyFile(uri);
+        List<Location> locations = new DefinitionHandler(project, smithyFile).handle(params);
         return completedFuture(Either.forLeft(locations));
     }
 
     @Override
     public CompletableFuture<Hover> hover(HoverParams params) {
         LOGGER.info("Hover");
-        Project project = projects.getProject(params.getTextDocument().getUri());
+
+        String uri = params.getTextDocument().getUri();
+        if (!projects.isTracked(uri)) {
+            client.unknownFileError(uri, "hover");
+            return completedFuture(HoverHandler.emptyContents());
+        }
+
+        Project project = projects.getProject(uri);
+        SmithyFile smithyFile = project.getSmithyFile(uri);
+
         // TODO: Abstract away passing minimum severity
-        Hover hover = new HoverHandler(project).handle(params, minimumSeverity);
+        Hover hover = new HoverHandler(project, smithyFile).handle(params, minimumSeverity);
         return completedFuture(hover);
     }
 
@@ -711,34 +738,33 @@ public class SmithyLanguageServer implements
     }
 
     List<Diagnostic> getFileDiagnostics(String uri) {
-        if (UriAdapter.isJarFile(uri) || UriAdapter.isSmithyJarFile(uri)) {
+        if (LspAdapter.isJarFile(uri) || LspAdapter.isSmithyJarFile(uri)) {
             // Don't send diagnostics to jar files since they can't be edited
             // and diagnostics could be misleading.
             return Collections.emptyList();
         }
 
-        Project project = projects.getProject(uri);
-        if (project == null) {
-            client.error("Attempted to get file diagnostics for an untracked file: " + uri);
-            return Collections.emptyList();
+        if (!projects.isTracked(uri)) {
+            client.unknownFileError(uri, "diagnostics");
         }
 
+        Project project = projects.getProject(uri);
         SmithyFile smithyFile = project.getSmithyFile(uri);
-        String path = UriAdapter.toPath(uri);
+        String path = LspAdapter.toPath(uri);
 
         List<Diagnostic> diagnostics = project.modelResult().getValidationEvents().stream()
                 .filter(validationEvent -> validationEvent.getSeverity().compareTo(minimumSeverity) >= 0)
-                .filter(validationEvent -> !UriAdapter.isJarFile(validationEvent.getSourceLocation().getFilename()))
                 .filter(validationEvent -> validationEvent.getSourceLocation().getFilename().equals(path))
                 .map(validationEvent -> toDiagnostic(validationEvent, smithyFile))
                 .collect(Collectors.toCollection(ArrayList::new));
 
-        if (smithyFile != null && VersionDiagnostics.hasVersionDiagnostic(smithyFile)) {
-            diagnostics.add(VersionDiagnostics.forSmithyFile(smithyFile));
+        Diagnostic versionDiagnostic = SmithyDiagnostics.versionDiagnostic(smithyFile);
+        if (versionDiagnostic != null) {
+            diagnostics.add(versionDiagnostic);
         }
 
-        if (smithyFile != null && projects.isDetached(uri)) {
-            diagnostics.add(DetachedDiagnostics.forSmithyFile(smithyFile));
+        if (projects.isDetached(uri)) {
+            diagnostics.add(SmithyDiagnostics.detachedDiagnostic(smithyFile));
         }
 
         return diagnostics;
@@ -749,16 +775,13 @@ public class SmithyLanguageServer implements
         SourceLocation sourceLocation = validationEvent.getSourceLocation();
 
         // TODO: Improve location of diagnostics
-        Range range = RangeAdapter.lineOffset(PositionAdapter.fromSourceLocation(sourceLocation));
+        Range range = LspAdapter.lineOffset(LspAdapter.toPosition(sourceLocation));
         if (validationEvent.getShapeId().isPresent() && smithyFile != null) {
             // Event is (probably) on a member target
             if (validationEvent.containsId("Target")) {
                 DocumentShape documentShape = smithyFile.documentShapesByStartPosition()
-                        .get(PositionAdapter.fromSourceLocation(sourceLocation));
-                boolean hasMemberTarget = documentShape != null
-                        && documentShape.isKind(DocumentShape.Kind.DefinedMember)
-                        && documentShape.targetReference() != null;
-                if (hasMemberTarget) {
+                        .get(LspAdapter.toPosition(sourceLocation));
+                if (documentShape != null && documentShape.hasMemberTarget()) {
                     range = documentShape.targetReference().range();
                 }
             }  else {
