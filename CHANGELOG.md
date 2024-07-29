@@ -1,5 +1,21 @@
 # Smithy Language Server Changelog
 
+## 0.3.0 (2024-07-29)
+
+### Features
+* Made various performance improvements ([#146](https://github.com/smithy-lang/smithy-language-server/pull/146))
+* Added support for using build-system agnostic .smithy-project.json to tell the server where project files and locally dependencies are ([#146](https://github.com/smithy-lang/smithy-language-server/pull/146))
+* Added configuration option for minimum severity of validation events ([#146](https://github.com/smithy-lang/smithy-language-server/pull/146))
+* Switched to smithy-syntax formatter ([#146](https://github.com/smithy-lang/smithy-language-server/pull/146))
+* Added progress reporting on load ([#146](https://github.com/smithy-lang/smithy-language-server/pull/146))
+
+### Removed/Replaced
+* Removed generation of smithy.lsp.log file in favor of smithyLsp.trace.server and sending client logMessage notifications ([#146](https://github.com/smithy-lang/smithy-language-server/pull/146))
+* Removed loading of every .smithy file found in all subdirectories of root path. Instead, server loads single files as separate models, or any files specified in smithy-build.json as a project ([#146](https://github.com/smithy-lang/smithy-language-server/pull/146))
+
+### Bug fixes
+* Fixed erroneously loading files in build directories, which could cause conflicting shape definitions ([#146](https://github.com/smithy-lang/smithy-language-server/pull/146))
+
 ## 0.2.4 (2024-11-08)
 
 ### Features
