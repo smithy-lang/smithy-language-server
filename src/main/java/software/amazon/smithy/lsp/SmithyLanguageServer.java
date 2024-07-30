@@ -95,7 +95,6 @@ import software.amazon.smithy.lsp.diagnostics.SmithyDiagnostics;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.document.DocumentShape;
-import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.lsp.ext.serverstatus.OpenProject;
 import software.amazon.smithy.lsp.ext.serverstatus.ServerStatus;
 import software.amazon.smithy.lsp.handler.CompletionHandler;
@@ -197,12 +196,6 @@ public class SmithyLanguageServer implements
         Object initializationOptions = params.getInitializationOptions();
         if (initializationOptions instanceof JsonObject) {
             JsonObject jsonObject = (JsonObject) initializationOptions;
-            if (jsonObject.has("logToFile")) {
-                String setting = jsonObject.get("logToFile").getAsString();
-                if (setting.equals("enabled")) {
-                    LspLog.enable();
-                }
-            }
             if (jsonObject.has("diagnostics.minimumSeverity")) {
                 String configuredMinimumSeverity = jsonObject.get("diagnostics.minimumSeverity").getAsString();
                 Optional<Severity> severity = Severity.fromString(configuredMinimumSeverity);
