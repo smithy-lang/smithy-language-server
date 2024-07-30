@@ -1,6 +1,9 @@
 # Smithy Language Server Changelog
 
-## 0.3.0 (2024-07-29)
+## 0.4.0 (2024-07-30)
+
+### Breaking
+* Upgraded JDK version to 21 ([#157](https://github.com/smithy-lang/smithy-language-server/pull/157))
 
 ### Features
 * Made various performance improvements ([#146](https://github.com/smithy-lang/smithy-language-server/pull/146))
