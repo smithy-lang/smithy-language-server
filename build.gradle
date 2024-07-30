@@ -139,16 +139,6 @@ publishing {
             }
         }
     }
-
-    // Don't sign the artifacts if we didn't get a key and password to use.
-    if (project.hasProperty("signingKey") && project.hasProperty("signingPassword")) {
-        signing {
-            useInMemoryPgpKeys(
-                    (String) project.property("signingKey"),
-                    (String) project.property("signingPassword"))
-            sign(publishing.publications["mavenJava"])
-        }
-    }
 }
 
 
@@ -209,8 +199,9 @@ tasks.named("checkstyleTest") {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 jar {
@@ -224,6 +215,7 @@ jar {
         exclude "META-INF/*.DSA"
         exclude "META-INF/*.RSA"
         exclude "reflect.properties"
+        // Included by dependencies in later versions of java, causes duplicate entries in the output jar
         exclude "**/module-info.class"
     }
     manifest {
