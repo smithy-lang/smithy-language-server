@@ -33,10 +33,10 @@ plugins {
     id "application"
 
     id "maven-publish"
-    id "signing"
     id "com.palantir.git-version" version "0.12.3"
     id "checkstyle"
     id "org.jreleaser" version "1.13.0"
+    id 'org.beryx.runtime' version '1.13.1'
 }
 
 
@@ -69,6 +69,8 @@ task javadocJar(type: Jar) {
 ext {
     // Load the Smithy Language Server version from VERSION.
     libraryVersion = project.file("VERSION").getText('UTF-8').replace(System.lineSeparator(), "")
+    imageJreVersion = "17"
+    correttoRoot = "https://corretto.aws/downloads/latest/amazon-corretto-${imageJreVersion}"
 }
 
 println "Smithy Language Server version: '${libraryVersion}'"
@@ -78,7 +80,6 @@ def stagingDirectory = rootProject.layout.buildDirectory.dir("staging")
 allprojects {
     apply plugin: "java"
     apply plugin: "maven-publish"
-    apply plugin: "signing"
     group = "software.amazon.smithy"
     version = libraryVersion
     description = "Language Server Protocol implementation for Smithy"
@@ -200,7 +201,7 @@ tasks.named("checkstyleTest") {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(17)
     }
 }
 
@@ -223,31 +224,133 @@ jar {
     }
 }
 
+
+runtime {
+    addOptions("--compress", "2", "--strip-debug", "--no-header-files", "--no-man-pages")
+    addModules("java.logging")
+
+    launcher {
+        jvmArgs = [
+                '-XX:-UsePerfData',
+                '-Xshare:auto',
+                '-XX:SharedArchiveFile={{BIN_DIR}}/../lib/smithy.jsa'
+        ]
+    }
+
+    targetPlatform("linux-x86_64") {
+        jdkHome = jdkDownload("${correttoRoot}-x64-linux-jdk.tar.gz")
+    }
+
+    targetPlatform("linux-aarch64") {
+        jdkHome = jdkDownload("${correttoRoot}-aarch64-linux-jdk.tar.gz")
+    }
+
+    targetPlatform("darwin-x86_64") {
+        jdkHome = jdkDownload("${correttoRoot}-x64-macos-jdk.tar.gz")
+    }
+
+    targetPlatform("darwin-aarch64") {
+        jdkHome = jdkDownload("${correttoRoot}-aarch64-macos-jdk.tar.gz")
+    }
+
+    targetPlatform("windows-x64") {
+        jdkHome = jdkDownload("${correttoRoot}-x64-windows-jdk.zip")
+    }
+
+    // Because we're using target-platforms, it will use this property as a prefix for each target zip
+    imageZip = layout.buildDirectory.file("image/smithy-language-server.zip")
+}
+
+tasks["assembleDist"].dependsOn("publish")
+tasks["assembleDist"].dependsOn("runtimeZip")
+
 jreleaser {
     dryrun = false
 
-    // Used for creating a tagged release, uploading files and generating changelog.
-    // In the future we can set this up to push release tags to GitHub, but for now it's
-    // set up to do nothing.
-    // https://jreleaser.org/guide/latest/reference/release/index.html
+    project {
+        website = 'https://smithy.io'
+        authors = ['Smithy']
+        vendor = "Smithy"
+        license = 'Apache-2.0'
+        description = "Smithy Language Server - A Language Server Protocol implementation for the Smithy IDL."
+        copyright = "2019"
+    }
+
     release {
-        generic {
-            enabled = true
-            skipRelease = true
+        github {
+            overwrite = true
+            tagName = '{{projectVersion}}'
+            releaseName = 'Smithy Language Server v{{{projectVersion}}}'
+            changelog {
+                enabled = false
+            }
+            commitAuthor {
+                name = "smithy-automation"
+                email = "github-smithy-automation@amazon.com"
+            }
         }
     }
 
-    // Used to announce a release to configured announcers.
-    // https://jreleaser.org/guide/latest/reference/announce/index.html
-    announce {
-        active = "NEVER"
+    files {
+        active = "ALWAYS"
+        artifact {
+            // We'll include the VERSION file in the release artifacts so that the version can be easily
+            // retrieving by hitting the GitHub `releases/latest` url
+            path = "VERSION"
+            extraProperties.put('skipSigning', true)
+        }
     }
 
-    // Signing configuration.
-    // https://jreleaser.org/guide/latest/reference/signing.html
+    platform {
+        // These replacements are for the names of files that are released, *not* for names within this build config
+        replacements = [
+                'osx': 'darwin',
+                'aarch_64': 'aarch64',
+                'windows_x86_64': 'windows_x64'
+        ]
+    }
+
+    distributions {
+        'smithy-language-server' {
+            distributionType = 'JLINK'
+            stereotype = 'CLI'
+
+            artifact {
+                path = "build/image/smithy-language-server-linux-x86_64.zip"
+                platform = "linux-x86_64"
+            }
+
+            artifact {
+                path = "build/image/smithy-language-server-linux-aarch64.zip"
+                platform = "linux-aarch_64"
+            }
+
+            artifact {
+                path = "build/image/smithy-language-server-darwin-x86_64.zip"
+                platform = "osx-x86_64"
+            }
+
+            artifact {
+                path = "build/image/smithy-language-server-darwin-aarch64.zip"
+                platform = "osx-aarch_64"
+            }
+
+            artifact {
+                path = "build/image/smithy-language-server-windows-x64.zip"
+                platform = "windows-x86_64"
+            }
+        }
+    }
+
+    checksum {
+        individual = true
+        files = false
+    }
+
     signing {
-        active = "ALWAYS"
+        active = "RELEASE"
         armored = true
+        verify = true
     }
 
     // Configuration for deploying to Maven Central.
