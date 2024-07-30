@@ -15,8 +15,8 @@
 
 package software.amazon.smithy.lsp;
 
+import org.eclipse.lsp4j.jsonrpc.util.Preconditions;
 import org.eclipse.lsp4j.jsonrpc.validation.NonNull;
-import org.eclipse.lsp4j.util.Preconditions;
 
 public class SelectorParams {
     @NonNull

@@ -18,11 +18,11 @@ package software.amazon.smithy.lsp.project;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import software.amazon.smithy.build.model.MavenConfig;
 import software.amazon.smithy.build.model.MavenRepository;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
-import software.amazon.smithy.lsp.ext.LspLog;
 import software.amazon.smithy.utils.ListUtils;
 import software.amazon.smithy.utils.SmithyBuilder;
 import software.amazon.smithy.utils.ToSmithyBuilder;
@@ -32,6 +32,8 @@ import software.amazon.smithy.utils.ToSmithyBuilder;
  * top-level {@code mavenRepositories} and {@code mavenDependencies} properties.
  */
 public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildExtensions> {
+    private static final Logger LOGGER = Logger.getLogger(SmithyBuildExtensions.class.getName());
+
     private final List<String> imports;
     private final List<String> mavenRepositories;
     private final List<String> mavenDependencies;
@@ -157,7 +159,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
                                 .map(repo -> MavenRepository.builder().url(repo).build())
                                 .collect(Collectors.toList()))
                         .build();
-                LspLog.println("Read deprecated `mavenRepositories` in smithy-build.json. Update smithy-build.json to "
+                LOGGER.warning("Read deprecated `mavenRepositories` in smithy-build.json. Update smithy-build.json to "
                     + "{\"maven\": {\"repositories\": [{\"url\": \"repo url\"}]}}");
             }
 
@@ -181,7 +183,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
                 config = config.toBuilder()
                         .dependencies(mavenDependencies)
                         .build();
-                LspLog.println("Read deprecated `mavenDependencies` in smithy-build.json. Update smithy-build.json to "
+                LOGGER.warning("Read deprecated `mavenDependencies` in smithy-build.json. Update smithy-build.json to "
                         + "{\"maven\": {\"dependencies\": [\"dependencyA\", \"dependencyB\"]}}");
             }
             this.maven = config;

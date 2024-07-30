@@ -139,28 +139,18 @@ publishing {
             }
         }
     }
-
-    // Don't sign the artifacts if we didn't get a key and password to use.
-    if (project.hasProperty("signingKey") && project.hasProperty("signingPassword")) {
-        signing {
-            useInMemoryPgpKeys(
-                    (String) project.property("signingKey"),
-                    (String) project.property("signingPassword"))
-            sign(publishing.publications["mavenJava"])
-        }
-    }
 }
 
 
 dependencies {
-    implementation "org.eclipse.lsp4j:org.eclipse.lsp4j:0.20.0"
+    implementation "org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1"
     implementation "software.amazon.smithy:smithy-build:[smithyVersion, 2.0["
     implementation "software.amazon.smithy:smithy-cli:[smithyVersion, 2.0["
     implementation "software.amazon.smithy:smithy-model:[smithyVersion, 2.0["
     implementation "software.amazon.smithy:smithy-syntax:[smithyVersion, 2.0["
 
     testImplementation "org.junit.jupiter:junit-jupiter:5.10.0"
-    testImplementation "org.hamcrest:hamcrest:2.1"
+    testImplementation "org.hamcrest:hamcrest:2.2"
 
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
@@ -209,8 +199,9 @@ tasks.named("checkstyleTest") {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 jar {
@@ -224,6 +215,8 @@ jar {
         exclude "META-INF/*.DSA"
         exclude "META-INF/*.RSA"
         exclude "reflect.properties"
+        // Included by dependencies in later versions of java, causes duplicate entries in the output jar
+        exclude "**/module-info.class"
     }
     manifest {
         attributes("Main-Class": "software.amazon.smithy.lsp.Main")
