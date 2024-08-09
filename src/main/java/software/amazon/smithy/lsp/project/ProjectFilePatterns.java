@@ -99,17 +99,11 @@ public final class ProjectFilePatterns {
             return glob;
         }
 
-        // we have a directory
-        if (glob.endsWith("/")) {
-            glob = glob + "**";
-        } else {
-            glob = glob + "/**";
-        }
-
+        String pat = "**";
         if (isWatcherPattern) {
-            glob += ".{smithy,json}";
+            pat += ".{smithy,json}";
         }
 
-        return glob;
+        return path.resolve(pat).toString();
     }
 }
