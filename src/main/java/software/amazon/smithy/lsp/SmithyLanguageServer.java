@@ -33,9 +33,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.eclipse.lsp4j.CodeAction;
 import org.eclipse.lsp4j.CodeActionOptions;
 import org.eclipse.lsp4j.CodeActionParams;
@@ -50,14 +53,13 @@ import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeConfigurationParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
+import org.eclipse.lsp4j.DidChangeWorkspaceFoldersParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.DocumentFormattingParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
-import org.eclipse.lsp4j.FileChangeType;
-import org.eclipse.lsp4j.FileEvent;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.InitializeParams;
@@ -82,7 +84,11 @@ import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.Unregistration;
 import org.eclipse.lsp4j.UnregistrationParams;
 import org.eclipse.lsp4j.WorkDoneProgressBegin;
+import org.eclipse.lsp4j.WorkDoneProgressCreateParams;
 import org.eclipse.lsp4j.WorkDoneProgressEnd;
+import org.eclipse.lsp4j.WorkspaceFolder;
+import org.eclipse.lsp4j.WorkspaceFoldersOptions;
+import org.eclipse.lsp4j.WorkspaceServerCapabilities;
 import org.eclipse.lsp4j.jsonrpc.CompletableFutures;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
@@ -102,7 +108,7 @@ import software.amazon.smithy.lsp.handler.DefinitionHandler;
 import software.amazon.smithy.lsp.handler.FileWatcherRegistrationHandler;
 import software.amazon.smithy.lsp.handler.HoverHandler;
 import software.amazon.smithy.lsp.project.Project;
-import software.amazon.smithy.lsp.project.ProjectConfigLoader;
+import software.amazon.smithy.lsp.project.ProjectChanges;
 import software.amazon.smithy.lsp.project.ProjectLoader;
 import software.amazon.smithy.lsp.project.ProjectManager;
 import software.amazon.smithy.lsp.project.SmithyFile;
@@ -133,6 +139,11 @@ public class SmithyLanguageServer implements
         capabilities.setHoverProvider(true);
         capabilities.setDocumentFormattingProvider(true);
         capabilities.setDocumentSymbolProvider(true);
+
+        WorkspaceFoldersOptions workspaceFoldersOptions = new WorkspaceFoldersOptions();
+        workspaceFoldersOptions.setSupported(true);
+        capabilities.setWorkspace(new WorkspaceServerCapabilities(workspaceFoldersOptions));
+
         CAPABILITIES = capabilities;
     }
 
@@ -145,17 +156,12 @@ public class SmithyLanguageServer implements
     SmithyLanguageServer() {
     }
 
-    SmithyLanguageServer(LanguageClient client, Project project) {
-        this.client = new SmithyLanguageClient(client);
-        this.projects.updateMainProject(project);
-    }
-
     SmithyLanguageClient getClient() {
         return this.client;
     }
 
-    Project getProject() {
-        return projects.mainProject();
+    Project getFirstProject() {
+        return projects.nonDetachedProjects().values().stream().findFirst().orElse(null);
     }
 
     ProjectManager getProjects() {
@@ -212,22 +218,8 @@ public class SmithyLanguageServer implements
             }
         }
 
-        Path root = null;
-        // TODO: Handle multiple workspaces
-        if (params.getWorkspaceFolders() != null && !params.getWorkspaceFolders().isEmpty()) {
-            String uri = params.getWorkspaceFolders().get(0).getUri();
-            root = Paths.get(URI.create(uri));
-        } else if (params.getRootUri() != null) {
-            String uri = params.getRootUri();
-            root = Paths.get(URI.create(uri));
-        } else if (params.getRootPath() != null) {
-            String uri = params.getRootPath();
-            root = Paths.get(URI.create(uri));
-        }
 
-        if (root != null) {
-            // TODO: Support this for other tasks. Need to create a progress token with the client
-            //  through createProgress.
+        if (params.getWorkspaceFolders() != null && !params.getWorkspaceFolders().isEmpty()) {
             Either<String, Integer> workDoneProgressToken = params.getWorkDoneToken();
             if (workDoneProgressToken != null) {
                 WorkDoneProgressBegin notification = new WorkDoneProgressBegin();
@@ -235,7 +227,10 @@ public class SmithyLanguageServer implements
                 client.notifyProgress(new ProgressParams(workDoneProgressToken, Either.forLeft(notification)));
             }
 
-            tryInitProject(root);
+            for (WorkspaceFolder workspaceFolder : params.getWorkspaceFolders()) {
+                Path root = Paths.get(URI.create(workspaceFolder.getUri()));
+                tryInitProject(workspaceFolder.getName(), root);
+            }
 
             if (workDoneProgressToken != null) {
                 WorkDoneProgressEnd notification = new WorkDoneProgressEnd();
@@ -247,15 +242,15 @@ public class SmithyLanguageServer implements
         return completedFuture(new InitializeResult(CAPABILITIES));
     }
 
-    private void tryInitProject(Path root) {
+    private void tryInitProject(String name, Path root) {
         LOGGER.info("Initializing project at " + root);
         lifecycleManager.cancelAllTasks();
         Result<Project, List<Exception>> loadResult = ProjectLoader.load(
                 root, projects, lifecycleManager.managedDocuments());
         if (loadResult.isOk()) {
             Project updatedProject = loadResult.unwrap();
-            resolveDetachedProjects(updatedProject);
-            projects.updateMainProject(loadResult.unwrap());
+            resolveDetachedProjects(this.projects.getProjectByName(name), updatedProject);
+            this.projects.updateProjectByName(name, updatedProject);
             LOGGER.info("Initialized project at " + root);
         } else {
             LOGGER.severe("Init project failed");
@@ -263,11 +258,11 @@ public class SmithyLanguageServer implements
             //  if we find a smithy-build.json, etc.
             // If we overwrite an existing project with an empty one, we lose track of the state of tracked
             // files. Instead, we will just keep the original project before the reload failure.
-            if (projects.mainProject() == null) {
-                projects.updateMainProject(Project.empty(root));
+            if (projects.getProjectByName(name) == null) {
+                projects.updateProjectByName(name, Project.empty(root));
             }
 
-            String baseMessage = "Failed to load Smithy project at " + root;
+            String baseMessage = "Failed to load Smithy project " + name + " at " + root;
             StringBuilder errorMessage = new StringBuilder(baseMessage).append(":");
             for (Exception error : loadResult.unwrapErr()) {
                 errorMessage.append(System.lineSeparator());
@@ -281,11 +276,11 @@ public class SmithyLanguageServer implements
         }
     }
 
-    private void resolveDetachedProjects(Project updatedProject) {
+    private void resolveDetachedProjects(Project oldProject, Project updatedProject) {
         // This is a project reload, so we need to resolve any added/removed files
         // that need to be moved to or from detached projects.
-        if (getProject() != null) {
-            Set<String> currentProjectSmithyPaths = getProject().smithyFiles().keySet();
+        if (oldProject != null) {
+            Set<String> currentProjectSmithyPaths = oldProject.smithyFiles().keySet();
             Set<String> updatedProjectSmithyPaths = updatedProject.smithyFiles().keySet();
 
             Set<String> addedPaths = new HashSet<>(updatedProjectSmithyPaths);
@@ -303,8 +298,7 @@ public class SmithyLanguageServer implements
                 String removedUri = LspAdapter.toUri(removedPath);
                 // Only move to a detached project if the file is managed
                 if (lifecycleManager.managedDocuments().contains(removedUri)) {
-                    // Note: This should always be non-null, since we essentially got this from the current project
-                    Document removedDocument = projects.getDocument(removedUri);
+                    Document removedDocument = oldProject.getDocument(removedUri);
                     // The copy here is technically unnecessary, if we make ModelAssembler support borrowed strings
                     projects.createDetachedProject(removedUri, removedDocument.copyText());
                 }
@@ -313,8 +307,8 @@ public class SmithyLanguageServer implements
     }
 
     private CompletableFuture<Void> registerSmithyFileWatchers() {
-        Project project = projects.mainProject();
-        List<Registration> registrations = FileWatcherRegistrationHandler.getSmithyFileWatcherRegistrations(project);
+        List<Registration> registrations = FileWatcherRegistrationHandler.getSmithyFileWatcherRegistrations(
+                projects.nonDetachedProjects().values());
         return client.registerCapability(new RegistrationParams(registrations));
     }
 
@@ -325,7 +319,8 @@ public class SmithyLanguageServer implements
 
     @Override
     public void initialized(InitializedParams params) {
-        List<Registration> registrations = FileWatcherRegistrationHandler.getBuildFileWatcherRegistrations();
+        List<Registration> registrations = FileWatcherRegistrationHandler.getBuildFileWatcherRegistrations(
+                projects.nonDetachedProjects().values());
         client.registerCapability(new RegistrationParams(registrations));
         registerSmithyFileWatchers();
     }
@@ -365,7 +360,6 @@ public class SmithyLanguageServer implements
         }
     }
 
-    // TODO: This doesn't really work for multiple projects
     @Override
     public CompletableFuture<List<? extends Location>> selectorCommand(SelectorParams selectorParams) {
         LOGGER.info("SelectorCommand");
@@ -378,29 +372,31 @@ public class SmithyLanguageServer implements
             return completedFuture(Collections.emptyList());
         }
 
-        Project project = projects.mainProject();
-        // TODO: Might also want to tell user if the model isn't loaded
-        // TODO: Use proper location (source is just a point)
-        return completedFuture(project.modelResult().getResult()
+        // Select from all available projects
+        Collection<Project> detached = projects.detachedProjects().values();
+        Collection<Project> nonDetached = projects.nonDetachedProjects().values();
+
+        return completedFuture(Stream.concat(detached.stream(), nonDetached.stream())
+                .flatMap(project -> project.modelResult().getResult().stream())
                 .map(selector::select)
-                .map(shapes -> shapes.stream()
+                .flatMap(shapes -> shapes.stream()
+                        // TODO: Use proper location (source is just a point)
                         .map(Shape::getSourceLocation)
-                        .map(LspAdapter::toLocation)
-                        .collect(Collectors.toList()))
-                .orElse(Collections.emptyList()));
+                        .map(LspAdapter::toLocation))
+                .toList());
     }
 
     @Override
     public CompletableFuture<ServerStatus> serverStatus() {
-        OpenProject openProject = new OpenProject(
-                LspAdapter.toUri(projects.mainProject().root().toString()),
-                projects.mainProject().smithyFiles().keySet().stream()
-                        .map(LspAdapter::toUri)
-                        .collect(Collectors.toList()),
-                false);
-
         List<OpenProject> openProjects = new ArrayList<>();
-        openProjects.add(openProject);
+        for (Project project : projects.nonDetachedProjects().values()) {
+            openProjects.add(new OpenProject(
+                    LspAdapter.toUri(project.root().toString()),
+                    project.smithyFiles().keySet().stream()
+                            .map(LspAdapter::toUri)
+                            .toList(),
+                    false));
+        }
 
         for (Map.Entry<String, Project> entry : projects.detachedProjects().entrySet()) {
             openProjects.add(new OpenProject(
@@ -417,46 +413,72 @@ public class SmithyLanguageServer implements
         LOGGER.info("DidChangeWatchedFiles");
         // Smithy files were added or deleted to watched sources/imports (specified by smithy-build.json),
         // or the smithy-build.json itself was changed
-        Set<String> createdSmithyFiles = new HashSet<>(params.getChanges().size());
-        Set<String> deletedSmithyFiles = new HashSet<>(params.getChanges().size());
-        boolean changedBuildFiles = false;
-        for (FileEvent event : params.getChanges()) {
-            String changedUri = event.getUri();
-            if (changedUri.endsWith(".smithy")) {
-                if (event.getType().equals(FileChangeType.Created)) {
-                    createdSmithyFiles.add(changedUri);
-                } else if (event.getType().equals(FileChangeType.Deleted)) {
-                    deletedSmithyFiles.add(changedUri);
-                }
-            } else if (changedUri.endsWith(ProjectConfigLoader.SMITHY_BUILD)
-                    || changedUri.endsWith(ProjectConfigLoader.SMITHY_PROJECT)) {
-                changedBuildFiles = true;
-            } else {
-                for (String extFile : ProjectConfigLoader.SMITHY_BUILD_EXTS) {
-                    if (changedUri.endsWith(extFile)) {
-                        changedBuildFiles = true;
-                        break;
-                    }
-                }
-            }
-        }
 
-        if (changedBuildFiles) {
-            client.info("Build files changed, reloading project");
-            // TODO: Handle more granular updates to build files.
-            tryInitProject(projects.mainProject().root());
-        } else {
-            client.info("Project files changed, adding files "
-                        + createdSmithyFiles + " and removing files " + deletedSmithyFiles);
-            // We get this notification for watched files, which only includes project files,
-            // so we don't need to resolve detached projects.
-            projects.mainProject().updateFiles(createdSmithyFiles, deletedSmithyFiles);
-        }
+        Map<String, ProjectChanges> changesByProject = projects.computeProjectChanges(params.getChanges());
+
+        changesByProject.forEach((projectName, projectChanges) -> {
+            Project project = projects.getProjectByName(projectName);
+            if (projectChanges.hasChangedBuildFiles()) {
+                client.info("Build files changed, reloading project");
+                // TODO: Handle more granular updates to build files.
+                tryInitProject(projectName, project.root());
+            } else if (projectChanges.hasChangedSmithyFiles()) {
+                Set<String> createdUris = projectChanges.createdSmithyFileUris();
+                Set<String> deletedUris = projectChanges.deletedSmithyFileUris();
+                client.info("Project files changed, adding files "
+                            + createdUris + " and removing files " + deletedUris);
+
+                // We get this notification for watched files, which only includes project files,
+                // so we don't need to resolve detached projects.
+                project.updateFiles(createdUris, deletedUris);
+            }
+        });
 
         // TODO: Update watchers based on specific changes
         unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
 
         sendFileDiagnosticsForManagedDocuments();
+    }
+
+    @Override
+    public void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params) {
+        LOGGER.info("DidChangeWorkspaceFolders");
+
+        Either<String, Integer> progressToken = Either.forLeft(UUID.randomUUID().toString());
+        try {
+            client.createProgress(new WorkDoneProgressCreateParams(progressToken)).get();
+        } catch (ExecutionException | InterruptedException e) {
+            client.error(String.format("Unable to create work done progress token: %s", e.getMessage()));
+            progressToken = null;
+        }
+
+        if (progressToken != null) {
+            WorkDoneProgressBegin begin = new WorkDoneProgressBegin();
+            begin.setTitle("Updating workspace");
+            client.notifyProgress(new ProgressParams(progressToken, Either.forLeft(begin)));
+        }
+
+        for (WorkspaceFolder folder : params.getEvent().getAdded()) {
+            Path root = Paths.get(URI.create(folder.getUri()));
+            tryInitProject(folder.getName(), root);
+        }
+
+        for (WorkspaceFolder folder : params.getEvent().getRemoved()) {
+            Project removedProject = projects.removeProjectByName(folder.getName());
+            if (removedProject == null) {
+                continue;
+            }
+
+            resolveDetachedProjects(removedProject, Project.empty(removedProject.root()));
+        }
+
+        unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
+        sendFileDiagnosticsForManagedDocuments();
+
+        if (progressToken != null) {
+            WorkDoneProgressEnd end = new WorkDoneProgressEnd();
+            client.notifyProgress(new ProgressParams(progressToken, Either.forLeft(end)));
+        }
     }
 
     @Override

@@ -86,7 +86,7 @@ public class SmithyVersionRefactoringTest {
         List<TextEdit> edits = action.getEdit().getChanges().get(uri);
         assertThat(edits, hasSize(1));
         TextEdit edit = edits.get(0);
-        Document document = server.getProject().getDocument(uri);
+        Document document = server.getFirstProject().getDocument(uri);
         document.applyEdit(edit.getRange(), edit.getNewText());
         assertThat(document.copyText(), equalTo("$version: \"1\"\n" +
                                                 "\n" +
@@ -135,7 +135,7 @@ public class SmithyVersionRefactoringTest {
         List<TextEdit> edits = action.getEdit().getChanges().get(uri);
         assertThat(edits, hasSize(1));
         TextEdit edit = edits.get(0);
-        Document document = server.getProject().getDocument(uri);
+        Document document = server.getFirstProject().getDocument(uri);
         document.applyEdit(edit.getRange(), edit.getNewText());
         assertThat(document.copyText(), equalTo("$version: \"2\"\n" +
                                                 "namespace com.foo\n" +

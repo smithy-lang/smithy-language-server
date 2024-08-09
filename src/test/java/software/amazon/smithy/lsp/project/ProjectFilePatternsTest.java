@@ -3,28 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package software.amazon.smithy.lsp.handler;
+package software.amazon.smithy.lsp.project;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.is;
 
+import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import java.util.HashSet;
-import java.util.List;
-import java.util.stream.Collectors;
-import org.eclipse.lsp4j.DidChangeWatchedFilesRegistrationOptions;
-import org.eclipse.lsp4j.Registration;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.TestWorkspace;
-import software.amazon.smithy.lsp.project.Project;
-import software.amazon.smithy.lsp.project.ProjectLoader;
-import software.amazon.smithy.lsp.project.ProjectManager;
 import software.amazon.smithy.utils.ListUtils;
 
-public class FileWatcherRegistrationHandlerTest {
+public class ProjectFilePatternsTest {
     @Test
-    public void createsCorrectRegistrations() {
+    public void createsPathMatchers() {
         TestWorkspace workspace = TestWorkspace.builder()
                 .withSourceDir(new TestWorkspace.Dir()
                         .withPath("foo")
@@ -44,17 +38,14 @@ public class FileWatcherRegistrationHandlerTest {
                 .build();
 
         Project project = ProjectLoader.load(workspace.getRoot(), new ProjectManager(), new HashSet<>()).unwrap();
-        List<String> watcherPatterns = FileWatcherRegistrationHandler.getSmithyFileWatcherRegistrations(List.of(project))
-                .stream()
-                .map(Registration::getRegisterOptions)
-                .map(o -> (DidChangeWatchedFilesRegistrationOptions) o)
-                .flatMap(options -> options.getWatchers().stream())
-                .map(watcher -> watcher.getGlobPattern().getLeft())
-                .collect(Collectors.toList());
+        PathMatcher smithyMatcher = ProjectFilePatterns.getSmithyFilesPathMatcher(project);
+        PathMatcher buildMatcher = ProjectFilePatterns.getBuildFilesPathMatcher(project);
 
-        assertThat(watcherPatterns, containsInAnyOrder(
-                endsWith("foo/**.{smithy,json}"),
-                endsWith("other/**.{smithy,json}"),
-                endsWith("abc.smithy")));
+        Path root = project.root();
+        assertThat(smithyMatcher.matches(root.resolve("abc.smithy")), is(true));
+        assertThat(smithyMatcher.matches(root.resolve("foo/bar/baz.smithy")), is(true));
+        assertThat(smithyMatcher.matches(root.resolve("other/bar.smithy")), is(true));
+        assertThat(buildMatcher.matches(root.resolve("smithy-build.json")), is(true));
+        assertThat(buildMatcher.matches(root.resolve(".smithy-project.json")), is(true));
     }
 }

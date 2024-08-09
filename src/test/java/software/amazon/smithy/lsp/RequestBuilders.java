@@ -17,6 +17,7 @@ import org.eclipse.lsp4j.CompletionTriggerKind;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
+import org.eclipse.lsp4j.DidChangeWorkspaceFoldersParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
@@ -31,6 +32,7 @@ import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.WorkspaceFolder;
+import org.eclipse.lsp4j.WorkspaceFoldersChangeEvent;
 import software.amazon.smithy.utils.IoUtils;
 
 /**
@@ -65,6 +67,10 @@ public final class RequestBuilders {
 
     public static DidChangeWatchedFiles didChangeWatchedFiles() {
         return new DidChangeWatchedFiles();
+    }
+
+    public static DidChangeWorkspaceFolders didChangeWorkspaceFolders() {
+        return new DidChangeWorkspaceFolders();
     }
 
     public static final class DidChange {
@@ -248,6 +254,26 @@ public final class RequestBuilders {
 
         public DidChangeWatchedFilesParams build() {
             return new DidChangeWatchedFilesParams(changes);
+        }
+    }
+
+    public static final class DidChangeWorkspaceFolders {
+        final List<WorkspaceFolder> added = new ArrayList<>();
+        final List<WorkspaceFolder> removed = new ArrayList<>();
+
+        public DidChangeWorkspaceFolders added(String uri, String name) {
+            this.added.add(new WorkspaceFolder(uri, name));
+            return this;
+        }
+
+        public DidChangeWorkspaceFolders removed(String uri, String name) {
+            this.removed.add(new WorkspaceFolder(uri, name));
+            return this;
+        }
+
+        public DidChangeWorkspaceFoldersParams build() {
+            return new DidChangeWorkspaceFoldersParams(
+                    new WorkspaceFoldersChangeEvent(added, removed));
         }
     }
 }
