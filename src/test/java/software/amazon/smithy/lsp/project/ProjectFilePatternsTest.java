@@ -6,11 +6,13 @@
 package software.amazon.smithy.lsp.project;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
 
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.util.HashSet;
+import org.hamcrest.CustomTypeSafeMatcher;
+import org.hamcrest.Description;
+import org.hamcrest.Matcher;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.TestWorkspace;
@@ -42,10 +44,24 @@ public class ProjectFilePatternsTest {
         PathMatcher buildMatcher = ProjectFilePatterns.getBuildFilesPathMatcher(project);
 
         Path root = project.root();
-        assertThat(smithyMatcher.matches(root.resolve("abc.smithy")), is(true));
-        assertThat(smithyMatcher.matches(root.resolve("foo/bar/baz.smithy")), is(true));
-        assertThat(smithyMatcher.matches(root.resolve("other/bar.smithy")), is(true));
-        assertThat(buildMatcher.matches(root.resolve("smithy-build.json")), is(true));
-        assertThat(buildMatcher.matches(root.resolve(".smithy-project.json")), is(true));
+        assertThat(smithyMatcher, matches(root.resolve("abc.smithy")));
+        assertThat(smithyMatcher, matches(root.resolve("foo/bar/baz.smithy")));
+        assertThat(smithyMatcher, matches(root.resolve("other/bar.smithy")));
+        assertThat(buildMatcher, matches(root.resolve("smithy-build.json")));
+        assertThat(buildMatcher, matches(root.resolve(".smithy-project.json")));
+    }
+
+    static Matcher<PathMatcher> matches(Path path) {
+        return new CustomTypeSafeMatcher<PathMatcher>("A matcher that matches " + path) {
+            @Override
+            protected boolean matchesSafely(PathMatcher item) {
+                return item.matches(path);
+            }
+
+            @Override
+            protected void describeMismatchSafely(PathMatcher item, Description mismatchDescription) {
+                mismatchDescription.appendText("did not match " + item.toString());
+            }
+        };
     }
 }

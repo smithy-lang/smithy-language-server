@@ -21,6 +21,26 @@ public final class ProjectFilePatterns {
     private ProjectFilePatterns() {
     }
 
+    static final class Matcher implements PathMatcher {
+        final String pattern;
+        final PathMatcher matcher;
+
+        Matcher(String pattern) {
+            this.pattern = pattern;
+            this.matcher = FileSystems.getDefault().getPathMatcher(pattern);
+        }
+
+        @Override
+        public boolean matches(Path path) {
+            return matcher.matches(path);
+        }
+
+        @Override
+        public String toString() {
+            return pattern;
+        }
+    }
+
     /**
      * @param project The project to get watch patterns for
      * @return A list of glob patterns used to watch Smithy files in the given project
@@ -39,7 +59,7 @@ public final class ProjectFilePatterns {
         String pattern = Stream.concat(project.sources().stream(), project.imports().stream())
                 .map(path -> getSmithyFilePattern(path, false))
                 .collect(Collectors.joining(","));
-        return FileSystems.getDefault().getPathMatcher("glob:{" + pattern + "}");
+        return new Matcher("glob:{" + pattern + "}");
     }
 
     /**
@@ -67,7 +87,7 @@ public final class ProjectFilePatterns {
     public static PathMatcher getBuildFilesPathMatcher(Project project) {
         // Watch pattern is the same as the pattern used for matching
         String pattern = getBuildFilesWatchPattern(project);
-        return FileSystems.getDefault().getPathMatcher("glob:" + pattern);
+        return new Matcher("glob:" + pattern);
     }
 
     // When computing the pattern used for telling the client which files to watch, we want
