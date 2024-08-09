@@ -97,7 +97,7 @@ public final class ProjectFilePatterns {
     private static String getSmithyFilePattern(Path path, boolean isWatcherPattern) {
         String glob = path.toString();
         if (glob.endsWith(".smithy") || glob.endsWith(".json")) {
-            return glob;
+            return glob.replace("\\", "\\\\");
         }
 
         if (!glob.endsWith(File.separator)) {
@@ -109,6 +109,6 @@ public final class ProjectFilePatterns {
             glob += ".{smithy,json}";
         }
 
-        return glob;
+        return glob.replace("\\", "\\\\");
     }
 }
