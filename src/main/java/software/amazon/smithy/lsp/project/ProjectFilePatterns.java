@@ -5,6 +5,7 @@
 
 package software.amazon.smithy.lsp.project;
 
+import java.io.File;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
@@ -99,11 +100,15 @@ public final class ProjectFilePatterns {
             return glob;
         }
 
-        String pat = "**";
+        if (!glob.endsWith(File.separator)) {
+            glob += File.separator;
+        }
+        glob += "**";
+
         if (isWatcherPattern) {
-            pat += ".{smithy,json}";
+            glob += ".{smithy,json}";
         }
 
-        return path.resolve(pat).toString();
+        return glob;
     }
 }
