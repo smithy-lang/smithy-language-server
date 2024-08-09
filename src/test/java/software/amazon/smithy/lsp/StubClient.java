@@ -5,10 +5,12 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import org.eclipse.lsp4j.MessageActionItem;
 import org.eclipse.lsp4j.MessageParams;
+import org.eclipse.lsp4j.ProgressParams;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.RegistrationParams;
 import org.eclipse.lsp4j.ShowMessageRequestParams;
 import org.eclipse.lsp4j.UnregistrationParams;
+import org.eclipse.lsp4j.WorkDoneProgressCreateParams;
 import org.eclipse.lsp4j.services.LanguageClient;
 
 public final class StubClient implements LanguageClient {
@@ -63,4 +65,12 @@ public final class StubClient implements LanguageClient {
     public CompletableFuture<Void> unregisterCapability(UnregistrationParams params) {
         return CompletableFuture.completedFuture(null);
     }
+
+    @Override
+    public CompletableFuture<Void> createProgress(WorkDoneProgressCreateParams params) {
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public void notifyProgress(ProgressParams params) {}
 }

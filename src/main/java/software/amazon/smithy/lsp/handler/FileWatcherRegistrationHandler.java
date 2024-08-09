@@ -5,12 +5,9 @@
 
 package software.amazon.smithy.lsp.handler;
 
-import java.nio.file.Path;
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.eclipse.lsp4j.DidChangeWatchedFilesRegistrationOptions;
 import org.eclipse.lsp4j.FileSystemWatcher;
 import org.eclipse.lsp4j.Registration;
@@ -18,7 +15,7 @@ import org.eclipse.lsp4j.Unregistration;
 import org.eclipse.lsp4j.WatchKind;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.lsp.project.Project;
-import software.amazon.smithy.lsp.project.ProjectConfigLoader;
+import software.amazon.smithy.lsp.project.ProjectFilePatterns;
 
 /**
  * Handles computing the {@link Registration}s and {@link Unregistration}s for
@@ -40,48 +37,22 @@ public final class FileWatcherRegistrationHandler {
     private static final String WATCH_BUILD_FILES_ID = "WatchSmithyBuildFiles";
     private static final String WATCH_SMITHY_FILES_ID = "WatchSmithyFiles";
     private static final String WATCH_FILES_METHOD = "workspace/didChangeWatchedFiles";
-    private static final List<Registration> BUILD_FILE_WATCHER_REGISTRATIONS;
-    private static final List<Unregistration> SMITHY_FILE_WATCHER_UNREGISTRATIONS;
-
-    static {
-        // smithy-build.json + .smithy-project.json + build exts
-        int buildFileWatcherCount = 2 + ProjectConfigLoader.SMITHY_BUILD_EXTS.length;
-        List<FileSystemWatcher> buildFileWatchers = new ArrayList<>(buildFileWatcherCount);
-        buildFileWatchers.add(new FileSystemWatcher(Either.forLeft(ProjectConfigLoader.SMITHY_BUILD)));
-        buildFileWatchers.add(new FileSystemWatcher(Either.forLeft(ProjectConfigLoader.SMITHY_PROJECT)));
-        for (String ext : ProjectConfigLoader.SMITHY_BUILD_EXTS) {
-            buildFileWatchers.add(new FileSystemWatcher(Either.forLeft(ext)));
-        }
-
-        BUILD_FILE_WATCHER_REGISTRATIONS = Collections.singletonList(new Registration(
-                WATCH_BUILD_FILES_ID,
-                WATCH_FILES_METHOD,
-                new DidChangeWatchedFilesRegistrationOptions(buildFileWatchers)));
-
-        SMITHY_FILE_WATCHER_UNREGISTRATIONS = Collections.singletonList(new Unregistration(
-                WATCH_SMITHY_FILES_ID,
-                WATCH_FILES_METHOD));
-    }
+    private static final List<Unregistration> SMITHY_FILE_WATCHER_UNREGISTRATIONS = List.of(new Unregistration(
+            WATCH_SMITHY_FILES_ID,
+            WATCH_FILES_METHOD));
 
     private FileWatcherRegistrationHandler() {
     }
 
     /**
-     * @return The registrations to watch for build file changes
+     * @param projects The projects to get registrations for
+     * @return The registrations to watch for Smithy file changes across all projects
      */
-    public static List<Registration> getBuildFileWatcherRegistrations() {
-        return BUILD_FILE_WATCHER_REGISTRATIONS;
-    }
-
-    /**
-     * @param project The Project to get registrations for
-     * @return The registrations to watch for Smithy file changes
-     */
-    public static List<Registration> getSmithyFileWatcherRegistrations(Project project) {
-        List<FileSystemWatcher> smithyFileWatchers = Stream.concat(project.sources().stream(),
-                        project.imports().stream())
-                .map(FileWatcherRegistrationHandler::smithyFileWatcher)
-                .collect(Collectors.toList());
+    public static List<Registration> getSmithyFileWatcherRegistrations(Collection<Project> projects) {
+        List<FileSystemWatcher> smithyFileWatchers = projects.stream()
+                .flatMap(project -> ProjectFilePatterns.getSmithyFileWatchPatterns(project).stream())
+                .map(pattern -> new FileSystemWatcher(Either.forLeft(pattern), SMITHY_WATCH_FILE_KIND))
+                .toList();
 
         return Collections.singletonList(new Registration(
                 WATCH_SMITHY_FILES_ID,
@@ -96,17 +67,19 @@ public final class FileWatcherRegistrationHandler {
         return SMITHY_FILE_WATCHER_UNREGISTRATIONS;
     }
 
-    private static FileSystemWatcher smithyFileWatcher(Path path) {
-        String glob = path.toString();
-        if (!glob.endsWith(".smithy") && !glob.endsWith(".json")) {
-            // we have a directory
-            if (glob.endsWith("/")) {
-                glob = glob + "**/*.{smithy,json}";
-            } else {
-                glob = glob + "/**/*.{smithy,json}";
-            }
-        }
-        // Watch the absolute path, either a directory or file
-        return new FileSystemWatcher(Either.forLeft(glob), SMITHY_WATCH_FILE_KIND);
+    /**
+     * @param projects The projects to get registrations for
+     * @return The registrations to watch for build file changes across all projects
+     */
+    public static List<Registration> getBuildFileWatcherRegistrations(Collection<Project> projects) {
+        List<FileSystemWatcher> watchers = projects.stream()
+                .map(ProjectFilePatterns::getBuildFilesWatchPattern)
+                .map(pattern -> new FileSystemWatcher(Either.forLeft(pattern)))
+                .toList();
+
+        return Collections.singletonList(new Registration(
+                WATCH_BUILD_FILES_ID,
+                WATCH_FILES_METHOD,
+                new DidChangeWatchedFilesRegistrationOptions(watchers)));
     }
 }

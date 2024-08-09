@@ -21,7 +21,7 @@ public class ProjectManagerTest {
         Project mainProject = ProjectLoader.load(attachedRoot).unwrap();
 
         ProjectManager manager = new ProjectManager();
-        manager.updateMainProject(mainProject);
+        manager.updateProjectByName("main", mainProject);
 
         String detachedUri = LspAdapter.toUri("/foo/bar");
         manager.createDetachedProject(detachedUri, "");
