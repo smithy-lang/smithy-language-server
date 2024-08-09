@@ -1807,7 +1807,11 @@ public class SmithyLanguageServerTest {
 
         server.didChange(RequestBuilders.didChange()
                 .uri(fooUri)
-                .text("$version: \"2\"\nnamespace com.foo\nstructure Foo {}\n")
+                .text("""
+                        $version: "2"
+                        namespace com.foo
+                        structure Foo {}
+                        """)
                 .range(LspAdapter.origin())
                 .build());
 
@@ -1817,7 +1821,9 @@ public class SmithyLanguageServerTest {
 
         server.didChange(RequestBuilders.didChange()
                 .uri(fooUri)
-                .text("\nstructure Bar {}")
+                .text("""
+                        
+                        structure Bar {}""")
                 .range(LspAdapter.point(3, 0))
                 .build());
 
@@ -1826,9 +1832,9 @@ public class SmithyLanguageServerTest {
         Project projectFoo = server.getProjects().getProjectByName("foo");
         Project projectBar = server.getProjects().getProjectByName("bar");
 
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("model/main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("model/main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("model/other.smithy")));
+        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("main.smithy")));
+        assertThat(projectBar.smithyFiles(), hasKey(endsWith("main.smithy")));
+        assertThat(projectBar.smithyFiles(), hasKey(endsWith("other.smithy")));
 
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Bar")));
@@ -1913,8 +1919,8 @@ public class SmithyLanguageServerTest {
         Project projectFoo = server.getProjects().getProjectByName("foo");
         Project projectBar = server.getProjects().getProjectByName("bar");
 
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("model/main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("model/main.smithy")));
+        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("main.smithy")));
+        assertThat(projectBar.smithyFiles(), hasKey(endsWith("main.smithy")));
         assertThat(projectBar.smithyFiles(), hasKey(endsWith("other.smithy")));
 
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));

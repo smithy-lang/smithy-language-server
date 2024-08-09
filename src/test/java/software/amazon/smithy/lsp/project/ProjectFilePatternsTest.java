@@ -6,7 +6,6 @@
 package software.amazon.smithy.lsp.project;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
 
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
@@ -14,6 +13,7 @@ import java.util.HashSet;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.TestWorkspace;
+import software.amazon.smithy.lsp.UtilMatchers;
 import software.amazon.smithy.utils.ListUtils;
 
 public class ProjectFilePatternsTest {
@@ -42,10 +42,10 @@ public class ProjectFilePatternsTest {
         PathMatcher buildMatcher = ProjectFilePatterns.getBuildFilesPathMatcher(project);
 
         Path root = project.root();
-        assertThat(smithyMatcher.matches(root.resolve("abc.smithy")), is(true));
-        assertThat(smithyMatcher.matches(root.resolve("foo/bar/baz.smithy")), is(true));
-        assertThat(smithyMatcher.matches(root.resolve("other/bar.smithy")), is(true));
-        assertThat(buildMatcher.matches(root.resolve("smithy-build.json")), is(true));
-        assertThat(buildMatcher.matches(root.resolve(".smithy-project.json")), is(true));
+        assertThat(smithyMatcher, UtilMatchers.canMatchPath(root.resolve("abc.smithy")));
+        assertThat(smithyMatcher, UtilMatchers.canMatchPath(root.resolve("foo/bar/baz.smithy")));
+        assertThat(smithyMatcher, UtilMatchers.canMatchPath(root.resolve("other/bar.smithy")));
+        assertThat(buildMatcher, UtilMatchers.canMatchPath(root.resolve("smithy-build.json")));
+        assertThat(buildMatcher, UtilMatchers.canMatchPath(root.resolve(".smithy-project.json")));
     }
 }

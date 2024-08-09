@@ -5,6 +5,7 @@
 
 package software.amazon.smithy.lsp.project;
 
+import java.io.File;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
@@ -48,13 +49,14 @@ public final class ProjectFilePatterns {
      */
     public static String getBuildFilesWatchPattern(Project project) {
         Path root = project.root();
-        String smithyBuildJsonPattern = root.resolve(ProjectConfigLoader.SMITHY_BUILD).toString();
-        String smithyProjectJsonPattern = root.resolve(ProjectConfigLoader.SMITHY_PROJECT).toString();
+        String buildJsonPattern = escapeBackslashes(root.resolve(ProjectConfigLoader.SMITHY_BUILD).toString());
+        String projectJsonPattern = escapeBackslashes(root.resolve(ProjectConfigLoader.SMITHY_PROJECT).toString());
+
         List<String> patterns = new ArrayList<>();
-        patterns.add(smithyBuildJsonPattern);
-        patterns.add(smithyProjectJsonPattern);
+        patterns.add(buildJsonPattern);
+        patterns.add(projectJsonPattern);
         for (String buildExt : ProjectConfigLoader.SMITHY_BUILD_EXTS) {
-            patterns.add(root.resolve(buildExt).toString());
+            patterns.add(escapeBackslashes(root.resolve(buildExt).toString()));
         }
 
         return "{" + String.join(",", patterns) + "}";
@@ -76,20 +78,24 @@ public final class ProjectFilePatterns {
     private static String getSmithyFilePattern(Path path, boolean isWatcherPattern) {
         String glob = path.toString();
         if (glob.endsWith(".smithy") || glob.endsWith(".json")) {
-            return glob;
+            return escapeBackslashes(glob);
         }
 
-        // we have a directory
-        if (glob.endsWith("/")) {
-            glob = glob + "**";
-        } else {
-            glob = glob + "/**";
+        if (!glob.endsWith(File.separator)) {
+            glob += File.separator;
         }
+        glob += "**";
 
         if (isWatcherPattern) {
             glob += ".{smithy,json}";
         }
 
-        return glob;
+        return escapeBackslashes(glob);
+    }
+
+    // In glob patterns, '\' is an escape character, so it needs to escaped
+    // itself to work as a separator (i.e. for windows)
+    private static String escapeBackslashes(String pattern) {
+        return pattern.replace("\\", "\\\\");
     }
 }
