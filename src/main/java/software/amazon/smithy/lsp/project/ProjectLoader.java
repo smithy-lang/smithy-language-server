@@ -88,7 +88,8 @@ public final class ProjectLoader {
             if (LspAdapter.isSmithyJarFile(filePath) || LspAdapter.isJarFile(filePath)) {
                 return Document.of(IoUtils.readUtf8Url(LspAdapter.jarUrl(filePath)));
             } else if (filePath.equals(asPath)) {
-                return Document.of(text);
+                Document document = Document.of(text);
+                return document;
             } else {
                 // TODO: Make generic 'please file a bug report' exception
                 throw new IllegalStateException(
@@ -378,7 +379,7 @@ public final class ProjectLoader {
         }
     }
 
-    private static void collectJar(List<Path> accumulator, String jarRoot, Path jarPath) throws IOException {
+    private static void collectJar(List<Path> accumulator, String jarRoot, Path jarPath) {
         URL manifestUrl = ModelDiscovery.createSmithyJarManifestUrl(jarPath.toString());
 
         String prefix = computeJarFilePrefix(jarRoot, jarPath);

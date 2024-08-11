@@ -263,13 +263,17 @@ public class ProjectTest {
 
     @Test
     public void changeFileApplyingSimpleTrait() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Foo\n"
-                    + "apply Bar @length(min: 1)\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                string Foo
+                apply Bar @length(min: 1)
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 
@@ -290,13 +294,17 @@ public class ProjectTest {
 
     @Test
     public void changeFileApplyingListTrait() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Foo\n"
-                    + "apply Bar @tags([\"foo\"])\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                string Foo
+                apply Bar @tags(["foo"])
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 
@@ -317,17 +325,23 @@ public class ProjectTest {
 
     @Test
     public void changeFileApplyingListTraitWithUnrelatedDependencies() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Foo\n"
-                    + "apply Bar @tags([\"foo\"])\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n"
-                    + "string Baz\n";
-        String m3 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "apply Baz @length(min: 1)\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                string Foo
+                apply Bar @tags(["foo"])
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                string Baz
+                """;
+        String m3 = """
+                $version: "2"
+                namespace com.foo
+                apply Baz @length(min: 1)
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 
@@ -354,16 +368,22 @@ public class ProjectTest {
 
     @Test
     public void changingFileApplyingListTraitWithRelatedDependencies() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Foo\n"
-                    + "apply Bar @tags([\"foo\"])\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n";
-        String m3 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "apply Bar @length(min: 1)\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                string Foo
+                apply Bar @tags(["foo"])
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                """;
+        String m3 = """
+                $version: "2"
+                namespace com.foo
+                apply Bar @length(min: 1)
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 
@@ -388,16 +408,22 @@ public class ProjectTest {
 
     @Test
     public void changingFileApplyingListTraitWithRelatedArrayTraitDependencies() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Foo\n"
-                    + "apply Bar @tags([\"foo\"])\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n";
-        String m3 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "apply Bar @tags([\"bar\"])\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                string Foo
+                apply Bar @tags(["foo"])
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                """;
+        String m3 = """
+                $version: "2"
+                namespace com.foo
+                apply Bar @tags(["bar"])
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 
@@ -418,13 +444,17 @@ public class ProjectTest {
 
     @Test
     public void changingFileWithDependencies() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Foo\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n"
-                    + "apply Foo @length(min: 1)\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                apply Foo @length(min: 1)
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 
@@ -445,13 +475,17 @@ public class ProjectTest {
 
     @Test
     public void changingFileWithArrayDependencies() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Foo\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n"
-                    + "apply Foo @tags([\"foo\"])\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                apply Foo @tags(["foo"])
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 
@@ -472,14 +506,18 @@ public class ProjectTest {
 
     @Test
     public void changingFileWithMixedArrayDependencies() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "@tags([\"foo\"])\n"
-                    + "string Foo\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n"
-                    + "apply Foo @tags([\"foo\"])\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                @tags(["foo"])
+                string Foo
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                apply Foo @tags(["foo"])
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 
@@ -500,16 +538,22 @@ public class ProjectTest {
 
     @Test
     public void changingFileWithArrayDependenciesWithDependencies() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Foo\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n"
-                    + "apply Foo @tags([\"foo\"])\n";
-        String m3 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "apply Bar @length(min: 1)\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                apply Foo @tags(["foo"])
+                """;
+        String m3 = """
+                $version: "2"
+                namespace com.foo
+                apply Bar @length(min: 1)
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 
@@ -547,15 +591,21 @@ public class ProjectTest {
 
     @Test
     public void removingSimpleApply() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "apply Bar @length(min: 1)\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n";
-        String m3 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "apply Bar @pattern(\"a\")\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                apply Bar @length(min: 1)
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                """;
+        String m3 = """
+                $version: "2"
+                namespace com.foo
+                apply Bar @pattern("a")
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 
@@ -579,15 +629,21 @@ public class ProjectTest {
 
     @Test
     public void removingArrayApply() {
-        String m1 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "apply Bar @tags([\"foo\"])\n";
-        String m2 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "string Bar\n";
-        String m3 = "$version: \"2\"\n"
-                    + "namespace com.foo\n"
-                    + "apply Bar @tags([\"bar\"])\n";
+        String m1 = """
+                $version: "2"
+                namespace com.foo
+                apply Bar @tags(["foo"])
+                """;
+        String m2 = """
+                $version: "2"
+                namespace com.foo
+                string Bar
+                """;
+        String m3 = """
+                $version: "2"
+                namespace com.foo
+                apply Bar @tags(["bar"])
+                """;
         TestWorkspace workspace = TestWorkspace.multipleModels(m1, m2, m3);
         Project project = ProjectLoader.load(workspace.getRoot()).unwrap();
 

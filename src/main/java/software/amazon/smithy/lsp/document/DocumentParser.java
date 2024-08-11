@@ -156,31 +156,23 @@ public final class DocumentParser extends SimpleParser {
                 continue;
             }
 
+            DocumentShape documentShape;
             if (shape.isMemberShape()) {
                 DocumentShape.Kind kind = DocumentShape.Kind.DefinedMember;
                 if (is('$')) {
                     kind = DocumentShape.Kind.Elided;
                 }
-                DocumentShape member = documentShape(kind);
-                documentShapes.put(member.range().getStart(), member);
-                sp();
-                if (peek() == ':') {
-                    skip();
-                    // get target
-                    sp();
-                    DocumentShape target = documentShape(DocumentShape.Kind.Targeted);
-                    documentShapes.put(target.range().getStart(), target);
-                    member.setTargetReference(target);
-                }
+                documentShape = documentShape(kind);
             } else {
                 skipAlpha(); // shape type
                 sp();
-                DocumentShape shapeDef = documentShape(DocumentShape.Kind.DefinedShape);
-                if (shapeDef.shapeName().length() == 0) {
-                    // Not sure if we should set the shape name here
-                    shapeDef.setKind(DocumentShape.Kind.Inline);
-                }
-                documentShapes.put(shapeDef.range().getStart(), shapeDef);
+                documentShape = documentShape(DocumentShape.Kind.DefinedShape);
+            }
+
+            documentShapes.put(documentShape.range().getStart(), documentShape);
+            if (documentShape.hasMemberTarget()) {
+                DocumentShape memberTarget = documentShape.targetReference();
+                documentShapes.put(memberTarget.range().getStart(), memberTarget);
             }
         }
         return documentShapes;
@@ -198,7 +190,21 @@ public final class DocumentParser extends SimpleParser {
         int endIdx = position();
         Range range = new Range(start, end);
         CharSequence shapeName = document.borrowSpan(startIdx, endIdx);
-        return new DocumentShape(range, shapeName, kind);
+
+        // This is a bit ugly, but it avoids intermediate allocations (like a builder would require)
+        DocumentShape targetReference = null;
+        if (kind == DocumentShape.Kind.DefinedMember) {
+            sp();
+            if (is(':')) {
+                skip();
+                sp();
+                targetReference = documentShape(DocumentShape.Kind.Targeted);
+            }
+        } else if (kind == DocumentShape.Kind.DefinedShape && (shapeName == null || shapeName.isEmpty())) {
+            kind = DocumentShape.Kind.Inline;
+        }
+
+        return new DocumentShape(range, shapeName, kind, targetReference);
     }
 
     /**
@@ -604,15 +610,10 @@ public final class DocumentParser extends SimpleParser {
 
     private boolean isWs(int offset) {
         char peeked = peek(offset);
-        switch (peeked) {
-            case '\n':
-            case '\r':
-            case ' ':
-            case '\t':
-                return true;
-            default:
-                return false;
-        }
+        return switch (peeked) {
+            case '\n', '\r', ' ', '\t' -> true;
+            default -> false;
+        };
     }
 
     private boolean isEof() {
@@ -643,33 +644,12 @@ public final class DocumentParser extends SimpleParser {
             return false;
         }
 
-        switch (token.toString()) {
-            case "structure":
-            case "operation":
-            case "string":
-            case "integer":
-            case "list":
-            case "map":
-            case "boolean":
-            case "enum":
-            case "union":
-            case "blob":
-            case "byte":
-            case "short":
-            case "long":
-            case "float":
-            case "double":
-            case "timestamp":
-            case "intEnum":
-            case "document":
-            case "service":
-            case "resource":
-            case "bigDecimal":
-            case "bigInteger":
-                return true;
-            default:
-                return false;
-        }
+        return switch (token.toString()) {
+            case "structure", "operation", "string", "integer", "list", "map", "boolean", "enum", "union", "blob",
+                    "byte", "short", "long", "float", "double", "timestamp", "intEnum", "document", "service",
+                    "resource", "bigDecimal", "bigInteger" -> true;
+            default -> false;
+        };
     }
 
     private int firstIndexOfWithOnlyLeadingWs(String s) {

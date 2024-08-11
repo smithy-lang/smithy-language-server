@@ -6,14 +6,12 @@
 package software.amazon.smithy.lsp;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.node.NodeMapper;
@@ -62,7 +60,7 @@ public final class TestWorkspace {
      */
     public void addModel(String relativePath, String model) {
         try {
-            Files.write(root.resolve(relativePath), model.getBytes(StandardCharsets.UTF_8));
+            Files.writeString(root.resolve(relativePath), model);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -178,7 +176,7 @@ public final class TestWorkspace {
 
         private static void writeModels(Path toDir, Map<String, String> models) throws Exception {
             for (Map.Entry<String, String> entry : models.entrySet()) {
-                Files.write(toDir.resolve(entry.getKey()), entry.getValue().getBytes(StandardCharsets.UTF_8));
+                Files.writeString(toDir.resolve(entry.getKey()), entry.getValue());
             }
         }
     }
@@ -239,11 +237,11 @@ public final class TestWorkspace {
 
                 List<String> sources = new ArrayList<>();
                 sources.addAll(sourceModels.keySet());
-                sources.addAll(sourceDirs.stream().map(d -> d.path).collect(Collectors.toList()));
+                sources.addAll(sourceDirs.stream().map(d -> d.path).toList());
 
                 List<String> imports = new ArrayList<>();
                 imports.addAll(importModels.keySet());
-                imports.addAll(importDirs.stream().map(d -> d.path).collect(Collectors.toList()));
+                imports.addAll(importDirs.stream().map(d -> d.path).toList());
 
                 if (config == null) {
                     config = SmithyBuildConfig.builder()
@@ -267,7 +265,7 @@ public final class TestWorkspace {
         String configString = Node.prettyPrintJson(MAPPER.serialize(config));
         Path configPath = root.resolve("smithy-build.json");
         try {
-            Files.write(configPath, configString.getBytes(StandardCharsets.UTF_8));
+            Files.writeString(configPath, configString);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

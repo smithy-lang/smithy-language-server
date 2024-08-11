@@ -10,28 +10,8 @@ import org.eclipse.lsp4j.Range;
 
 /**
  * The imports of a document, including the range they occupy.
+ *
+ * @param importsRange The range of the imports
+ * @param imports The set of imported shape ids. They are not guaranteed to be valid shape ids
  */
-public final class DocumentImports {
-    private final Range importsRange;
-    private final Set<String> imports;
-
-    DocumentImports(Range importsRange, Set<String> imports) {
-        this.importsRange = importsRange;
-        this.imports = imports;
-    }
-
-    /**
-     * @return The range of the imports
-     */
-    public Range importsRange() {
-        return importsRange;
-    }
-
-    /**
-     * @return The set of imported shape ids. They are not guaranteed
-     *  to be valid shape ids
-     */
-    public Set<String> imports() {
-        return imports;
-    }
-}
+public record DocumentImports(Range importsRange, Set<String> imports) {}

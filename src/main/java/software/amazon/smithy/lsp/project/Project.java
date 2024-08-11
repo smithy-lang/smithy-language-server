@@ -187,7 +187,7 @@ public final class Project {
      * @param validate Whether to run model validation.
      */
     public void updateFiles(Set<String> addUris, Set<String> removeUris, Set<String> changeUris, boolean validate) {
-        if (!modelResult.getResult().isPresent()) {
+        if (modelResult.getResult().isEmpty()) {
             // TODO: If there's no model, we didn't collect the smithy files (so no document), so I'm thinking
             //  maybe we do nothing here. But we could also still update the document, and
             //  just compute the shapes later?
@@ -280,8 +280,7 @@ public final class Project {
             String path = LspAdapter.toPath(uri);
             Set<Shape> fileShapes = getFileShapes(path, Collections.emptySet());
             Document document = Document.of(IoUtils.readUtf8File(path));
-            SmithyFile smithyFile = ProjectLoader.buildSmithyFile(path, document, fileShapes)
-                    .build();
+            SmithyFile smithyFile = ProjectLoader.buildSmithyFile(path, document, fileShapes).build();
             smithyFiles.put(path, smithyFile);
         }
     }
@@ -335,9 +334,8 @@ public final class Project {
         // the file would be fine because it would ignore the duplicated trait application coming from the same
         // source location. But if the apply statement is changed/removed, the old application isn't removed, so we
         // could get a duplicate trait, or a merged array trait.
-        smithyFileDependenciesIndex.getDependentFiles(path).forEach((depPath) -> {
-            removeFileForReload(assembler, builder, depPath, visited);
-        });
+        smithyFileDependenciesIndex.getDependentFiles(path).forEach((depPath) ->
+                removeFileForReload(assembler, builder, depPath, visited));
         smithyFileDependenciesIndex.getAppliedTraitsInFile(path).forEach((shapeId, traits) -> {
             Shape shape = builder.getCurrentShapes().get(shapeId);
             if (shape != null) {

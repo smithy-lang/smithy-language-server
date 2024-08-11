@@ -19,7 +19,7 @@ public final class UtilMatchers {
     private UtilMatchers() {}
 
     public static <T> Matcher<Optional<T>> anOptionalOf(Matcher<T> matcher) {
-        return new CustomTypeSafeMatcher<Optional<T>>("An optional that is present with value " + matcher.toString()) {
+        return new CustomTypeSafeMatcher<>("An optional that is present with value " + matcher.toString()) {
             @Override
             protected boolean matchesSafely(Optional<T> item) {
                 return item.isPresent() && matcher.matches(item.get());
@@ -27,7 +27,7 @@ public final class UtilMatchers {
 
             @Override
             public void describeMismatchSafely(Optional<T> item, Description description) {
-                if (!item.isPresent()) {
+                if (item.isEmpty()) {
                     description.appendText("was an empty optional");
                 } else {
                     matcher.describeMismatch(item.get(), description);

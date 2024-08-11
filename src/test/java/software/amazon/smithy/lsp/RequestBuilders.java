@@ -75,7 +75,7 @@ public final class RequestBuilders {
 
     public static final class DidChange {
         private String uri;
-        private Integer version;
+        private Integer version = 1;
         private Range range;
         private String text;
 

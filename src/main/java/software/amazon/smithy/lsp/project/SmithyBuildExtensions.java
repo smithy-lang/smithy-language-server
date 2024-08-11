@@ -129,7 +129,7 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
             if (other.mavenConfig().getRepositories().isEmpty()) {
                 repositories.addAll(other.mavenRepositories.stream()
                         .map(repo -> MavenRepository.builder().url(repo).build())
-                        .collect(Collectors.toList()));
+                        .toList());
             } else {
                 repositories.addAll(other.maven.getRepositories());
             }

@@ -15,14 +15,12 @@
 
 package software.amazon.smithy.lsp.codeactions;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.eclipse.lsp4j.CodeAction;
-import org.eclipse.lsp4j.Position;
-import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.WorkspaceEdit;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 
 public final class DefineVersionCodeAction {
     private static final int DEFAULT_VERSION = 1;
@@ -42,10 +40,9 @@ public final class DefineVersionCodeAction {
         codeAction.setKind(SmithyCodeActions.SMITHY_DEFINE_VERSION);
         WorkspaceEdit wEdit = new WorkspaceEdit();
         TextEdit edit = new TextEdit(
-            new Range(new Position(0, 0), new Position(0, 0)),
-            "$version: \"" + DEFAULT_VERSION + "\"\n\n"
-        );
-        Map<String, List<TextEdit>> changes = Collections.singletonMap(fileUri, Collections.singletonList(edit));
+                LspAdapter.origin(),
+                String.format("$version: \"%s\"%n%n", DEFAULT_VERSION));
+        Map<String, List<TextEdit>> changes = Map.of(fileUri, List.of(edit));
         wEdit.setChanges(changes);
         codeAction.setEdit(wEdit);
         return codeAction;
