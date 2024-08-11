@@ -64,6 +64,7 @@ import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.MavenConfig;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.document.Document;
+import software.amazon.smithy.lsp.ext.SelectorParams;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.protocol.RangeBuilder;
@@ -76,10 +77,12 @@ import software.amazon.smithy.model.traits.LengthTrait;
 public class SmithyLanguageServerTest {
     @Test
     public void runsSelector() throws Exception {
-        String model = safeString("$version: \"2\"\n"
-                       + "namespace com.foo\n"
-                       + "\n"
-                       + "string Foo\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                string Foo
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -91,15 +94,17 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void completion() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "structure Foo {\n" +
-                       "    bar: String\n" +
-                       "}\n" +
-                       "\n" +
-                       "@default(0)\n" +
-                       "integer Bar\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo {
+                    bar: String
+                }
+
+                @default(0)
+                integer Bar
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -134,15 +139,19 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void completionImports() throws Exception {
-        String model1 = safeString("$version: \"2\"\n" +
-                        "namespace com.foo\n" +
-                        "\n" +
-                        "structure Foo {\n" +
-                        "}\n");
-        String model2 = safeString("$version: \"2\"\n" +
-                        "namespace com.bar\n" +
-                        "\n" +
-                        "string Bar\n");
+        String model1 = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo {
+                }
+                """);
+        String model2 = safeString("""
+                $version: "2"
+                namespace com.bar
+
+                string Bar
+                """);
         TestWorkspace workspace = TestWorkspace.multipleModels(model1, model2);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -179,29 +188,33 @@ public class SmithyLanguageServerTest {
 
         Document document = server.getFirstProject().getDocument(uri);
         // TODO: The server puts the 'use' on the wrong line
-        assertThat(completions.get(0).getAdditionalTextEdits(), containsInAnyOrder(makesEditedDocument(document, safeString("$version: \"2\"\n" +
-                                                                                                      "namespace com.foo\n" +
-                                                                                                      "use com.bar#Bar\n" +
-                                                                                                      "\n" +
-                                                                                                      "structure Foo {\n" +
-                                                                                                      "    bar: Ba\n" +
-                                                                                                      "}\n"))));
+        assertThat(completions.get(0).getAdditionalTextEdits(), containsInAnyOrder(makesEditedDocument(document, safeString("""
+                $version: "2"
+                namespace com.foo
+                use com.bar#Bar
+
+                structure Foo {
+                    bar: Ba
+                }
+                """))));
     }
 
     @Test
     public void definition() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "@trait\n" +
-                       "string myTrait\n" +
-                       "\n" +
-                       "structure Foo {\n" +
-                       "    bar: Baz\n" +
-                       "}\n" +
-                       "\n" +
-                       "@myTrait(\"\")\n" +
-                       "string Baz\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                @trait
+                string myTrait
+
+                structure Foo {
+                    bar: Baz
+                }
+
+                @myTrait("")
+                string Baz
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -249,20 +262,22 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void hover() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "@trait\n" +
-                       "string myTrait\n" +
-                       "\n" +
-                       "structure Foo {\n" +
-                       "    bar: Bar\n" +
-                       "}\n" +
-                       "\n" +
-                       "@myTrait(\"\")\n" +
-                       "structure Bar {\n" +
-                       "    baz: String\n" +
-                       "}\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                @trait
+                string myTrait
+
+                structure Foo {
+                    bar: Bar
+                }
+
+                @myTrait("")
+                structure Bar {
+                    baz: String
+                }
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
         String uri = workspace.getUri("main.smithy");
@@ -296,13 +311,15 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void hoverWithBrokenModel() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "structure Foo {\n" +
-                       "    bar: Bar\n" +
-                       "    baz: String\n" +
-                       "}\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo {
+                    bar: Bar
+                    baz: String
+                }
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -321,32 +338,40 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void documentSymbol() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "@trait\n" +
-                       "string myTrait\n" +
-                       "\n" +
-                       "structure Foo {\n" +
-                       "    @required\n" +
-                       "    bar: Bar\n" +
-                       "}\n" +
-                       "\n" +
-                       "structure Bar {\n" +
-                       "    @myTrait(\"foo\")\n" +
-                       "    baz: Baz\n" +
-                       "}\n" +
-                       "\n" +
-                       "@myTrait(\"abc\")\n" +
-                       "integer Baz\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                @trait
+                string myTrait
+
+                structure Foo {
+                    @required
+                    bar: Bar
+                }
+
+                structure Bar {
+                    @myTrait("foo")
+                    baz: Baz
+                }
+
+                @myTrait("abc")
+                integer Baz
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
         String uri = workspace.getUri("main.smithy");
 
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .build());
+
+        server.getLifecycleManager().waitForAllTasks();
+
         DocumentSymbolParams params = new DocumentSymbolParams(new TextDocumentIdentifier(uri));
         List<Either<SymbolInformation, DocumentSymbol>> response = server.documentSymbol(params).get();
-        List<DocumentSymbol> documentSymbols = response.stream().map(Either::getRight).collect(Collectors.toList());
+        List<DocumentSymbol> documentSymbols = response.stream().map(Either::getRight).toList();
         List<String> names = documentSymbols.stream().map(DocumentSymbol::getName).collect(Collectors.toList());
 
         assertThat(names, hasItem("myTrait"));
@@ -359,16 +384,18 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void formatting() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "structure Foo{\n" +
-                       "bar:    Baz}\n" +
-                       "\n" +
-                       "@tags(\n" +
-                       "[\"a\",\n" +
-                       "    \"b\"])\n" +
-                       "string Baz\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo{
+                bar:    Baz}
+
+                @tags(
+                ["a",
+                    "b"])
+                string Baz
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -379,29 +406,33 @@ public class SmithyLanguageServerTest {
         List<? extends TextEdit> edits = server.formatting(params).get();
         Document document = server.getFirstProject().getDocument(uri);
 
-        assertThat(edits, containsInAnyOrder(makesEditedDocument(document, safeString("$version: \"2\"\n" +
-                                                                "\n" +
-                                                                "namespace com.foo\n" +
-                                                                "\n" +
-                                                                "structure Foo {\n" +
-                                                                "    bar: Baz\n" +
-                                                                "}\n" +
-                                                                "\n" +
-                                                                "@tags([\"a\", \"b\"])\n" +
-                                                                "string Baz\n"))));
+        assertThat(edits, containsInAnyOrder(makesEditedDocument(document, safeString("""
+                $version: "2"
+
+                namespace com.foo
+
+                structure Foo {
+                    bar: Baz
+                }
+
+                @tags(["a", "b"])
+                string Baz
+                """))));
     }
 
     @Test
     public void didChange() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "structure GetFooInput {\n" +
-                       "}\n" +
-                       "\n" +
-                       "operation GetFoo {\n" +
-                       "}\n");
+        String model = safeString("""
+                $version: "2"
+
+                namespace com.foo
+
+                structure GetFooInput {
+                }
+
+                operation GetFoo {
+                }
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -435,16 +466,18 @@ public class SmithyLanguageServerTest {
         server.getLifecycleManager().waitForAllTasks();
 
         // mostly so you can see what it looks like
-        assertThat(server.getFirstProject().getDocument(uri).copyText(), equalTo(safeString("$version: \"2\"\n" +
-                                                                                            "\n" +
-                                                                                            "namespace com.foo\n" +
-                                                                                            "\n" +
-                                                                                            "structure GetFooInput {\n" +
-                                                                                            "}\n" +
-                                                                                            "\n" +
-                                                                                            "operation GetFoo {\n" +
-                                                                                            "    input: G\n" +
-                                                                                            "}\n")));
+        assertThat(server.getFirstProject().getDocument(uri).copyText(), equalTo(safeString("""
+                $version: "2"
+
+                namespace com.foo
+
+                structure GetFooInput {
+                }
+
+                operation GetFoo {
+                    input: G
+                }
+                """)));
 
         // input: G
         CompletionParams completionParams = new RequestBuilders.PositionRequest()
@@ -458,10 +491,12 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void didChangeReloadsModel() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "operation Foo {}\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                operation Foo {}
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -495,14 +530,16 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void didChangeThenDefinition() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "structure Foo {\n" +
-                       "    bar: Bar\n" +
-                       "}\n" +
-                       "\n" +
-                       "string Bar\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo {
+                    bar: Bar
+                }
+
+                string Bar
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
         String uri = workspace.getUri("main.smithy");
@@ -540,16 +577,18 @@ public class SmithyLanguageServerTest {
 
         server.getLifecycleManager().getTask(uri).get();
 
-        assertThat(server.getFirstProject().getDocument(uri).copyText(), equalTo(safeString("$version: \"2\"\n" +
-                                                                                            "namespace com.foo\n" +
-                                                                                            "\n" +
-                                                                                            "structure Foo {\n" +
-                                                                                            "    bar: Bar\n" +
-                                                                                            "}\n" +
-                                                                                            "\n" +
-                                                                                            "string Baz\n" +
-                                                                                            "\n" +
-                                                                                            "string Bar\n")));
+        assertThat(server.getFirstProject().getDocument(uri).copyText(), equalTo(safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo {
+                    bar: Bar
+                }
+
+                string Baz
+
+                string Bar
+                """)));
 
         Location afterChanges = server.definition(definitionParams).get().getLeft().get(0);
         assertThat(afterChanges.getUri(), equalTo(uri));
@@ -605,12 +644,14 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void newShapeMixinCompletion() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "@mixin\n" +
-                       "structure Foo {}\n" +
-                       "\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                @mixin
+                structure Foo {}
+
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
         String uri = workspace.getUri("main.smithy");
@@ -650,13 +691,14 @@ public class SmithyLanguageServerTest {
 
         server.getLifecycleManager().getTask(uri).get();
 
-        assertThat(server.getFirstProject().getDocument(uri).copyText(), equalTo(safeString("$version: \"2\"\n" +
-                                                                                            "namespace com.foo\n" +
-                                                                                            "\n" +
-                                                                                            "@mixin\n" +
-                                                                                            "structure Foo {}\n" +
-                                                                                            "\n" +
-                                                                                            "structure Bar with [F]")));
+        assertThat(server.getFirstProject().getDocument(uri).copyText(), equalTo(safeString("""
+                $version: "2"
+                namespace com.foo
+
+                @mixin
+                structure Foo {}
+
+                structure Bar with [F]""")));
 
         Position currentPosition = range.build().getStart();
         CompletionParams completionParams = new RequestBuilders.PositionRequest()
@@ -673,13 +715,15 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void existingShapeMixinCompletion() throws Exception {
-        String model = safeString("$version: \"2\"\n" +
-                       "namespace com.foo\n" +
-                       "\n" +
-                       "@mixin\n" +
-                       "structure Foo {}\n" +
-                       "\n" +
-                       "structure Bar {}\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                @mixin
+                structure Foo {}
+
+                structure Bar {}
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
         String uri = workspace.getUri("main.smithy");
@@ -706,13 +750,15 @@ public class SmithyLanguageServerTest {
 
         server.getLifecycleManager().getTask(uri).get();
 
-        assertThat(server.getFirstProject().getDocument(uri).copyText(), equalTo(safeString("$version: \"2\"\n" +
-                                                                                            "namespace com.foo\n" +
-                                                                                            "\n" +
-                                                                                            "@mixin\n" +
-                                                                                            "structure Foo {}\n" +
-                                                                                            "\n" +
-                                                                                            "structure Bar with [F] {}\n")));
+        assertThat(server.getFirstProject().getDocument(uri).copyText(), equalTo(safeString("""
+                $version: "2"
+                namespace com.foo
+
+                @mixin
+                structure Foo {}
+
+                structure Bar with [F] {}
+                """)));
 
         Position currentPosition = range.build().getStart();
         CompletionParams completionParams = new RequestBuilders.PositionRequest()
@@ -729,12 +775,14 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void diagnosticsOnMemberTarget() {
-        String model = safeString("$version: \"2\"\n"
-                + "namespace com.foo\n"
-                + "\n"
-                + "structure Foo {\n"
-                + "    bar: Bar\n"
-                + "}\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo {
+                    bar: Bar
+                }
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
         String uri = workspace.getUri("main.smithy");
@@ -751,13 +799,15 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void diagnosticOnTrait() {
-        String model = safeString("$version: \"2\"\n"
-                + "namespace com.foo\n"
-                + "\n"
-                + "structure Foo {\n"
-                + "    @bar\n"
-                + "    bar: String\n"
-                + "}\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo {
+                    @bar
+                    bar: String
+                }
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
         String uri = workspace.getUri("main.smithy");
@@ -779,12 +829,14 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void diagnosticsOnShape() throws Exception {
-        String model = safeString("$version: \"2\"\n"
-                + "namespace com.foo\n"
-                + "\n"
-                + "list Foo {\n"
-                + "    \n"
-                + "}\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                list Foo {
+                   \s
+                }
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         StubClient client = new StubClient();
         SmithyLanguageServer server = new SmithyLanguageServer();
@@ -823,12 +875,14 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void insideJar() throws Exception {
-        String model = safeString("$version: \"2\"\n"
-                + "namespace com.foo\n"
-                + "\n"
-                + "structure Foo {\n"
-                + "    bar: PrimitiveInteger\n"
-                + "}\n");
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo {
+                    bar: PrimitiveInteger
+                }
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -904,9 +958,11 @@ public class SmithyLanguageServerTest {
     public void removingWatchedFile() {
         TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
         String filename = "model/main.smithy";
-        String modelText = safeString("$version: \"2\"\n"
-                           + "namespace com.foo\n"
-                           + "string Foo\n");
+        String modelText = safeString("""
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """);
         workspace.addModel(filename, modelText);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -932,9 +988,11 @@ public class SmithyLanguageServerTest {
     public void addingDetachedFile() {
         TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
         String filename = "main.smithy";
-        String modelText = safeString("$version: \"2\"\n"
-                           + "namespace com.foo\n"
-                           + "string Foo\n");
+        String modelText = safeString("""
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """);
         workspace.addModel(filename, modelText);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -975,9 +1033,11 @@ public class SmithyLanguageServerTest {
     public void removingAttachedFile() {
         TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
         String filename = "model/main.smithy";
-        String modelText = safeString("$version: \"2\"\n"
-                           + "namespace com.foo\n"
-                           + "string Foo\n");
+        String modelText = safeString("""
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """);
         workspace.addModel(filename, modelText);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -1022,10 +1082,12 @@ public class SmithyLanguageServerTest {
                 .sources(Collections.singletonList("./././smithy"))
                 .build();
         String filename = "smithy/main.smithy";
-        String modelText = safeString("$version: \"2\"\n"
-                           + "namespace com.foo\n"
-                           + "\n"
-                           + "string Foo\n");
+        String modelText = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                string Foo
+                """);
         TestWorkspace workspace = TestWorkspace.builder()
                 .withSourceDir(TestWorkspace.dir()
                         .withPath("./smithy")
@@ -1048,22 +1110,26 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void reloadingProjectWithArrayMetadataValues() throws Exception {
-        String modelText1 = safeString("$version: \"2\"\n"
-                           + "\n"
-                           + "metadata foo = [1]\n"
-                           + "metadata foo = [2]\n"
-                           + "metadata bar = {a: [1]}\n"
-                           + "\n"
-                           + "namespace com.foo\n"
-                           + "\n"
-                           + "string Foo\n");
-        String modelText2 = safeString("$version: \"2\"\n"
-                            + "\n"
-                            + "metadata foo = [3]\n"
-                            + "\n"
-                            + "namespace com.foo\n"
-                            + "\n"
-                            + "string Bar\n");
+        String modelText1 = safeString("""
+                $version: "2"
+
+                metadata foo = [1]
+                metadata foo = [2]
+                metadata bar = {a: [1]}
+
+                namespace com.foo
+
+                string Foo
+                """);
+        String modelText2 = safeString("""
+                $version: "2"
+
+                metadata foo = [3]
+
+                namespace com.foo
+
+                string Bar
+                """);
         TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -1112,22 +1178,26 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void changingWatchedFilesWithMetadata() throws Exception {
-        String modelText1 = safeString("$version: \"2\"\n"
-                            + "\n"
-                            + "metadata foo = [1]\n"
-                            + "metadata foo = [2]\n"
-                            + "metadata bar = {a: [1]}\n"
-                            + "\n"
-                            + "namespace com.foo\n"
-                            + "\n"
-                            + "string Foo\n");
-        String modelText2 = safeString("$version: \"2\"\n"
-                            + "\n"
-                            + "metadata foo = [3]\n"
-                            + "\n"
-                            + "namespace com.foo\n"
-                            + "\n"
-                            + "string Bar\n");
+        String modelText1 = safeString("""
+                $version: "2"
+
+                metadata foo = [1]
+                metadata foo = [2]
+                metadata bar = {a: [1]}
+
+                namespace com.foo
+
+                string Foo
+                """);
+        String modelText2 = safeString("""
+                $version: "2"
+
+                metadata foo = [3]
+
+                namespace com.foo
+
+                string Bar
+                """);
         TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -1158,11 +1228,13 @@ public class SmithyLanguageServerTest {
     public void addingOpenedDetachedFile() throws Exception {
         TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
         String filename = "main.smithy";
-        String modelText = safeString("$version: \"2\"\n"
-                           + "\n"
-                           + "namespace com.foo\n"
-                           + "\n"
-                           + "string Foo\n");
+        String modelText = safeString("""
+                $version: "2"
+
+                namespace com.foo
+
+                string Foo
+                """);
         workspace.addModel(filename, modelText);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -1210,9 +1282,11 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void detachingOpenedFile() throws Exception {
-        String modelText = safeString("$version: \"2\"\n"
-                           + "namespace com.foo\n"
-                           + "string Foo\n");
+        String modelText = safeString("""
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """);
         TestWorkspace workspace = TestWorkspace.singleModel(modelText);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -1251,11 +1325,13 @@ public class SmithyLanguageServerTest {
     public void movingDetachedFile() throws Exception {
         TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
         String filename = "main.smithy";
-        String modelText = safeString("$version: \"2\"\n"
-                           + "\n"
-                           + "namespace com.foo\n"
-                           + "\n"
-                           + "string Foo\n");
+        String modelText = safeString("""
+                $version: "2"
+
+                namespace com.foo
+
+                string Foo
+                """);
         workspace.addModel(filename, modelText);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -1294,13 +1370,15 @@ public class SmithyLanguageServerTest {
         TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
 
         String filename1 = "model/main.smithy";
-        String modelText1 = safeString("$version: \"2\"\n"
-                            + "\n"
-                            + "namespace com.foo\n"
-                            + "\n"
-                            + "// using an unknown trait\n"
-                            + "@foo\n"
-                            + "string Bar\n");
+        String modelText1 = safeString("""
+                $version: "2"
+
+                namespace com.foo
+
+                // using an unknown trait
+                @foo
+                string Bar
+                """);
         workspace.addModel(filename1, modelText1);
 
         StubClient client = new StubClient();
@@ -1322,13 +1400,15 @@ public class SmithyLanguageServerTest {
                 diagnosticWithMessage(containsString("Model.UnresolvedTrait"))));
 
         String filename2 = "model/trait.smithy";
-        String modelText2 = safeString("$version: \"2\"\n"
-                            + "\n"
-                            + "namespace com.foo\n"
-                            + "\n"
-                            + "// adding the missing trait\n"
-                            + "@trait\n"
-                            + "structure foo {}\n");
+        String modelText2 = safeString("""
+                $version: "2"
+
+                namespace com.foo
+
+                // adding the missing trait
+                @trait
+                structure foo {}
+                """);
         workspace.addModel(filename2, modelText2);
 
         String uri2 = workspace.getUri(filename2);
@@ -1347,9 +1427,11 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void invalidSyntaxModelPartiallyLoads() {
-        String modelText1 = safeString("$version: \"2\"\n"
-                            + "namespace com.foo\n"
-                            + "string Foo\n");
+        String modelText1 = safeString("""
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """);
         String modelText2 = safeString("string Bar\n");
         TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
         SmithyLanguageServer server = initFromWorkspace(workspace);
@@ -1388,7 +1470,10 @@ public class SmithyLanguageServerTest {
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
                 .range(LspAdapter.origin())
-                .text(safeString("$version: \"2\"\nnamespace com.foo\n"))
+                .text(safeString("""
+                        $version: "2"
+                        namespace com.foo
+                        """))
                 .build());
 
         server.getLifecycleManager().waitForAllTasks();
@@ -1460,13 +1545,17 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void appliedTraitsAreMaintainedInPartialLoad() throws Exception {
-        String modelText1 = safeString("$version: \"2\"\n"
-                            + "namespace com.foo\n"
-                            + "string Foo\n");
-        String modelText2 = safeString("$version: \"2\"\n"
-                            + "namespace com.foo\n"
-                            + "string Bar\n"
-                            + "apply Foo @length(min: 1)\n");
+        String modelText1 = safeString("""
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """);
+        String modelText2 = safeString("""
+                $version: "2"
+                namespace com.foo
+                string Bar
+                apply Foo @length(min: 1)
+                """);
         TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -1547,7 +1636,11 @@ public class SmithyLanguageServerTest {
 
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
-                .text(safeString("$version: \"2\"\nnamespace com.foo\nstring Foo\n"))
+                .text(safeString("""
+                        $version: "2"
+                        namespace com.foo
+                        string Foo
+                        """))
                 .range(LspAdapter.origin())
                 .build());
         server.getLifecycleManager().waitForAllTasks();
@@ -1560,19 +1653,23 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void completionHoverDefinitionWithAbsoluteIds() throws Exception {
-        String modelText1 = safeString("$version: \"2\"\n"
-                            + "namespace com.foo\n"
-                            + "use com.bar#Bar\n"
-                            + "@com.bar#baz\n"
-                            + "structure Foo {\n"
-                            + "    bar: com.bar#Bar\n"
-                            + "}\n");
-        String modelText2 = safeString("$version: \"2\"\n"
-                            + "namespace com.bar\n"
-                            + "string Bar\n"
-                            + "string Bar2\n"
-                            + "@trait\n"
-                            + "structure baz {}\n");
+        String modelText1 = safeString("""
+                $version: "2"
+                namespace com.foo
+                use com.bar#Bar
+                @com.bar#baz
+                structure Foo {
+                    bar: com.bar#Bar
+                }
+                """);
+        String modelText2 = safeString("""
+                $version: "2"
+                namespace com.bar
+                string Bar
+                string Bar2
+                @trait
+                structure baz {}
+                """);
         TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
@@ -1631,11 +1728,15 @@ public class SmithyLanguageServerTest {
 
     @Test
     public void useCompletionDoesntAutoImport() throws Exception {
-        String modelText1 = safeString("$version: \"2\"\n"
-                            + "namespace com.foo\n");
-        String modelText2 = safeString("$version: \"2\"\n"
-                            + "namespace com.bar\n"
-                            + "string Bar\n");
+        String modelText1 = safeString("""
+                $version: "2"
+                namespace com.foo
+                """);
+        String modelText2 = safeString("""
+                $version: "2"
+                namespace com.bar
+                string Bar
+                """);
         TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 

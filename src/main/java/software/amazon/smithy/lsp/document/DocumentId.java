@@ -13,7 +13,7 @@ import org.eclipse.lsp4j.Range;
  * inaccurate in the sense that the string value it references isn't
  * necessarily a valid identifier, it just looks like an identifier.
  */
-public final class DocumentId {
+public record DocumentId(Type type, CharBuffer idSlice, Range range) {
     /**
      * Represents the different kinds of identifiers that can be used to match.
      */
@@ -41,32 +41,10 @@ public final class DocumentId {
         /**
          * Same as {@link Type#ID}, but with a member - will have a {@code $}.
          */
-        RELATIVE_WITH_MEMBER;
-    }
-
-    private final Type type;
-    private final CharBuffer buffer;
-    private final Range range;
-
-    DocumentId(Type type, CharBuffer buffer, Range range) {
-        this.type = type;
-        this.buffer = buffer;
-        this.range = range;
-    }
-
-    public Type type() {
-        return type;
+        RELATIVE_WITH_MEMBER
     }
 
     public String copyIdValue() {
-        return buffer.toString();
-    }
-
-    public CharBuffer borrowIdValue() {
-        return buffer;
-    }
-
-    public Range range() {
-        return range;
+        return idSlice.toString();
     }
 }

@@ -29,11 +29,13 @@ import software.amazon.smithy.model.shapes.Shape;
 public class DocumentParserTest {
     @Test
     public void jumpsToLines() {
-        String text = "abc\n" +
-                      "def\n" +
-                      "ghi\n" +
-                      "\n" +
-                      "\n";
+        String text = """
+                abc
+                def
+                ghi
+
+
+                """;
         DocumentParser parser = DocumentParser.of(safeString(text));
         assertEquals(0, parser.position());
         assertEquals(1, parser.line());
@@ -224,31 +226,33 @@ public class DocumentParserTest {
 
     @Test
     public void getsDocumentShapes() {
-        String text = "$version: \"2\"\n"
-                + "namespace com.foo\n"
-                + "string Foo\n"
-                + "structure Bar {\n"
-                + "    bar: Foo\n"
-                + "}\n"
-                + "enum Baz {\n"
-                + "    ONE\n"
-                + "    TWO\n"
-                + "}\n"
-                + "intEnum Biz {\n"
-                + "    ONE = 1\n"
-                + "}\n"
-                + "@mixin\n"
-                + "structure Boz {\n"
-                + "    elided: String\n"
-                + "}\n"
-                + "structure Mixed with [Boz] {\n"
-                + "    $elided\n"
-                + "}\n"
-                + "operation Get {\n"
-                + "    input := {\n"
-                + "        a: Integer\n"
-                + "    }\n"
-                + "}\n";
+        String text = """
+                $version: "2"
+                namespace com.foo
+                string Foo
+                structure Bar {
+                    bar: Foo
+                }
+                enum Baz {
+                    ONE
+                    TWO
+                }
+                intEnum Biz {
+                    ONE = 1
+                }
+                @mixin
+                structure Boz {
+                    elided: String
+                }
+                structure Mixed with [Boz] {
+                    $elided
+                }
+                operation Get {
+                    input := {
+                        a: Integer
+                    }
+                }
+                """;
         Set<Shape> shapes = Model.assembler()
                 .addUnparsedModel("main.smithy", text)
                 .assemble()

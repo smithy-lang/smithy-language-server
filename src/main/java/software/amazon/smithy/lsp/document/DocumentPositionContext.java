@@ -40,5 +40,5 @@ public enum DocumentPositionContext {
     /**
      * An unknown or indeterminate position.
      */
-    OTHER;
+    OTHER
 }

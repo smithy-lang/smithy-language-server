@@ -24,7 +24,7 @@ public class ProjectManagerTest {
         manager.updateProjectByName("main", mainProject);
 
         String detachedUri = LspAdapter.toUri("/foo/bar");
-        manager.createDetachedProject(detachedUri, "");
+        manager.createDetachedProject(detachedUri, "", 1);
 
         String mainUri = LspAdapter.toUri(attachedRoot.resolve("main.smithy").toString());
 

@@ -127,10 +127,11 @@ public final class ProjectManager {
     /**
      * @param uri The URI of the file to create a detached project for
      * @param text The text of the file to create a detached project for
+     * @param version The version of the document
      * @return A new detached project of the given {@code uri} and {@code text}
      */
-    public Project createDetachedProject(String uri, String text) {
-        Project project = ProjectLoader.loadDetached(uri, text);
+    public Project createDetachedProject(String uri, String text, int version) {
+        Project project = ProjectLoader.loadDetached(uri, text, version);
         detached.put(uri, project);
         return project;
     }

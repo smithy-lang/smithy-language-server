@@ -23,10 +23,16 @@ import software.amazon.smithy.lsp.protocol.LspAdapter;
 public final class Document {
     private final StringBuilder buffer;
     private int[] lineIndices;
+    private int changeVersion;
 
     private Document(StringBuilder buffer, int[] lineIndices) {
+        this(buffer, lineIndices, 0);
+    }
+
+    private Document(StringBuilder buffer, int[] lineIndices, int changeVersion) {
         this.buffer = buffer;
         this.lineIndices = lineIndices;
+        this.changeVersion = changeVersion;
     }
 
     /**
@@ -43,7 +49,7 @@ public final class Document {
      * @return A copy of this document
      */
     public Document copy() {
-        return new Document(new StringBuilder(copyText()), lineIndices.clone());
+        return new Document(new StringBuilder(copyText()), lineIndices.clone(), changeVersion);
     }
 
     /**
@@ -70,6 +76,14 @@ public final class Document {
             }
         }
         this.lineIndices = computeLineIndicies(buffer);
+    }
+
+    public int changeVersion() {
+        return changeVersion;
+    }
+
+    public void bumpVersion(int to) {
+        changeVersion = to;
     }
 
     /**
@@ -322,7 +336,7 @@ public final class Document {
         if (id == null) {
             return null;
         }
-        return id.borrowIdValue();
+        return id.idSlice();
     }
 
     /**

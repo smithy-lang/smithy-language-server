@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package software.amazon.smithy.lsp;
+package software.amazon.smithy.lsp.ext;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -21,7 +21,6 @@ import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest;
 import org.eclipse.lsp4j.jsonrpc.services.JsonSegment;
-import software.amazon.smithy.lsp.ext.serverstatus.ServerStatus;
 
 /**
  * Interface for protocol extensions for Smithy.

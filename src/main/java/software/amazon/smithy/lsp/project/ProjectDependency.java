@@ -11,34 +11,15 @@ import software.amazon.smithy.model.node.ObjectNode;
 /**
  * An arbitrary project dependency, used to specify non-maven dependencies
  * that exist locally.
+ *
+ * @param name The name of the dependency
+ * @param path The path of the dependency
  */
-final class ProjectDependency {
-    private final String name;
-    private final String path;
-
-    private ProjectDependency(String name, String path) {
-        this.name = name;
-        this.path = path;
-    }
-
+record ProjectDependency(String name, String path) {
     static ProjectDependency fromNode(Node node) {
         ObjectNode objectNode = node.expectObjectNode();
         String name = objectNode.expectStringMember("name").getValue();
         String path = objectNode.expectStringMember("path").getValue();
         return new ProjectDependency(name, path);
-    }
-
-    /**
-     * @return The name of the dependency
-     */
-    public String name() {
-        return name;
-    }
-
-    /**
-     * @return The path of the dependency
-     */
-    public String path() {
-        return path;
     }
 }

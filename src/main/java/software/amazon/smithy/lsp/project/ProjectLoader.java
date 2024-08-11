@@ -63,9 +63,10 @@ public final class ProjectLoader {
      *
      * @param uri URI of the file to load into a project
      * @param text Text of the file to load into a project
+     * @param version The version of the document
      * @return The loaded project
      */
-    public static Project loadDetached(String uri, String text) {
+    public static Project loadDetached(String uri, String text, int version) {
         LOGGER.info("Loading detached project at " + uri);
         String asPath = LspAdapter.toPath(uri);
         ValidatedResult<Model> modelResult = Model.assembler()
@@ -88,7 +89,9 @@ public final class ProjectLoader {
             if (LspAdapter.isSmithyJarFile(filePath) || LspAdapter.isJarFile(filePath)) {
                 return Document.of(IoUtils.readUtf8Url(LspAdapter.jarUrl(filePath)));
             } else if (filePath.equals(asPath)) {
-                return Document.of(text);
+                Document document = Document.of(text);
+                document.bumpVersion(version);
+                return document;
             } else {
                 // TODO: Make generic 'please file a bug report' exception
                 throw new IllegalStateException(
@@ -270,7 +273,8 @@ public final class ProjectLoader {
                 .namespace(namespace)
                 .imports(imports)
                 .documentShapes(documentShapes)
-                .documentVersion(documentVersion);
+                .documentVersion(documentVersion)
+                .changeVersion(document.changeVersion());
     }
 
     // This is gross, but necessary to deal with the way that array metadata gets merged.
@@ -378,7 +382,7 @@ public final class ProjectLoader {
         }
     }
 
-    private static void collectJar(List<Path> accumulator, String jarRoot, Path jarPath) throws IOException {
+    private static void collectJar(List<Path> accumulator, String jarRoot, Path jarPath) {
         URL manifestUrl = ModelDiscovery.createSmithyJarManifestUrl(jarPath.toString());
 
         String prefix = computeJarFilePrefix(jarRoot, jarPath);

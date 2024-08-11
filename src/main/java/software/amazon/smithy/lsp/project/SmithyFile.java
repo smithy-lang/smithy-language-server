@@ -34,6 +34,7 @@ public final class SmithyFile {
     private final DocumentImports imports;
     private final Map<Position, DocumentShape> documentShapes;
     private final DocumentVersion documentVersion;
+    private int changeVersion;
 
     private SmithyFile(Builder builder) {
         this.path = builder.path;
@@ -43,6 +44,7 @@ public final class SmithyFile {
         this.imports = builder.imports;
         this.documentShapes = builder.documentShapes;
         this.documentVersion = builder.documentVersion;
+        this.changeVersion = builder.changeVersion;
     }
 
     /**
@@ -141,6 +143,14 @@ public final class SmithyFile {
         return imports.imports().contains(shapeId);
     }
 
+    public int changeVersion() {
+        return changeVersion;
+    }
+
+    public void setChangeVersion(int changeVersion) {
+        this.changeVersion = changeVersion;
+    }
+
     /**
      * @return A {@link SmithyFile} builder
      */
@@ -156,6 +166,7 @@ public final class SmithyFile {
         private DocumentImports imports;
         private Map<Position, DocumentShape> documentShapes;
         private DocumentVersion documentVersion;
+        private int changeVersion;
 
         private Builder() {
         }
@@ -192,6 +203,11 @@ public final class SmithyFile {
 
         public Builder documentVersion(DocumentVersion documentVersion) {
             this.documentVersion = documentVersion;
+            return this;
+        }
+
+        public Builder changeVersion(int changeVersion) {
+            this.changeVersion = changeVersion;
             return this;
         }
 

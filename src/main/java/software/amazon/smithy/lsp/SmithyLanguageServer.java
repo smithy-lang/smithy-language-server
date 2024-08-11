@@ -101,8 +101,10 @@ import software.amazon.smithy.lsp.diagnostics.SmithyDiagnostics;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.document.DocumentShape;
-import software.amazon.smithy.lsp.ext.serverstatus.OpenProject;
-import software.amazon.smithy.lsp.ext.serverstatus.ServerStatus;
+import software.amazon.smithy.lsp.ext.OpenProject;
+import software.amazon.smithy.lsp.ext.SelectorParams;
+import software.amazon.smithy.lsp.ext.ServerStatus;
+import software.amazon.smithy.lsp.ext.SmithyProtocolExtensions;
 import software.amazon.smithy.lsp.handler.CompletionHandler;
 import software.amazon.smithy.lsp.handler.DefinitionHandler;
 import software.amazon.smithy.lsp.handler.FileWatcherRegistrationHandler;
@@ -191,25 +193,22 @@ public class SmithyLanguageServer implements
     public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
         LOGGER.info("Initialize");
 
-        // TODO: Use this to manage shutdown if the parent process exits, after upgrading jdk
-        // Optional.ofNullable(params.getProcessId())
-        //         .flatMap(ProcessHandle::of)
-        //         .ifPresent(processHandle -> {
-        //             processHandle.onExit().thenRun(this::exit);
-        //         });
+        Optional.ofNullable(params.getProcessId())
+                .flatMap(ProcessHandle::of)
+                .ifPresent(processHandle -> processHandle.onExit().thenRun(this::exit));
 
         // TODO: Replace with a Gson Type Adapter if more config options are added beyond `logToFile`.
         Object initializationOptions = params.getInitializationOptions();
-        if (initializationOptions instanceof JsonObject) {
-            JsonObject jsonObject = (JsonObject) initializationOptions;
+        if (initializationOptions instanceof JsonObject jsonObject) {
             if (jsonObject.has("diagnostics.minimumSeverity")) {
                 String configuredMinimumSeverity = jsonObject.get("diagnostics.minimumSeverity").getAsString();
                 Optional<Severity> severity = Severity.fromString(configuredMinimumSeverity);
                 if (severity.isPresent()) {
                     this.minimumSeverity = severity.get();
                 } else {
-                    client.error("Invalid value for 'diagnostics.minimumSeverity': " + configuredMinimumSeverity
-                                 + ".\nMust be one of " + Arrays.toString(Severity.values()));
+                    client.error(String.format("""
+                            Invalid value for 'diagnostics.minimumSeverity': %s.
+                            Must be one of %s.""", configuredMinimumSeverity, Arrays.toString(Severity.values())));
                 }
             }
             if (jsonObject.has("onlyReloadOnSave")) {
@@ -300,7 +299,8 @@ public class SmithyLanguageServer implements
                 if (lifecycleManager.managedDocuments().contains(removedUri)) {
                     Document removedDocument = oldProject.getDocument(removedUri);
                     // The copy here is technically unnecessary, if we make ModelAssembler support borrowed strings
-                    projects.createDetachedProject(removedUri, removedDocument.copyText());
+                    projects.createDetachedProject(
+                            removedUri, removedDocument.copyText(), removedDocument.changeVersion());
                 }
             }
         }
@@ -365,7 +365,7 @@ public class SmithyLanguageServer implements
         LOGGER.info("SelectorCommand");
         Selector selector;
         try {
-            selector = Selector.parse(selectorParams.getExpression());
+            selector = Selector.parse(selectorParams.expression());
         } catch (Exception e) {
             LOGGER.info("Invalid selector");
             // TODO: Respond with error somehow
@@ -511,16 +511,18 @@ public class SmithyLanguageServer implements
                 document.applyEdit(document.fullRange(), contentChangeEvent.getText());
             }
         }
+        document.bumpVersion(params.getTextDocument().getVersion());
 
         if (!onlyReloadOnSave) {
-            // TODO: A consequence of this is that any existing validation events are cleared, which
-            //  is kinda annoying.
-            // Report any parse/shape/trait loading errors
             Project project = projects.getProject(uri);
             if (project == null) {
                 client.unknownFileError(uri, "change");
                 return;
             }
+
+            // TODO: A consequence of this is that any existing validation events are cleared, which
+            //  is kinda annoying.
+            // Report any parse/shape/trait loading errors
             CompletableFuture<Void> future = CompletableFuture
                     .runAsync(() -> project.updateModelWithoutValidating(uri))
                     .thenComposeAsync(unused -> sendFileDiagnostics(uri));
@@ -539,11 +541,15 @@ public class SmithyLanguageServer implements
 
         String text = params.getTextDocument().getText();
         Document document = projects.getDocument(uri);
+        int version = params.getTextDocument().getVersion();
         if (document != null) {
             document.applyEdit(null, text);
+            document.bumpVersion(version);
         } else {
-            projects.createDetachedProject(uri, text);
+            projects.createDetachedProject(uri, text, version);
         }
+        SmithyFile smithyFile = projects.getProject(uri).getSmithyFile(uri);
+        smithyFile.setChangeVersion(version);
 
         lifecycleManager.putTask(uri, sendFileDiagnostics(uri));
     }
@@ -627,11 +633,12 @@ public class SmithyLanguageServer implements
         Project project = projects.getProject(uri);
         SmithyFile smithyFile = project.getSmithyFile(uri);
 
-        return CompletableFutures.computeAsync((cc) -> {
-            if (smithyFile == null) {
-                return Collections.emptyList();
-            }
+        if (smithyFile.changeVersion() != smithyFile.document().changeVersion()) {
+            client.info("[DocumentSymbol] document out of sync, canceling");
+            return completedFuture(Collections.emptyList());
+        }
 
+        return CompletableFutures.computeAsync((cc) -> {
             Collection<DocumentShape> documentShapes = smithyFile.documentShapes();
             if (documentShapes.isEmpty()) {
                 return Collections.emptyList();
@@ -643,10 +650,6 @@ public class SmithyLanguageServer implements
 
             List<Either<SymbolInformation, DocumentSymbol>> documentSymbols = new ArrayList<>(documentShapes.size());
             for (DocumentShape documentShape : documentShapes) {
-                if (cc.isCanceled()) {
-                    client.info("canceled document symbols");
-                    return Collections.emptyList();
-                }
                 SymbolKind symbolKind;
                 switch (documentShape.kind()) {
                     case Inline:
@@ -662,6 +665,11 @@ public class SmithyLanguageServer implements
                         symbolKind = SymbolKind.Class;
                         break;
                 }
+
+                // Check before copying shapeName, which is actually a reference to the underlying document, and may
+                // be changed.
+                cc.checkCanceled();
+
                 String symbolName = documentShape.shapeName().toString();
                 if (symbolName.isEmpty()) {
                     LOGGER.warning("[DocumentSymbols] Empty shape name for " + documentShape);
@@ -813,16 +821,11 @@ public class SmithyLanguageServer implements
     }
 
     private static DiagnosticSeverity toDiagnosticSeverity(Severity severity) {
-        switch (severity) {
-            case ERROR:
-            case DANGER:
-                return  DiagnosticSeverity.Error;
-            case WARNING:
-                return DiagnosticSeverity.Warning;
-            case NOTE:
-                return DiagnosticSeverity.Information;
-            default:
-                return DiagnosticSeverity.Hint;
-        }
+        return switch (severity) {
+            case ERROR, DANGER -> DiagnosticSeverity.Error;
+            case WARNING -> DiagnosticSeverity.Warning;
+            case NOTE -> DiagnosticSeverity.Information;
+            default -> DiagnosticSeverity.Hint;
+        };
     }
 }
