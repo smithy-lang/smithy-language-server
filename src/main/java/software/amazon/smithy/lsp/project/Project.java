@@ -17,7 +17,13 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import org.eclipse.lsp4j.Position;
 import software.amazon.smithy.lsp.document.Document;
+import software.amazon.smithy.lsp.document.DocumentImports;
+import software.amazon.smithy.lsp.document.DocumentNamespace;
+import software.amazon.smithy.lsp.document.DocumentParser;
+import software.amazon.smithy.lsp.document.DocumentShape;
+import software.amazon.smithy.lsp.document.DocumentVersion;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
@@ -267,9 +273,24 @@ public final class Project {
                 Set<Shape> updatedShapes = getFileShapes(visitedPath, smithyFiles.get(visitedPath).shapes());
                 // Only recompute the rest of the smithy file if it changed
                 if (changedPaths.contains(visitedPath)) {
+                    var documentParser = DocumentParser.forStatements(current.document(), current.statements());
+                    DocumentNamespace documentNamespace = documentParser.documentNamespace();
+                    DocumentImports documentImports = documentParser.documentImports();
+                    Map<Position, DocumentShape> documentShapes = documentParser.documentShapes();
+                    DocumentVersion documentVersion = documentParser.documentVersion();
                     // TODO: Could cache validation events
                     this.smithyFiles.put(visitedPath,
-                            ProjectLoader.buildSmithyFile(visitedPath, current.document(), updatedShapes).build());
+                            SmithyFile.builder()
+                                    .path(visitedPath)
+                                    .document(current.document())
+                                    .shapes(updatedShapes)
+                                    .namespace(documentNamespace)
+                                    .imports(documentImports)
+                                    .documentVersion(documentVersion)
+                                    .documentShapes(documentShapes)
+                                    .statements(current.statements())
+                                    .changeVersion(current.document().changeVersion())
+                                    .build());
                 } else {
                     current.setShapes(updatedShapes);
                     current.setChangeVersion(current.document().changeVersion());

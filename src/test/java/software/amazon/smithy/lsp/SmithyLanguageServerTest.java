@@ -180,7 +180,7 @@ public class SmithyLanguageServerTest {
         CompletionParams completionParams = new RequestBuilders.PositionRequest()
                 .uri(uri)
                 .line(4)
-                .character(10)
+                .character(11)
                 .buildCompletion();
         List<CompletionItem> completions = server.completion(completionParams).get().getLeft();
 
@@ -1754,7 +1754,7 @@ public class SmithyLanguageServerTest {
         List<CompletionItem> completions = server.completion(RequestBuilders.positionRequest()
                 .uri(uri)
                 .line(2)
-                .character(5)
+                .character(6)
                 .buildCompletion())
                 .get()
                 .getLeft();

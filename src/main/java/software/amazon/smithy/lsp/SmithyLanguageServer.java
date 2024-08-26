@@ -498,11 +498,12 @@ public class SmithyLanguageServer implements
 
         lifecycleManager.cancelTask(uri);
 
-        Document document = projects.getDocument(uri);
-        if (document == null) {
+        SmithyFile smithyFile = projects.getSmithyFile(uri);
+        if (smithyFile == null) {
             client.unknownFileError(uri, "change");
             return;
         }
+        Document document = smithyFile.document();
 
         for (TextDocumentContentChangeEvent contentChangeEvent : params.getContentChanges()) {
             if (contentChangeEvent.getRange() != null) {
@@ -511,7 +512,9 @@ public class SmithyLanguageServer implements
                 document.applyEdit(document.fullRange(), contentChangeEvent.getText());
             }
         }
+
         document.bumpVersion(params.getTextDocument().getVersion());
+        smithyFile.reparse();
 
         if (!onlyReloadOnSave) {
             Project project = projects.getProject(uri);
