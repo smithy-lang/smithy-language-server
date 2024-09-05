@@ -5,6 +5,8 @@
 
 package software.amazon.smithy.lsp;
 
+import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import java.util.Optional;
 import org.hamcrest.CustomTypeSafeMatcher;
 import org.hamcrest.Description;
@@ -30,6 +32,24 @@ public final class UtilMatchers {
                 } else {
                     matcher.describeMismatch(item.get(), description);
                 }
+            }
+        };
+    }
+
+    public static Matcher<PathMatcher> canMatchPath(Path path) {
+        // PathMatcher implementations don't seem to have a nice toString, so this Matcher
+        // doesn't print out the PathMatcher that couldn't match, but we could wrap the
+        // system default PathMatcher in one that stores the original pattern, if this
+        // Matcher becomes too hard to diagnose failures for.
+        return new CustomTypeSafeMatcher<PathMatcher>("A matcher that matches " + path) {
+            @Override
+            protected boolean matchesSafely(PathMatcher item) {
+                return item.matches(path);
+            }
+
+            @Override
+            protected void describeMismatchSafely(PathMatcher item, Description mismatchDescription) {
+                mismatchDescription.appendText("did not match");
             }
         };
     }

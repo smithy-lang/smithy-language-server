@@ -25,10 +25,12 @@ public final class TestWorkspace {
     private static final NodeMapper MAPPER = new NodeMapper();
     private final Path root;
     private SmithyBuildConfig config;
+    private final String name;
 
-    private TestWorkspace(Path root, SmithyBuildConfig config) {
+    private TestWorkspace(Path root, SmithyBuildConfig config, String name) {
         this.root = root;
         this.config = config;
+        this.name = name;
     }
 
     /**
@@ -40,6 +42,10 @@ public final class TestWorkspace {
 
     public SmithyBuildConfig getConfig() {
         return config;
+    }
+
+    public String getName() {
+        return name;
     }
 
     /**
@@ -99,7 +105,7 @@ public final class TestWorkspace {
      */
     public static TestWorkspace emptyWithDirSource() {
         return builder()
-                .withSourceDir(new Dir().path("model"))
+                .withSourceDir(new Dir().withPath("model"))
                 .build();
     }
 
@@ -131,7 +137,7 @@ public final class TestWorkspace {
         List<Dir> sourceDirs = new ArrayList<>();
         List<Dir> importDirs = new ArrayList<>();
 
-        public Dir path(String path) {
+        public Dir withPath(String path) {
             this.path = path;
             return this;
         }
@@ -179,7 +185,15 @@ public final class TestWorkspace {
 
     public static final class Builder extends Dir {
         private SmithyBuildConfig config = null;
+        private String name = "";
+
         private Builder() {}
+
+        @Override
+        public Builder withPath(String path) {
+            this.path = path;
+            return this;
+        }
 
         @Override
         public Builder withSourceFile(String filename, String model) {
@@ -210,6 +224,11 @@ public final class TestWorkspace {
             return this;
         }
 
+        public Builder withName(String name) {
+            this.name = name;
+            return this;
+        }
+
         public TestWorkspace build() {
             try {
                 if (path == null) {
@@ -237,7 +256,7 @@ public final class TestWorkspace {
 
                 writeModels(root);
 
-                return new TestWorkspace(root, config);
+                return new TestWorkspace(root, config, name);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

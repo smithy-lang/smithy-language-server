@@ -17,6 +17,7 @@ import org.eclipse.lsp4j.CompletionTriggerKind;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
+import org.eclipse.lsp4j.DidChangeWorkspaceFoldersParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
@@ -31,6 +32,7 @@ import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.WorkspaceFolder;
+import org.eclipse.lsp4j.WorkspaceFoldersChangeEvent;
 import software.amazon.smithy.utils.IoUtils;
 
 /**
@@ -67,11 +69,15 @@ public final class RequestBuilders {
         return new DidChangeWatchedFiles();
     }
 
+    public static DidChangeWorkspaceFolders didChangeWorkspaceFolders() {
+        return new DidChangeWorkspaceFolders();
+    }
+
     public static final class DidChange {
-        public String uri;
-        public Integer version;
-        public Range range;
-        public String text;
+        private String uri;
+        private Integer version;
+        private Range range;
+        private String text;
 
         public DidChange next() {
             this.version += 1;
@@ -112,8 +118,8 @@ public final class RequestBuilders {
     }
 
     public static final class Initialize {
-        public List<WorkspaceFolder> workspaceFolders = new ArrayList<>();
-        public Object initializationOptions;
+        private final List<WorkspaceFolder> workspaceFolders = new ArrayList<>();
+        private Object initializationOptions;
 
         public Initialize workspaceFolder(String uri, String name) {
             this.workspaceFolders.add(new WorkspaceFolder(uri, name));
@@ -137,7 +143,7 @@ public final class RequestBuilders {
     }
 
     public static final class DidClose {
-        public String uri;
+        private String uri;
 
         public DidClose uri(String uri) {
             this.uri = uri;
@@ -150,10 +156,10 @@ public final class RequestBuilders {
     }
 
     public static final class DidOpen {
-        public String uri;
-        public String languageId = "smithy";
-        public int version = 1;
-        public String text;
+        private String uri;
+        private String languageId = "smithy";
+        private int version = 1;
+        private String text;
 
         public DidOpen uri(String uri) {
             this.uri = uri;
@@ -184,7 +190,7 @@ public final class RequestBuilders {
     }
 
     public static final class DidSave {
-        String uri;
+        private String uri;
 
         public DidSave uri(String uri) {
             this.uri = uri;
@@ -197,9 +203,9 @@ public final class RequestBuilders {
     }
 
     public static final class PositionRequest {
-        String uri;
-        int line;
-        int character;
+        private String uri;
+        private int line;
+        private int character;
 
         public PositionRequest uri(String uri) {
             this.uri = uri;
@@ -239,7 +245,7 @@ public final class RequestBuilders {
     }
 
     public static final class DidChangeWatchedFiles {
-        public final List<FileEvent> changes = new ArrayList<>();
+        private final List<FileEvent> changes = new ArrayList<>();
 
         public DidChangeWatchedFiles event(String uri, FileChangeType type) {
             this.changes.add(new FileEvent(uri, type));
@@ -248,6 +254,26 @@ public final class RequestBuilders {
 
         public DidChangeWatchedFilesParams build() {
             return new DidChangeWatchedFilesParams(changes);
+        }
+    }
+
+    public static final class DidChangeWorkspaceFolders {
+        private final List<WorkspaceFolder> added = new ArrayList<>();
+        private final List<WorkspaceFolder> removed = new ArrayList<>();
+
+        public DidChangeWorkspaceFolders added(String uri, String name) {
+            this.added.add(new WorkspaceFolder(uri, name));
+            return this;
+        }
+
+        public DidChangeWorkspaceFolders removed(String uri, String name) {
+            this.removed.add(new WorkspaceFolder(uri, name));
+            return this;
+        }
+
+        public DidChangeWorkspaceFoldersParams build() {
+            return new DidChangeWorkspaceFoldersParams(
+                    new WorkspaceFoldersChangeEvent(added, removed));
         }
     }
 }
