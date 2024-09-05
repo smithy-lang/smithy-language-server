@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 import org.eclipse.lsp4j.FileChangeType;
 import org.eclipse.lsp4j.FileEvent;
 import org.eclipse.lsp4j.WorkspaceFolder;
@@ -21,8 +22,10 @@ import software.amazon.smithy.lsp.protocol.LspAdapter;
  * Manages open projects tracked by the server.
  */
 public final class ProjectManager {
+    private static final Logger LOGGER = Logger.getLogger(ProjectManager.class.getName());
+
     private final Map<String, Project> detached = new HashMap<>();
-    private final Map<String, Project> projects = new HashMap<>();
+    private final Map<String, Project> attached = new HashMap<>();
 
     public ProjectManager() {
     }
@@ -32,7 +35,7 @@ public final class ProjectManager {
      * @return The project with the given name, if it exists
      */
     public Project getProjectByName(String name) {
-        return this.projects.get(name);
+        return this.attached.get(name);
     }
 
     /**
@@ -40,7 +43,7 @@ public final class ProjectManager {
      * @param updated Project to update
      */
     public void updateProjectByName(String name, Project updated) {
-        this.projects.put(name, updated);
+        this.attached.put(name, updated);
     }
 
     /**
@@ -48,7 +51,7 @@ public final class ProjectManager {
      * @return The removed project, if it exists
      */
     public Project removeProjectByName(String name) {
-        return this.projects.remove(name);
+        return this.attached.remove(name);
     }
 
     /**
@@ -63,8 +66,8 @@ public final class ProjectManager {
     /**
      * @return A map of project names to projects tracked by the server
      */
-    public Map<String, Project> nonDetachedProjects() {
-        return projects;
+    public Map<String, Project> attachedProjects() {
+        return attached;
     }
 
     /**
@@ -76,11 +79,13 @@ public final class ProjectManager {
         if (isDetached(uri)) {
             return detached.get(uri);
         }  else  {
-            for (Project project : projects.values()) {
+            for (Project project : attached.values()) {
                 if (project.smithyFiles().containsKey(path)) {
                     return project;
                 }
             }
+
+            LOGGER.warning(() -> "Tried getting project for unknown file: " + uri);
 
             return null;
         }
@@ -116,7 +121,7 @@ public final class ProjectManager {
     }
 
     private Project getNonDetached(String path) {
-        for (Project project : projects.values()) {
+        for (Project project : attached.values()) {
             if (project.smithyFiles().containsKey(path)) {
                 return project;
             }
@@ -159,18 +164,23 @@ public final class ProjectManager {
     /**
      * Computes per-project file changes from the given file events.
      *
+     * <p>>Note: if you have lots of projects, this will create a bunch of
+     * garbage because most times you aren't getting multiple sets of large
+     * updates to a project. Project changes are relatively rare, so this
+     * shouldn't have a huge impact.
+     *
      * @param events The file events to compute per-project file changes from
      * @return A map of project name to the corresponding project's changes
      */
     public Map<String, ProjectChanges> computeProjectChanges(List<FileEvent> events) {
         // Note: we could eagerly compute these and store them, but project changes are relatively rare,
         //  and doing it this way means we don't need to manage the state.
-        Map<String, PathMatcher> projectSmithyFileMatchers = new HashMap<>(nonDetachedProjects().size());
-        Map<String, PathMatcher> projectBuildFileMatchers = new HashMap<>(nonDetachedProjects().size());
+        Map<String, PathMatcher> projectSmithyFileMatchers = new HashMap<>(attachedProjects().size());
+        Map<String, PathMatcher> projectBuildFileMatchers = new HashMap<>(attachedProjects().size());
 
-        Map<String, ProjectChanges> changes = new HashMap<>(nonDetachedProjects().size());
+        Map<String, ProjectChanges> changes = new HashMap<>(attachedProjects().size());
 
-        nonDetachedProjects().forEach((projectName, project) -> {
+        attachedProjects().forEach((projectName, project) -> {
             projectSmithyFileMatchers.put(projectName, ProjectFilePatterns.getSmithyFilesPathMatcher(project));
             projectBuildFileMatchers.put(projectName, ProjectFilePatterns.getBuildFilesPathMatcher(project));
 

@@ -19,6 +19,8 @@ import java.util.stream.Stream;
  * paths of a {@link Project}, such as sources and build files.
  */
 public final class ProjectFilePatterns {
+    private static final int BUILD_FILE_COUNT = 2 + ProjectConfigLoader.SMITHY_BUILD_EXTS.length;
+
     private ProjectFilePatterns() {
     }
 
@@ -52,7 +54,7 @@ public final class ProjectFilePatterns {
         String buildJsonPattern = escapeBackslashes(root.resolve(ProjectConfigLoader.SMITHY_BUILD).toString());
         String projectJsonPattern = escapeBackslashes(root.resolve(ProjectConfigLoader.SMITHY_PROJECT).toString());
 
-        List<String> patterns = new ArrayList<>();
+        List<String> patterns = new ArrayList<>(BUILD_FILE_COUNT);
         patterns.add(buildJsonPattern);
         patterns.add(projectJsonPattern);
         for (String buildExt : ProjectConfigLoader.SMITHY_BUILD_EXTS) {

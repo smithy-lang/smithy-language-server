@@ -1686,8 +1686,8 @@ public class SmithyLanguageServerTest {
 
         SmithyLanguageServer server = initFromWorkspaces(workspaceFoo, workspaceBar);
 
-        assertThat(server.getProjects().nonDetachedProjects(), hasKey("foo"));
-        assertThat(server.getProjects().nonDetachedProjects(), hasKey("bar"));
+        assertThat(server.getProjects().attachedProjects(), hasKey("foo"));
+        assertThat(server.getProjects().attachedProjects(), hasKey("bar"));
 
         assertThat(server.getProjects().getDocument(workspaceFoo.getUri("foo.smithy")), notNullValue());
         assertThat(server.getProjects().getDocument(workspaceBar.getUri("bar.smithy")), notNullValue());
@@ -1971,8 +1971,8 @@ public class SmithyLanguageServerTest {
 
         server.getLifecycleManager().waitForAllTasks();
 
-        assertThat(server.getProjects().nonDetachedProjects(), hasKey("foo"));
-        assertThat(server.getProjects().nonDetachedProjects(), hasKey("bar"));
+        assertThat(server.getProjects().attachedProjects(), hasKey("foo"));
+        assertThat(server.getProjects().attachedProjects(), hasKey("bar"));
 
         assertThat(server.getProjects().getDocument(workspaceFoo.getUri("foo.smithy")), notNullValue());
         assertThat(server.getProjects().getDocument(workspaceBar.getUri("bar.smithy")), notNullValue());
@@ -2027,8 +2027,8 @@ public class SmithyLanguageServerTest {
                 .removed(workspaceBar.getRoot().toUri().toString(), "bar")
                 .build());
 
-        assertThat(server.getProjects().nonDetachedProjects(), hasKey("foo"));
-        assertThat(server.getProjects().nonDetachedProjects(), not(hasKey("bar")));
+        assertThat(server.getProjects().attachedProjects(), hasKey("foo"));
+        assertThat(server.getProjects().attachedProjects(), not(hasKey("bar")));
         assertThat(server.getProjects().detachedProjects(), hasKey(endsWith("bar.smithy")));
         assertThat(server.getProjects().isDetached(workspaceBar.getUri("bar.smithy")), is(true));
 

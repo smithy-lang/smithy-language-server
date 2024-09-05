@@ -161,7 +161,7 @@ public class SmithyLanguageServer implements
     }
 
     Project getFirstProject() {
-        return projects.nonDetachedProjects().values().stream().findFirst().orElse(null);
+        return projects.attachedProjects().values().stream().findFirst().orElse(null);
     }
 
     ProjectManager getProjects() {
@@ -174,7 +174,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public void connect(LanguageClient client) {
-        LOGGER.info("Connect");
+        LOGGER.finest("Connect");
         this.client = new SmithyLanguageClient(client);
         String message = "smithy-language-server";
         try {
@@ -189,7 +189,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
-        LOGGER.info("Initialize");
+        LOGGER.finest("Initialize");
 
         // TODO: Use this to manage shutdown if the parent process exits, after upgrading jdk
         // Optional.ofNullable(params.getProcessId())
@@ -238,12 +238,12 @@ public class SmithyLanguageServer implements
             }
         }
 
-        LOGGER.info("Done initialize");
+        LOGGER.finest("Done initialize");
         return completedFuture(new InitializeResult(CAPABILITIES));
     }
 
     private void tryInitProject(String name, Path root) {
-        LOGGER.info("Initializing project at " + root);
+        LOGGER.finest("Initializing project at " + root);
         lifecycleManager.cancelAllTasks();
         Result<Project, List<Exception>> loadResult = ProjectLoader.load(
                 root, projects, lifecycleManager.managedDocuments());
@@ -251,7 +251,7 @@ public class SmithyLanguageServer implements
             Project updatedProject = loadResult.unwrap();
             resolveDetachedProjects(this.projects.getProjectByName(name), updatedProject);
             this.projects.updateProjectByName(name, updatedProject);
-            LOGGER.info("Initialized project at " + root);
+            LOGGER.finest("Initialized project at " + root);
         } else {
             LOGGER.severe("Init project failed");
             // TODO: Maybe we just start with this anyways by default, and then add to it
@@ -308,7 +308,7 @@ public class SmithyLanguageServer implements
 
     private CompletableFuture<Void> registerSmithyFileWatchers() {
         List<Registration> registrations = FileWatcherRegistrationHandler.getSmithyFileWatcherRegistrations(
-                projects.nonDetachedProjects().values());
+                projects.attachedProjects().values());
         return client.registerCapability(new RegistrationParams(registrations));
     }
 
@@ -320,7 +320,7 @@ public class SmithyLanguageServer implements
     @Override
     public void initialized(InitializedParams params) {
         List<Registration> registrations = FileWatcherRegistrationHandler.getBuildFileWatcherRegistrations(
-                projects.nonDetachedProjects().values());
+                projects.attachedProjects().values());
         client.registerCapability(new RegistrationParams(registrations));
         registerSmithyFileWatchers();
     }
@@ -348,7 +348,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public CompletableFuture<String> jarFileContents(TextDocumentIdentifier textDocumentIdentifier) {
-        LOGGER.info("JarFileContents");
+        LOGGER.finest("JarFileContents");
         String uri = textDocumentIdentifier.getUri();
         Project project = projects.getProject(uri);
         Document document = project.getDocument(uri);
@@ -362,7 +362,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public CompletableFuture<List<? extends Location>> selectorCommand(SelectorParams selectorParams) {
-        LOGGER.info("SelectorCommand");
+        LOGGER.finest("SelectorCommand");
         Selector selector;
         try {
             selector = Selector.parse(selectorParams.getExpression());
@@ -374,7 +374,7 @@ public class SmithyLanguageServer implements
 
         // Select from all available projects
         Collection<Project> detached = projects.detachedProjects().values();
-        Collection<Project> nonDetached = projects.nonDetachedProjects().values();
+        Collection<Project> nonDetached = projects.attachedProjects().values();
 
         return completedFuture(Stream.concat(detached.stream(), nonDetached.stream())
                 .flatMap(project -> project.modelResult().getResult().stream())
@@ -389,7 +389,7 @@ public class SmithyLanguageServer implements
     @Override
     public CompletableFuture<ServerStatus> serverStatus() {
         List<OpenProject> openProjects = new ArrayList<>();
-        for (Project project : projects.nonDetachedProjects().values()) {
+        for (Project project : projects.attachedProjects().values()) {
             openProjects.add(new OpenProject(
                     LspAdapter.toUri(project.root().toString()),
                     project.smithyFiles().keySet().stream()
@@ -410,7 +410,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
-        LOGGER.info("DidChangeWatchedFiles");
+        LOGGER.finest("DidChangeWatchedFiles");
         // Smithy files were added or deleted to watched sources/imports (specified by smithy-build.json),
         // or the smithy-build.json itself was changed
 
@@ -442,7 +442,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params) {
-        LOGGER.info("DidChangeWorkspaceFolders");
+        LOGGER.finest("DidChangeWorkspaceFolders");
 
         Either<String, Integer> progressToken = Either.forLeft(UUID.randomUUID().toString());
         try {
@@ -487,7 +487,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
-        LOGGER.info("DidChange");
+        LOGGER.finest("DidChange");
 
         if (params.getContentChanges().isEmpty()) {
             LOGGER.info("Received empty DidChange");
@@ -530,7 +530,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public void didOpen(DidOpenTextDocumentParams params) {
-        LOGGER.info("DidOpen");
+        LOGGER.finest("DidOpen");
 
         String uri = params.getTextDocument().getUri();
 
@@ -550,7 +550,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public void didClose(DidCloseTextDocumentParams params) {
-        LOGGER.info("DidClose");
+        LOGGER.finest("DidClose");
 
         String uri = params.getTextDocument().getUri();
         lifecycleManager.managedDocuments().remove(uri);
@@ -566,7 +566,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
-        LOGGER.info("DidSave");
+        LOGGER.finest("DidSave");
 
         String uri = params.getTextDocument().getUri();
         lifecycleManager.cancelTask(uri);
@@ -591,7 +591,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams params) {
-        LOGGER.info("Completion");
+        LOGGER.finest("Completion");
 
         String uri = params.getTextDocument().getUri();
         if (!projects.isTracked(uri)) {
@@ -609,7 +609,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public CompletableFuture<CompletionItem> resolveCompletionItem(CompletionItem unresolved) {
-        LOGGER.info("ResolveCompletion");
+        LOGGER.finest("ResolveCompletion");
         // TODO: Use this to add the import when a completion item is selected, if its expensive
         return completedFuture(unresolved);
     }
@@ -617,7 +617,7 @@ public class SmithyLanguageServer implements
     @Override
     public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>>
     documentSymbol(DocumentSymbolParams params) {
-        LOGGER.info("DocumentSymbol");
+        LOGGER.finest("DocumentSymbol");
         String uri = params.getTextDocument().getUri();
         if (!projects.isTracked(uri)) {
             client.unknownFileError(uri, "document symbol");
@@ -679,7 +679,7 @@ public class SmithyLanguageServer implements
     @Override
     public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>>
     definition(DefinitionParams params) {
-        LOGGER.info("Definition");
+        LOGGER.finest("Definition");
 
         String uri = params.getTextDocument().getUri();
         if (!projects.isTracked(uri)) {
@@ -695,7 +695,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public CompletableFuture<Hover> hover(HoverParams params) {
-        LOGGER.info("Hover");
+        LOGGER.finest("Hover");
 
         String uri = params.getTextDocument().getUri();
         if (!projects.isTracked(uri)) {
@@ -722,7 +722,7 @@ public class SmithyLanguageServer implements
 
     @Override
     public CompletableFuture<List<? extends TextEdit>> formatting(DocumentFormattingParams params) {
-        LOGGER.info("Formatting");
+        LOGGER.finest("Formatting");
         String uri = params.getTextDocument().getUri();
         Project project = projects.getProject(uri);
         Document document = project.getDocument(uri);
