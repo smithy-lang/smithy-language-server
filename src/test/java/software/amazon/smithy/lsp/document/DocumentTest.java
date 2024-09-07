@@ -166,9 +166,10 @@ public class DocumentTest {
 
         document.applyEdit(editRange, editText);
 
-        assertThat(document.copyText(), equalTo(safeString("abzx\n" +
-                                                "yc\n" +
-                                                "def")));
+        assertThat(document.copyText(), equalTo(safeString("""
+                abzx
+                yc
+                def""")));
         assertThat(document.indexOfLine(0), equalTo(0));
         assertThat(document.indexOfLine(1), equalTo(safeIndex(5, 1)));
         assertThat(document.indexOfLine(2), equalTo(safeIndex(8, 2)));
@@ -198,9 +199,11 @@ public class DocumentTest {
 
     @Test
     public void getsIndexOfLine() {
-        String s = "abc\n" +
-                   "def\n" +
-                   "hij\n";
+        String s = """
+                abc
+                def
+                hij
+                """;
         Document document = makeDocument(s);
 
         assertThat(document.indexOfLine(0), equalTo(0));
@@ -461,7 +464,6 @@ public class DocumentTest {
 
     // Makes a string literal with '\n' newline characters use the actual OS line separator.
     // Don't use this if you didn't manually type out the '\n's.
-    // TODO: Remove this for textblocks
     public static String safeString(String s) {
         return s.replace("\n", System.lineSeparator());
     }
@@ -471,11 +473,12 @@ public class DocumentTest {
     }
 
     public static Matcher<CharSequence> string(String other) {
-        return new CustomTypeSafeMatcher<CharSequence>(other) {
+        return new CustomTypeSafeMatcher<>(other) {
             @Override
             protected boolean matchesSafely(CharSequence item) {
                 return other.replace("\n", "\\n").replace("\r", "\\r").equals(item.toString().replace("\n", "\\n").replace("\r", "\\r"));
             }
+
             @Override
             public void describeMismatchSafely(CharSequence item, Description description) {
                 String o = other.replace("\n", "\\n").replace("\r", "\\r");
@@ -486,7 +489,7 @@ public class DocumentTest {
     }
 
     public static Matcher<DocumentId> documentShapeId(String other, DocumentId.Type type) {
-        return new CustomTypeSafeMatcher<DocumentId>(other + " with type: " + type) {
+        return new CustomTypeSafeMatcher<>(other + " with type: " + type) {
             @Override
             protected boolean matchesSafely(DocumentId item) {
                 return other.equals(item.copyIdValue()) && item.type() == type;

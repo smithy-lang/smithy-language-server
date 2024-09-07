@@ -24,7 +24,7 @@ public final class SmithyMatchers {
     private SmithyMatchers() {}
 
     public static <T> Matcher<ValidatedResult<T>> hasValue(Matcher<T> matcher) {
-        return new CustomTypeSafeMatcher<ValidatedResult<T>>("A validated result with value " + matcher.toString()) {
+        return new CustomTypeSafeMatcher<>("A validated result with value " + matcher.toString()) {
             @Override
             protected boolean matchesSafely(ValidatedResult<T> item) {
                 return item.getResult().isPresent() && matcher.matches(item.getResult().get());
@@ -42,7 +42,7 @@ public final class SmithyMatchers {
     }
 
     public static Matcher<Model> hasShapeWithId(String id) {
-        return new CustomTypeSafeMatcher<Model>("a model with the shape id `" + id + "`") {
+        return new CustomTypeSafeMatcher<>("a model with the shape id `" + id + "`") {
             @Override
             protected boolean matchesSafely(Model item) {
                 return item.getShape(ShapeId.from(id)).isPresent();
@@ -59,7 +59,7 @@ public final class SmithyMatchers {
     }
 
     public static Matcher<ValidationEvent> eventWithMessage(Matcher<String> message) {
-        return new CustomTypeSafeMatcher<ValidationEvent>("has matching message") {
+        return new CustomTypeSafeMatcher<>("has matching message") {
             @Override
             protected boolean matchesSafely(ValidationEvent item) {
                 return message.matches(item.getMessage());

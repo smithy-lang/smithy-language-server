@@ -44,12 +44,12 @@ public final class DefinitionHandler {
     public List<Location> handle(DefinitionParams params) {
         Position position = params.getPosition();
         DocumentId id = smithyFile.document().copyDocumentId(position);
-        if (id == null || id.borrowIdValue().length() == 0) {
+        if (id == null || id.idSlice().isEmpty()) {
             return Collections.emptyList();
         }
 
         Optional<Model> modelResult = project.modelResult().getResult();
-        if (!modelResult.isPresent()) {
+        if (modelResult.isEmpty()) {
             return Collections.emptyList();
         }
 
@@ -78,19 +78,13 @@ public final class DefinitionHandler {
     }
 
     private static Stream<Shape> contextualShapes(Model model, DocumentPositionContext context) {
-        switch (context) {
-            case TRAIT:
-                return model.getShapesWithTrait(TraitDefinition.class).stream();
-            case MEMBER_TARGET:
-                return model.shapes()
-                        .filter(shape -> !shape.isMemberShape())
-                        .filter(shape -> !shape.hasTrait(TraitDefinition.class));
-            case MIXIN:
-                return model.getShapesWithTrait(MixinTrait.class).stream();
-            case SHAPE_DEF:
-            case OTHER:
-            default:
-                return model.shapes().filter(shape -> !shape.isMemberShape());
-        }
+        return switch (context) {
+            case TRAIT -> model.getShapesWithTrait(TraitDefinition.class).stream();
+            case MEMBER_TARGET -> model.shapes()
+                    .filter(shape -> !shape.isMemberShape())
+                    .filter(shape -> !shape.hasTrait(TraitDefinition.class));
+            case MIXIN -> model.getShapesWithTrait(MixinTrait.class).stream();
+            default -> model.shapes().filter(shape -> !shape.isMemberShape());
+        };
     }
 }

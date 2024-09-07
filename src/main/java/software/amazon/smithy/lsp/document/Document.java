@@ -322,7 +322,7 @@ public final class Document {
         if (id == null) {
             return null;
         }
-        return id.borrowIdValue();
+        return id.idSlice();
     }
 
     /**

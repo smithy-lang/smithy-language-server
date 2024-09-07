@@ -89,7 +89,7 @@ public final class Result<T, E> {
      * @return The successful value, or throw an exception if this Result is failed
      */
     public T unwrap() {
-        if (!get().isPresent()) {
+        if (get().isEmpty()) {
             throw new RuntimeException("Called unwrap on an Err Result: " + getErr().get());
         }
         return get().get();
@@ -99,7 +99,7 @@ public final class Result<T, E> {
      * @return The failed value, or throw an exception if this Result is successful
      */
     public E unwrapErr() {
-        if (!getErr().isPresent()) {
+        if (getErr().isEmpty()) {
             throw new RuntimeException("Called unwrapErr on an Ok Result: " + get().get());
         }
         return getErr().get();

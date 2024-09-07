@@ -13,20 +13,15 @@
  * permissions and limitations under the License.
  */
 
-package software.amazon.smithy.lsp;
+package software.amazon.smithy.lsp.ext;
 
-import org.eclipse.lsp4j.jsonrpc.util.Preconditions;
 import org.eclipse.lsp4j.jsonrpc.validation.NonNull;
 
-public class SelectorParams {
-    @NonNull
-    private final String expression;
+/**
+ * Input to the {@link SmithyProtocolExtensions#selectorCommand(SelectorParams)}
+ * request.
+ *
+ * @param expression The selector expression to execute
+ */
+public record SelectorParams(@NonNull String expression) {}
 
-    public SelectorParams(@NonNull final String selector) {
-        this.expression = Preconditions.checkNotNull(selector, "selector");
-    }
-
-    public String getExpression() {
-        return this.expression;
-    }
-}

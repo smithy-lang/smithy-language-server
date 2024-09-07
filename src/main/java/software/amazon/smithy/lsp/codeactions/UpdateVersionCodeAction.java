@@ -15,7 +15,6 @@
 
 package software.amazon.smithy.lsp.codeactions;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.eclipse.lsp4j.CodeAction;
@@ -41,7 +40,7 @@ public final class UpdateVersionCodeAction {
         codeAction.setKind(SmithyCodeActions.SMITHY_UPDATE_VERSION);
         WorkspaceEdit wEdit = new WorkspaceEdit();
         TextEdit edit = new TextEdit(versionStatementRange, "$version: \"" + LATEST_VERSION + "\"");
-        Map<String, List<TextEdit>> changes = Collections.singletonMap(fileUri, Collections.singletonList(edit));
+        Map<String, List<TextEdit>> changes = Map.of(fileUri, List.of(edit));
         wEdit.setChanges(changes);
         codeAction.setEdit(wEdit);
         return codeAction;

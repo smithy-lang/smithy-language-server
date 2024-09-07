@@ -9,27 +9,8 @@ import org.eclipse.lsp4j.Range;
 
 /**
  * The Smithy version of the document, including the range it occupies.
+ *
+ * @param range The range of the version statement
+ * @param version The literal text of the version value
  */
-public final class DocumentVersion {
-    private final Range range;
-    private final String version;
-
-    DocumentVersion(Range range, String version) {
-        this.range = range;
-        this.version = version;
-    }
-
-    /**
-     * @return The range of the version statement
-     */
-    public Range range() {
-        return range;
-    }
-
-    /**
-     * @return The literal text of the version value
-     */
-    public String version() {
-        return version;
-    }
-}
+public record DocumentVersion(Range range, String version) {}

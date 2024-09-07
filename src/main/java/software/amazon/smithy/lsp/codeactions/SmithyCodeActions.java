@@ -62,11 +62,8 @@ public final class SmithyCodeActions {
         }
         Optional<Diagnostic> updateVersionDiagnostic = params.getContext().getDiagnostics().stream()
                 .filter(diagnosticCodePredicate(SmithyDiagnostics.UPDATE_VERSION)).findFirst();
-        if (updateVersionDiagnostic.isPresent()) {
-            actions.add(
-                UpdateVersionCodeAction.build(fileUri, updateVersionDiagnostic.get().getRange())
-            );
-        }
+        updateVersionDiagnostic.ifPresent(diagnostic -> actions.add(
+                UpdateVersionCodeAction.build(fileUri, diagnostic.getRange())));
 
         return actions;
     }

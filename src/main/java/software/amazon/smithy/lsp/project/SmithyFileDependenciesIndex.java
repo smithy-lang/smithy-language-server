@@ -82,7 +82,7 @@ final class SmithyFileDependenciesIndex {
 
     // TODO: Make this take care of metadata too
     static SmithyFileDependenciesIndex compute(ValidatedResult<Model> modelResult) {
-        if (!modelResult.getResult().isPresent()) {
+        if (modelResult.getResult().isEmpty()) {
             return new SmithyFileDependenciesIndex();
         }
 

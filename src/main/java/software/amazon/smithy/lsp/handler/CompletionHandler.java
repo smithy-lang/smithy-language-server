@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.CompletionContext;
@@ -97,7 +98,7 @@ public final class CompletionHandler {
 
         // TODO: Maybe we should only copy the token up to the current character
         DocumentId id = smithyFile.document().copyDocumentId(position);
-        if (id == null || id.borrowIdValue().length() == 0) {
+        if (id == null || id.idSlice().isEmpty()) {
             return Collections.emptyList();
         }
 
@@ -106,7 +107,7 @@ public final class CompletionHandler {
         }
 
         Optional<Model> modelResult = project.modelResult().getResult();
-        if (!modelResult.isPresent()) {
+        if (modelResult.isEmpty()) {
             return Collections.emptyList();
         }
         Model model = modelResult.get();
@@ -119,11 +120,11 @@ public final class CompletionHandler {
 
         return contextualShapes(model, context, smithyFile)
                 .filter(contextualMatcher(id, context))
-                // TODO: Use mapMulti when we upgrade jdk>16
-                .collect(ArrayList::new, completionsFactory(context, model, smithyFile, id), ArrayList::addAll);
+                .mapMulti(completionsFactory(context, model, smithyFile, id))
+                .toList();
     }
 
-    private static BiConsumer<ArrayList<CompletionItem>, Shape> completionsFactory(
+    private static BiConsumer<Shape, Consumer<CompletionItem>> completionsFactory(
             DocumentPositionContext context,
             Model model,
             SmithyFile smithyFile,
@@ -131,13 +132,13 @@ public final class CompletionHandler {
     ) {
         TraitBodyVisitor visitor = new TraitBodyVisitor(model);
         boolean useFullId = shouldMatchOnAbsoluteId(id, context);
-        return (acc, shape) -> {
+        return (shape, consumer) -> {
             String shapeLabel = useFullId
                     ? shape.getId().toString()
                     : shape.getId().getName();
 
             switch (context) {
-                case TRAIT:
+                case TRAIT -> {
                     String traitBody = shape.accept(visitor);
                     // Strip outside pair of brackets from any structure traits.
                     if (!traitBody.isEmpty() && traitBody.charAt(0) == '{') {
@@ -147,25 +148,21 @@ public final class CompletionHandler {
                     if (!traitBody.isEmpty()) {
                         CompletionItem traitWithMembersItem = createCompletion(
                                 shapeLabel + "(" + traitBody + ")", shape.getId(), smithyFile, useFullId, id);
-                        acc.add(traitWithMembersItem);
+                        consumer.accept(traitWithMembersItem);
                     }
 
                     if (shape.isStructureShape() && !shape.members().isEmpty()) {
                         shapeLabel += "()";
                     }
-                    CompletionItem defaultCompletionItem = createCompletion(
-                            shapeLabel, shape.getId(), smithyFile, useFullId, id);
-                    acc.add(defaultCompletionItem);
-                    break;
-                case MEMBER_TARGET:
-                case MIXIN:
-                case USE_TARGET:
-                    acc.add(createCompletion(shapeLabel, shape.getId(), smithyFile, useFullId, id));
-                    break;
-                case SHAPE_DEF:
-                case OTHER:
-                default:
-                    break;
+                    CompletionItem defaultItem = createCompletion(shapeLabel, shape.getId(), smithyFile, useFullId, id);
+                    consumer.accept(defaultItem);
+                }
+                case MEMBER_TARGET, MIXIN, USE_TARGET -> {
+                    CompletionItem item = createCompletion(shapeLabel, shape.getId(), smithyFile, useFullId, id);
+                    consumer.accept(item);
+                }
+                default -> {
+                }
             }
         };
     }
@@ -204,25 +201,18 @@ public final class CompletionHandler {
     }
 
     private static Stream<Shape> contextualShapes(Model model, DocumentPositionContext context, SmithyFile smithyFile) {
-        switch (context) {
-            case TRAIT:
-                return model.getShapesWithTrait(TraitDefinition.class).stream();
-            case MEMBER_TARGET:
-                return model.shapes()
-                        .filter(shape -> !shape.isMemberShape())
-                        .filter(shape -> !shape.hasTrait(TraitDefinition.class));
-            case MIXIN:
-                return model.getShapesWithTrait(MixinTrait.class).stream();
-            case USE_TARGET:
-                return model.shapes()
-                        .filter(shape -> !shape.isMemberShape())
-                        .filter(shape -> !shape.getId().getNamespace().contentEquals(smithyFile.namespace()))
-                        .filter(shape -> !smithyFile.hasImport(shape.getId().toString()));
-            case SHAPE_DEF:
-            case OTHER:
-            default:
-                return Stream.empty();
-        }
+        return switch (context) {
+            case TRAIT -> model.getShapesWithTrait(TraitDefinition.class).stream();
+            case MEMBER_TARGET -> model.shapes()
+                    .filter(shape -> !shape.isMemberShape())
+                    .filter(shape -> !shape.hasTrait(TraitDefinition.class));
+            case MIXIN -> model.getShapesWithTrait(MixinTrait.class).stream();
+            case USE_TARGET -> model.shapes()
+                    .filter(shape -> !shape.isMemberShape())
+                    .filter(shape -> !shape.getId().getNamespace().contentEquals(smithyFile.namespace()))
+                    .filter(shape -> !smithyFile.hasImport(shape.getId().toString()));
+            default -> Stream.empty();
+        };
     }
 
     private static Predicate<Shape> contextualMatcher(DocumentId id, DocumentPositionContext context) {

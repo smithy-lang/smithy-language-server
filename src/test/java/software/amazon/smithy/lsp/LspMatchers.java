@@ -21,7 +21,7 @@ public final class LspMatchers {
     private LspMatchers() {}
 
     public static Matcher<CompletionItem> hasLabel(String label) {
-        return new CustomTypeSafeMatcher<CompletionItem>("a completion item with the label + `" + label + "`") {
+        return new CustomTypeSafeMatcher<>("a completion item with the label + `" + label + "`") {
             @Override
             protected boolean matchesSafely(CompletionItem item) {
                 return item.getLabel().equals(label);
@@ -36,7 +36,7 @@ public final class LspMatchers {
     }
 
     public static Matcher<TextEdit> makesEditedDocument(Document document, String expected) {
-        return new CustomTypeSafeMatcher<TextEdit>("makes an edited document " + expected) {
+        return new CustomTypeSafeMatcher<>("makes an edited document " + expected) {
             @Override
             protected boolean matchesSafely(TextEdit item) {
                 Document copy = document.copy();
@@ -49,13 +49,18 @@ public final class LspMatchers {
                 Document copy = document.copy();
                 copy.applyEdit(textEdit.getRange(), textEdit.getNewText());
                 String actual = copy.copyText();
-                description.appendText("expected:\n'" + expected + "'\nbut was: \n'" + actual + "'\n");
+                description.appendText(String.format("""
+                        expected:
+                        '%s'
+                        but was:
+                        '%s'
+                        """, expected, actual));
             }
         };
     }
 
     public static Matcher<Range> hasText(Document document, Matcher<String> expected) {
-        return new CustomTypeSafeMatcher<Range>("text in range") {
+        return new CustomTypeSafeMatcher<>("text in range") {
             @Override
             protected boolean matchesSafely(Range item) {
                 CharSequence borrowed = document.borrowRange(item);
@@ -78,7 +83,7 @@ public final class LspMatchers {
     }
 
     public static Matcher<Diagnostic> diagnosticWithMessage(Matcher<String> message) {
-        return new CustomTypeSafeMatcher<Diagnostic>("has matching message") {
+        return new CustomTypeSafeMatcher<>("has matching message") {
             @Override
             protected boolean matchesSafely(Diagnostic item) {
                 return message.matches(item.getMessage());

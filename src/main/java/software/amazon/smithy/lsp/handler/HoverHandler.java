@@ -5,15 +5,13 @@
 
 package software.amazon.smithy.lsp.handler;
 
-import static java.util.regex.Matcher.quoteReplacement;
-
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
+import java.util.regex.Matcher;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
@@ -64,12 +62,12 @@ public final class HoverHandler {
         Hover hover = emptyContents();
         Position position = params.getPosition();
         DocumentId id = smithyFile.document().copyDocumentId(position);
-        if (id == null || id.borrowIdValue().length() == 0) {
+        if (id == null || id.idSlice().isEmpty()) {
             return hover;
         }
 
         ValidatedResult<Model> modelResult = project.modelResult();
-        if (!modelResult.getResult().isPresent()) {
+        if (modelResult.getResult().isEmpty()) {
             return hover;
         }
 
@@ -80,7 +78,7 @@ public final class HoverHandler {
                 .filter(contextualMatcher(smithyFile, id))
                 .findFirst();
 
-        if (!matchingShape.isPresent()) {
+        if (matchingShape.isEmpty()) {
             return hover;
         }
 
@@ -107,7 +105,7 @@ public final class HoverHandler {
                 .filter(event -> event.getShapeId().isPresent())
                 .filter(event -> event.getShapeId().get().equals(shapeToSerialize.getId()))
                 .filter(event -> event.getSeverity().compareTo(minimumSeverity) >= 0)
-                .collect(Collectors.toList());
+                .toList();
         if (!validationEvents.isEmpty()) {
             for (ValidationEvent event : validationEvents) {
                 hoverContent.append("**")
@@ -116,20 +114,24 @@ public final class HoverHandler {
                         .append(": ")
                         .append(event.getMessage());
             }
-            hoverContent.append("\n\n---\n\n");
+            hoverContent.append(System.lineSeparator())
+                    .append(System.lineSeparator())
+                    .append("---")
+                    .append(System.lineSeparator())
+                    .append(System.lineSeparator());
         }
 
         String serializedShape = serialized.get(path)
                 .substring(15) // remove '$version: "2.0"'
                 .trim()
-                .replaceAll(quoteReplacement("\n\n"), "\n");
-        int eol = serializedShape.indexOf('\n');
-        String namespaceLine = serializedShape.substring(0, eol);
-        serializedShape = serializedShape.substring(eol + 1);
-        hoverContent.append(String.format("```smithy\n"
-                                          + "%s\n"
-                                          + "%s\n"
-                                          + "```\n", namespaceLine, serializedShape));
+                .replaceAll(Matcher.quoteReplacement(
+                        // Replace newline literals with actual newlines
+                        System.lineSeparator() + System.lineSeparator()), System.lineSeparator());
+        hoverContent.append(String.format("""
+                ```smithy
+                %s
+                ```
+                """, serializedShape));
 
         // TODO: Add docs to a separate section of the hover content
         // if (shapeToSerialize.hasTrait(DocumentationTrait.class)) {
@@ -155,19 +157,13 @@ public final class HoverHandler {
     }
 
     private Stream<Shape> contextualShapes(Model model, DocumentPositionContext context) {
-        switch (context) {
-            case TRAIT:
-                return model.getShapesWithTrait(TraitDefinition.class).stream();
-            case MEMBER_TARGET:
-                return model.shapes()
-                        .filter(shape -> !shape.isMemberShape())
-                        .filter(shape -> !shape.hasTrait(TraitDefinition.class));
-            case MIXIN:
-                return model.getShapesWithTrait(MixinTrait.class).stream();
-            case SHAPE_DEF:
-            case OTHER:
-            default:
-                return model.shapes().filter(shape -> !shape.isMemberShape());
-        }
+        return switch (context) {
+            case TRAIT -> model.getShapesWithTrait(TraitDefinition.class).stream();
+            case MEMBER_TARGET -> model.shapes()
+                    .filter(shape -> !shape.isMemberShape())
+                    .filter(shape -> !shape.hasTrait(TraitDefinition.class));
+            case MIXIN -> model.getShapesWithTrait(MixinTrait.class).stream();
+            default -> model.shapes().filter(shape -> !shape.isMemberShape());
+        };
     }
 }

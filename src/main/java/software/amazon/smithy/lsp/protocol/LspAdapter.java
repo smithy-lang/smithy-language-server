@@ -6,7 +6,6 @@
 package software.amazon.smithy.lsp.protocol;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
@@ -200,13 +199,8 @@ public final class LspAdapter {
     }
 
     private static String decode(String uriOrPath) {
-        try {
-            // Some clients encode parts of the jar, like !/
-            return URLDecoder.decode(uriOrPath, StandardCharsets.UTF_8.name());
-        } catch (UnsupportedEncodingException e) {
-            LOGGER.severe("Failed to decode " + uriOrPath + " : " + e.getMessage());
-            return uriOrPath;
-        }
+        // Some clients encode parts of the jar, like !/
+        return URLDecoder.decode(uriOrPath, StandardCharsets.UTF_8);
     }
 
     private static String fixJarScheme(String uriOrPath) {
