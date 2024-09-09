@@ -1,5 +1,13 @@
 # Smithy Language Server Changelog
 
+## 0.4.1 (2024-09-09)
+
+### Features
+* Added support for multiple workspaces. ([#160](https://github.com/smithy-lang/smithy-language-server/pull/160))
+
+### Bug fixes
+* Fixed file patterns for `didChangeWatchedFiles` on Windows. ([#160](https://github.com/smithy-lang/smithy-language-server/pull/160))
+
 ## 0.4.0 (2024-07-30)
 
 ### Breaking
