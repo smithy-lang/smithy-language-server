@@ -162,6 +162,19 @@ public final class ProjectManager {
     }
 
     /**
+     * @param uri The URI of the Smithy file to get
+     * @return The {@link SmithyFile} corresponding to the given {@code uri}, if
+     *  it exists in any projects, otherwise {@code null}.
+     */
+    public SmithyFile getSmithyFile(String uri) {
+        Project project = getProject(uri);
+        if (project == null) {
+            return null;
+        }
+        return project.getSmithyFile(uri);
+    }
+
+    /**
      * Computes per-project file changes from the given file events.
      *
      * <p>>Note: if you have lots of projects, this will create a bunch of

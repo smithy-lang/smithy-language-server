@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package software.amazon.smithy.lsp.handler;
+package software.amazon.smithy.lsp;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -32,7 +32,7 @@ import software.amazon.smithy.lsp.project.ProjectFilePatterns;
  * everything, since these events should be rarer. But we can optimize it in the
  * future.
  */
-public final class FileWatcherRegistrationHandler {
+public final class FileWatcherRegistrations {
     private static final Integer SMITHY_WATCH_FILE_KIND = WatchKind.Delete | WatchKind.Create;
     private static final String WATCH_BUILD_FILES_ID = "WatchSmithyBuildFiles";
     private static final String WATCH_SMITHY_FILES_ID = "WatchSmithyFiles";
@@ -41,7 +41,7 @@ public final class FileWatcherRegistrationHandler {
             WATCH_SMITHY_FILES_ID,
             WATCH_FILES_METHOD));
 
-    private FileWatcherRegistrationHandler() {
+    private FileWatcherRegistrations() {
     }
 
     /**
