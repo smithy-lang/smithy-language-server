@@ -7,6 +7,7 @@ package software.amazon.smithy.lsp.project;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -16,7 +17,11 @@ import software.amazon.smithy.lsp.document.DocumentImports;
 import software.amazon.smithy.lsp.document.DocumentNamespace;
 import software.amazon.smithy.lsp.document.DocumentShape;
 import software.amazon.smithy.lsp.document.DocumentVersion;
+import software.amazon.smithy.lsp.syntax.Syntax;
+import software.amazon.smithy.model.loader.Prelude;
 import software.amazon.smithy.model.shapes.Shape;
+import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.traits.PrivateTrait;
 
 /**
  * The language server's representation of a Smithy file.
@@ -34,6 +39,8 @@ public final class SmithyFile implements ProjectFile {
     private final DocumentImports imports;
     private final Map<Position, DocumentShape> documentShapes;
     private final DocumentVersion documentVersion;
+    private List<Syntax.Statement> statements;
+    private int changeVersion;
 
     private SmithyFile(Builder builder) {
         this.path = builder.path;
@@ -43,6 +50,8 @@ public final class SmithyFile implements ProjectFile {
         this.imports = builder.imports;
         this.documentShapes = builder.documentShapes;
         this.documentVersion = builder.documentVersion;
+        this.statements = builder.statements;
+        this.changeVersion = builder.changeVersion;
     }
 
     /**
@@ -141,6 +150,44 @@ public final class SmithyFile implements ProjectFile {
         return imports.imports().contains(shapeId);
     }
 
+    public boolean isAccessible(Shape shape) {
+        return shape.getId().getNamespace().contentEquals(namespace())
+                || !shape.hasTrait(PrivateTrait.ID);
+    }
+
+    public int changeVersion() {
+        return changeVersion;
+    }
+
+    public void setChangeVersion(int changeVersion) {
+        this.changeVersion = changeVersion;
+    }
+
+    /**
+     * @return The parsed statements in this file
+     */
+    public List<Syntax.Statement> statements() {
+        return statements;
+    }
+
+    /**
+     * Re-parses the underlying {@link #document()}, updating {@link #statements()}.
+     */
+    public void reparse() {
+        Syntax.IdlParse parse = Syntax.parseIdl(document);
+        this.statements = parse.statements();
+    }
+
+    /**
+     * @param shapeId The shape id to check
+     * @return Whether the given shape id is in scope for this file
+     */
+    public boolean inScope(ShapeId shapeId) {
+        return Prelude.isPublicPreludeShape(shapeId)
+                || shapeId.getNamespace().contentEquals(namespace())
+                || hasImport(shapeId.toString());
+    }
+
     /**
      * @return A {@link SmithyFile} builder
      */
@@ -156,6 +203,8 @@ public final class SmithyFile implements ProjectFile {
         private DocumentImports imports;
         private Map<Position, DocumentShape> documentShapes;
         private DocumentVersion documentVersion;
+        private List<Syntax.Statement> statements;
+        private int changeVersion;
 
         private Builder() {
         }
@@ -192,6 +241,16 @@ public final class SmithyFile implements ProjectFile {
 
         public Builder documentVersion(DocumentVersion documentVersion) {
             this.documentVersion = documentVersion;
+            return this;
+        }
+
+        public Builder statements(List<Syntax.Statement> statements) {
+            this.statements = statements;
+            return this;
+        }
+
+        public Builder changeVersion(int changeVersion) {
+            this.changeVersion = changeVersion;
             return this;
         }
 

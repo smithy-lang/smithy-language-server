@@ -24,7 +24,7 @@ public final class Document {
     private final StringBuilder buffer;
     private int[] lineIndices;
 
-    private Document(StringBuilder buffer, int[] lineIndices) {
+    private Document(StringBuilder buffer, int[] lineIndices, int changeVersion) {
         this.buffer = buffer;
         this.lineIndices = lineIndices;
     }
@@ -36,14 +36,14 @@ public final class Document {
     public static Document of(String string) {
         StringBuilder buffer = new StringBuilder(string);
         int[] lineIndicies = computeLineIndicies(buffer);
-        return new Document(buffer, lineIndicies);
+        return new Document(buffer, lineIndicies, 0);
     }
 
     /**
      * @return A copy of this document
      */
     public Document copy() {
-        return new Document(new StringBuilder(copyText()), lineIndices.clone());
+        return new Document(new StringBuilder(copyText()), lineIndices.clone(), 0);
     }
 
     /**
@@ -97,20 +97,31 @@ public final class Document {
      *  doesn't exist
      */
     public int lineOfIndex(int idx) {
-        // TODO: Use binary search or similar
-        if (idx >= length() || idx < 0) {
-            return -1;
-        }
+        int low = 0;
+        int up = lastLine();
 
-        for (int line = 0; line <= lastLine() - 1; line++) {
-            int currentLineIdx = indexOfLine(line);
-            int nextLineIdx = indexOfLine(line + 1);
-            if (idx >= currentLineIdx && idx < nextLineIdx) {
-                return line;
+        while (low <= up) {
+            int mid = (low + up) / 2;
+            int midLineIdx = lineIndices[mid];
+            int midLineEndIdx = lineEndUnchecked(mid);
+            if (idx >= midLineIdx && idx <= midLineEndIdx) {
+                return mid;
+            } else if (idx < midLineIdx) {
+                up = mid - 1;
+            } else {
+                low = mid + 1;
             }
         }
 
-        return lastLine();
+        return -1;
+    }
+
+    private int lineEndUnchecked(int line) {
+        if (line == lastLine()) {
+            return length() - 1;
+        } else {
+            return lineIndices[line + 1] - 1;
+        }
     }
 
     /**
@@ -165,6 +176,34 @@ public final class Document {
         int lineStart = indexOfLine(line);
         int character = index - lineStart;
         return new Position(line, character);
+    }
+
+    /**
+     * @param start The start character offset
+     * @param end The end character offset
+     * @return The range between the two given offsets
+     */
+    public Range rangeBetween(int start, int end) {
+        if (end < start || start < 0) {
+            return null;
+        }
+
+        // The start is inclusive, so it should be within the bounds of the document
+        Position startPos = positionAtIndex(start);
+        if (startPos == null) {
+            return null;
+        }
+
+        Position endPos;
+        if (end == length()) {
+            int lastLine = lastLine();
+            int lastCol = length() - lineIndices[lastLine];
+            endPos = new Position(lastLine, lastCol);
+        } else {
+            endPos = positionAtIndex(end);
+        }
+
+        return new Range(startPos, endPos);
     }
 
     /**

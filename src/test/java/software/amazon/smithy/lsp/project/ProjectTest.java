@@ -133,11 +133,11 @@ public class ProjectTest {
                 .collect(Collectors.toList());
         assertThat(shapeIds, hasItems("com.foo#Foo", "com.foo#Foo$bar"));
 
-        assertThat(main.documentShapes(), hasSize(3));
+        assertThat(main.documentShapes(), hasSize(4));
         List<String> documentShapeNames = main.documentShapes().stream()
                 .map(documentShape -> documentShape.shapeName().toString())
                 .collect(Collectors.toList());
-        assertThat(documentShapeNames, hasItems("Foo", "bar", "String"));
+        assertThat(documentShapeNames, hasItems("Foo", "bar", "String", "A"));
     }
 
     @Test
