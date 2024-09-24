@@ -33,6 +33,7 @@ import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.document.DocumentShape;
 import software.amazon.smithy.lsp.document.DocumentVersion;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
+import software.amazon.smithy.lsp.syntax.Syntax;
 import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.ModelAssembler;
@@ -253,8 +254,10 @@ public final class ProjectLoader {
         DocumentParser documentParser = DocumentParser.forDocument(document);
         DocumentNamespace namespace = documentParser.documentNamespace();
         DocumentImports imports = documentParser.documentImports();
-        Map<Position, DocumentShape> documentShapes = documentParser.documentShapes(shapes);
+        Map<Position, DocumentShape> documentShapes = documentParser.documentShapes();
         DocumentVersion documentVersion = documentParser.documentVersion();
+        Syntax.IdlParse parse = Syntax.parseIdl(document);
+        List<Syntax.Statement> statements = parse.statements();
         return SmithyFile.builder()
                 .path(path)
                 .document(document)
@@ -262,7 +265,9 @@ public final class ProjectLoader {
                 .namespace(namespace)
                 .imports(imports)
                 .documentShapes(documentShapes)
-                .documentVersion(documentVersion);
+                .documentVersion(documentVersion)
+                .statements(statements);
+                // .changeVersion(document.changeVersion());
     }
 
     // This is gross, but necessary to deal with the way that array metadata gets merged.
