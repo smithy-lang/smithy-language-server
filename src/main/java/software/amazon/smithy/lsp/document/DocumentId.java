@@ -51,4 +51,15 @@ public record DocumentId(Type type, CharBuffer idSlice, Range range) {
     public String copyIdValue() {
         return idSlice.toString();
     }
+
+    /**
+     * @return The value of the id without a leading '$'
+     */
+    public String copyIdValueForElidedMember() {
+        String idValue = copyIdValue();
+        if (idValue.startsWith("$")) {
+            return idValue.substring(1);
+        }
+        return idValue;
+    }
 }

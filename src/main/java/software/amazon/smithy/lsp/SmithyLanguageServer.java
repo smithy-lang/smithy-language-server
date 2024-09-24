@@ -105,10 +105,9 @@ import software.amazon.smithy.lsp.ext.OpenProject;
 import software.amazon.smithy.lsp.ext.SelectorParams;
 import software.amazon.smithy.lsp.ext.ServerStatus;
 import software.amazon.smithy.lsp.ext.SmithyProtocolExtensions;
-import software.amazon.smithy.lsp.handler.CompletionHandler;
-import software.amazon.smithy.lsp.handler.DefinitionHandler;
-import software.amazon.smithy.lsp.handler.FileWatcherRegistrationHandler;
-import software.amazon.smithy.lsp.handler.HoverHandler;
+import software.amazon.smithy.lsp.language.CompletionHandler;
+import software.amazon.smithy.lsp.language.DefinitionHandler;
+import software.amazon.smithy.lsp.language.HoverHandler;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectChanges;
 import software.amazon.smithy.lsp.project.ProjectLoader;
@@ -306,19 +305,19 @@ public class SmithyLanguageServer implements
     }
 
     private CompletableFuture<Void> registerSmithyFileWatchers() {
-        List<Registration> registrations = FileWatcherRegistrationHandler.getSmithyFileWatcherRegistrations(
+        List<Registration> registrations = FileWatcherRegistrations.getSmithyFileWatcherRegistrations(
                 projects.attachedProjects().values());
         return client.registerCapability(new RegistrationParams(registrations));
     }
 
     private CompletableFuture<Void> unregisterSmithyFileWatchers() {
-        List<Unregistration> unregistrations = FileWatcherRegistrationHandler.getSmithyFileWatcherUnregistrations();
+        List<Unregistration> unregistrations = FileWatcherRegistrations.getSmithyFileWatcherUnregistrations();
         return client.unregisterCapability(new UnregistrationParams(unregistrations));
     }
 
     @Override
     public void initialized(InitializedParams params) {
-        List<Registration> registrations = FileWatcherRegistrationHandler.getBuildFileWatcherRegistrations(
+        List<Registration> registrations = FileWatcherRegistrations.getBuildFileWatcherRegistrations(
                 projects.attachedProjects().values());
         client.registerCapability(new RegistrationParams(registrations));
         registerSmithyFileWatchers();
@@ -497,11 +496,12 @@ public class SmithyLanguageServer implements
 
         lifecycleManager.cancelTask(uri);
 
-        Document document = projects.getDocument(uri);
-        if (document == null) {
+        SmithyFile smithyFile = projects.getSmithyFile(uri);
+        if (smithyFile == null) {
             client.unknownFileError(uri, "change");
             return;
         }
+        Document document = smithyFile.document();
 
         for (TextDocumentContentChangeEvent contentChangeEvent : params.getContentChanges()) {
             if (contentChangeEvent.getRange() != null) {
@@ -510,6 +510,8 @@ public class SmithyLanguageServer implements
                 document.applyEdit(document.fullRange(), contentChangeEvent.getText());
             }
         }
+        // document.bumpVersion(params.getTextDocument().getVersion());
+        smithyFile.reparse();
 
         if (!onlyReloadOnSave) {
             Project project = projects.getProject(uri);
@@ -697,14 +699,14 @@ public class SmithyLanguageServer implements
         String uri = params.getTextDocument().getUri();
         if (!projects.isTracked(uri)) {
             client.unknownFileError(uri, "hover");
-            return completedFuture(HoverHandler.emptyContents());
+            return completedFuture(HoverHandler.EMPTY);
         }
 
         Project project = projects.getProject(uri);
         SmithyFile smithyFile = project.getSmithyFile(uri);
 
         // TODO: Abstract away passing minimum severity
-        Hover hover = new HoverHandler(project, smithyFile).handle(params, minimumSeverity);
+        Hover hover = new HoverHandler(project, smithyFile, minimumSeverity).handle(params);
         return completedFuture(hover);
     }
 
