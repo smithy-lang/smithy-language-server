@@ -3,22 +3,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package software.amazon.smithy.lsp.project;
+package software.amazon.smithy.lsp;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.not;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.util.HashSet;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
-import software.amazon.smithy.lsp.TestWorkspace;
-import software.amazon.smithy.lsp.UtilMatchers;
+import software.amazon.smithy.lsp.project.Project;
+import software.amazon.smithy.lsp.project.ProjectLoader;
+import software.amazon.smithy.lsp.project.ProjectManager;
 import software.amazon.smithy.utils.ListUtils;
 
-public class ProjectFilePatternsTest {
+public class FilePatternsTest {
     @Test
-    public void createsPathMatchers() {
+    public void createsProjectPathMatchers() {
         TestWorkspace workspace = TestWorkspace.builder()
                 .withSourceDir(new TestWorkspace.Dir()
                         .withPath("foo")
@@ -38,8 +42,8 @@ public class ProjectFilePatternsTest {
                 .build();
 
         Project project = ProjectLoader.load(workspace.getRoot(), new ProjectManager(), new HashSet<>()).unwrap();
-        PathMatcher smithyMatcher = ProjectFilePatterns.getSmithyFilesPathMatcher(project);
-        PathMatcher buildMatcher = ProjectFilePatterns.getBuildFilesPathMatcher(project);
+        PathMatcher smithyMatcher = FilePatterns.getSmithyFilesPathMatcher(project);
+        PathMatcher buildMatcher = FilePatterns.getProjectBuildFilesPathMatcher(project);
 
         Path root = project.root();
         assertThat(smithyMatcher, UtilMatchers.canMatchPath(root.resolve("abc.smithy")));
@@ -47,5 +51,30 @@ public class ProjectFilePatternsTest {
         assertThat(smithyMatcher, UtilMatchers.canMatchPath(root.resolve("other/bar.smithy")));
         assertThat(buildMatcher, UtilMatchers.canMatchPath(root.resolve("smithy-build.json")));
         assertThat(buildMatcher, UtilMatchers.canMatchPath(root.resolve(".smithy-project.json")));
+    }
+
+    @Test
+    public void createsWorkspacePathMatchers() throws IOException {
+        Path workspaceRoot = Files.createTempDirectory("test");
+        workspaceRoot.toFile().deleteOnExit();
+
+        TestWorkspace fooWorkspace = TestWorkspace.builder()
+                .withRoot(workspaceRoot)
+                .withPath("foo")
+                .build();
+
+        // Set up a project outside the 'foo' root.
+        workspaceRoot.resolve("bar").toFile().mkdir();
+        workspaceRoot.resolve("bar/smithy-build.json").toFile().createNewFile();
+
+        Project fooProject = ProjectLoader.load(fooWorkspace.getRoot(), new ProjectManager(), new HashSet<>()).unwrap();
+
+        PathMatcher fooBuildMatcher = FilePatterns.getProjectBuildFilesPathMatcher(fooProject);
+        PathMatcher workspaceBuildMatcher = FilePatterns.getWorkspaceBuildFilesPathMatcher(workspaceRoot);
+
+        assertThat(fooBuildMatcher, UtilMatchers.canMatchPath(workspaceRoot.resolve("foo/smithy-build.json")));
+        assertThat(fooBuildMatcher, not(UtilMatchers.canMatchPath(workspaceRoot.resolve("bar/smithy-build.json"))));
+        assertThat(workspaceBuildMatcher, UtilMatchers.canMatchPath(workspaceRoot.resolve("foo/smithy-build.json")));
+        assertThat(workspaceBuildMatcher, UtilMatchers.canMatchPath(workspaceRoot.resolve("bar/smithy-build.json")));
     }
 }

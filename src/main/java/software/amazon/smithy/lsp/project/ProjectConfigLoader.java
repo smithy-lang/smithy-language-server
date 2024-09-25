@@ -74,17 +74,19 @@ public final class ProjectConfigLoader {
     }
 
     static Result<ProjectConfig, List<Exception>> loadFromRoot(Path workspaceRoot) {
+        List<Path> loadedConfigPaths = new ArrayList<>();
         SmithyBuildConfig.Builder builder = SmithyBuildConfig.builder();
         List<Exception> exceptions = new ArrayList<>();
 
-        // TODO: We don't handle cases where the smithy-build.json isn't in the top level of the root.
-        //  In order to do so, we probably need to be able to keep track of multiple projects.
         Path smithyBuildPath = workspaceRoot.resolve(SMITHY_BUILD);
         if (Files.isRegularFile(smithyBuildPath)) {
             LOGGER.info("Loading smithy-build.json from " + smithyBuildPath);
             Result<SmithyBuildConfig, Exception> result = Result.ofFallible(() ->
                     SmithyBuildConfig.load(smithyBuildPath));
-            result.get().ifPresent(builder::merge);
+            result.get().ifPresent(config -> {
+                    builder.merge(config);
+                    loadedConfigPaths.add(smithyBuildPath);
+            });
             result.getErr().ifPresent(exceptions::add);
         } else {
             LOGGER.info("No smithy-build.json found at " + smithyBuildPath + ", defaulting to empty config.");
@@ -97,7 +99,10 @@ public final class ProjectConfigLoader {
             if (Files.isRegularFile(extPath)) {
                 Result<SmithyBuildExtensions, Exception> result = Result.ofFallible(() ->
                         loadSmithyBuildExtensions(extPath));
-                result.get().ifPresent(extensionsBuilder::merge);
+                result.get().ifPresent(config -> {
+                    extensionsBuilder.merge(config);
+                    loadedConfigPaths.add(extPath);
+                });
                 result.getErr().ifPresent(exceptions::add);
             }
         }
@@ -110,6 +115,7 @@ public final class ProjectConfigLoader {
                     ProjectConfig.Builder.load(smithyProjectPath));
             if (result.isOk()) {
                 finalConfigBuilder = result.unwrap();
+                loadedConfigPaths.add(smithyProjectPath);
             } else {
                 exceptions.add(result.unwrapErr());
             }
@@ -126,6 +132,7 @@ public final class ProjectConfigLoader {
         if (finalConfigBuilder.outputDirectory == null) {
             config.getOutputDirectory().ifPresent(finalConfigBuilder::outputDirectory);
         }
+        finalConfigBuilder.loadedConfigPaths(loadedConfigPaths);
         return Result.ok(finalConfigBuilder.build());
     }
 

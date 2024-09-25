@@ -107,10 +107,8 @@ import software.amazon.smithy.lsp.ext.ServerStatus;
 import software.amazon.smithy.lsp.ext.SmithyProtocolExtensions;
 import software.amazon.smithy.lsp.handler.CompletionHandler;
 import software.amazon.smithy.lsp.handler.DefinitionHandler;
-import software.amazon.smithy.lsp.handler.FileWatcherRegistrationHandler;
 import software.amazon.smithy.lsp.handler.HoverHandler;
 import software.amazon.smithy.lsp.project.Project;
-import software.amazon.smithy.lsp.project.ProjectChanges;
 import software.amazon.smithy.lsp.project.ProjectLoader;
 import software.amazon.smithy.lsp.project.ProjectManager;
 import software.amazon.smithy.lsp.project.SmithyFile;
@@ -154,6 +152,7 @@ public class SmithyLanguageServer implements
     private final DocumentLifecycleManager lifecycleManager = new DocumentLifecycleManager();
     private Severity minimumSeverity = Severity.WARNING;
     private boolean onlyReloadOnSave = false;
+    private final Set<Path> workspacePaths = new HashSet<>();
 
     SmithyLanguageServer() {
     }
@@ -172,6 +171,10 @@ public class SmithyLanguageServer implements
 
     DocumentLifecycleManager getLifecycleManager() {
         return this.lifecycleManager;
+    }
+
+    Set<Path> getWorkspacePaths() {
+        return workspacePaths;
     }
 
     @Override
@@ -227,8 +230,7 @@ public class SmithyLanguageServer implements
             }
 
             for (WorkspaceFolder workspaceFolder : params.getWorkspaceFolders()) {
-                Path root = Paths.get(URI.create(workspaceFolder.getUri()));
-                tryInitProject(workspaceFolder.getName(), root);
+                loadWorkspace(workspaceFolder);
             }
 
             if (workDoneProgressToken != null) {
@@ -241,15 +243,17 @@ public class SmithyLanguageServer implements
         return completedFuture(new InitializeResult(CAPABILITIES));
     }
 
-    private void tryInitProject(String name, Path root) {
+    private void tryInitProject(Path root) {
         LOGGER.finest("Initializing project at " + root);
         lifecycleManager.cancelAllTasks();
+
         Result<Project, List<Exception>> loadResult = ProjectLoader.load(
                 root, projects, lifecycleManager.managedDocuments());
+
+        String projectName = root.toString();
         if (loadResult.isOk()) {
             Project updatedProject = loadResult.unwrap();
-            resolveDetachedProjects(this.projects.getProjectByName(name), updatedProject);
-            this.projects.updateProjectByName(name, updatedProject);
+            updateProject(projectName, updatedProject);
             LOGGER.finest("Initialized project at " + root);
         } else {
             LOGGER.severe("Init project failed");
@@ -257,11 +261,11 @@ public class SmithyLanguageServer implements
             //  if we find a smithy-build.json, etc.
             // If we overwrite an existing project with an empty one, we lose track of the state of tracked
             // files. Instead, we will just keep the original project before the reload failure.
-            if (projects.getProjectByName(name) == null) {
-                projects.updateProjectByName(name, Project.empty(root));
+            if (projects.getProjectByName(projectName) == null) {
+                projects.updateProjectByName(projectName, Project.empty(root));
             }
 
-            String baseMessage = "Failed to load Smithy project " + name + " at " + root;
+            String baseMessage = "Failed to load Smithy project at " + root;
             StringBuilder errorMessage = new StringBuilder(baseMessage).append(":");
             for (Exception error : loadResult.unwrapErr()) {
                 errorMessage.append(System.lineSeparator());
@@ -272,6 +276,16 @@ public class SmithyLanguageServer implements
 
             String showMessage = baseMessage + ". Check server logs to find out what went wrong.";
             client.showMessage(new MessageParams(MessageType.Error, showMessage));
+        }
+    }
+
+    private void updateProject(String projectName, Project updatedProject) {
+        // If the project didn't load any config files, it is now empty and should be removed
+        if (updatedProject.config().loadedConfigPaths().isEmpty()) {
+            removeProjectAndResolveDetached(projectName);
+        } else {
+            resolveDetachedProjects(this.projects.getProjectByName(projectName), updatedProject);
+            this.projects.updateProjectByName(projectName, updatedProject);
         }
     }
 
@@ -306,21 +320,29 @@ public class SmithyLanguageServer implements
     }
 
     private CompletableFuture<Void> registerSmithyFileWatchers() {
-        List<Registration> registrations = FileWatcherRegistrationHandler.getSmithyFileWatcherRegistrations(
+        List<Registration> registrations = FileWatcherRegistrations.getSmithyFileWatcherRegistrations(
                 projects.attachedProjects().values());
         return client.registerCapability(new RegistrationParams(registrations));
     }
 
     private CompletableFuture<Void> unregisterSmithyFileWatchers() {
-        List<Unregistration> unregistrations = FileWatcherRegistrationHandler.getSmithyFileWatcherUnregistrations();
+        List<Unregistration> unregistrations = FileWatcherRegistrations.getSmithyFileWatcherUnregistrations();
+        return client.unregisterCapability(new UnregistrationParams(unregistrations));
+    }
+
+    private CompletableFuture<Void> registerWorkspaceBuildFileWatchers() {
+        var registrations = FileWatcherRegistrations.getBuildFileWatcherRegistrations(workspacePaths);
+        return client.registerCapability(new RegistrationParams(registrations));
+    }
+
+    private CompletableFuture<Void> unregisterWorkspaceBuildFileWatchers() {
+        var unregistrations = FileWatcherRegistrations.getBuildFileWatcherUnregistrations();
         return client.unregisterCapability(new UnregistrationParams(unregistrations));
     }
 
     @Override
     public void initialized(InitializedParams params) {
-        List<Registration> registrations = FileWatcherRegistrationHandler.getBuildFileWatcherRegistrations(
-                projects.attachedProjects().values());
-        client.registerCapability(new RegistrationParams(registrations));
+        registerWorkspaceBuildFileWatchers();
         registerSmithyFileWatchers();
     }
 
@@ -411,19 +433,22 @@ public class SmithyLanguageServer implements
     public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
         LOGGER.finest("DidChangeWatchedFiles");
         // Smithy files were added or deleted to watched sources/imports (specified by smithy-build.json),
-        // or the smithy-build.json itself was changed
+        // the smithy-build.json itself was changed, added, or deleted.
 
-        Map<String, ProjectChanges> changesByProject = projects.computeProjectChanges(params.getChanges());
+        WorkspaceChanges changes = WorkspaceChanges.computeWorkspaceChanges(
+                params.getChanges(), projects, workspacePaths);
 
-        changesByProject.forEach((projectName, projectChanges) -> {
+        changes.byProject().forEach((projectName, projectChange) -> {
             Project project = projects.getProjectByName(projectName);
-            if (projectChanges.hasChangedBuildFiles()) {
+
+            if (!projectChange.changedBuildFileUris().isEmpty()) {
                 client.info("Build files changed, reloading project");
                 // TODO: Handle more granular updates to build files.
-                tryInitProject(projectName, project.root());
-            } else if (projectChanges.hasChangedSmithyFiles()) {
-                Set<String> createdUris = projectChanges.createdSmithyFileUris();
-                Set<String> deletedUris = projectChanges.deletedSmithyFileUris();
+                // Note: This will take care of removing projects when build files are deleted
+                tryInitProject(project.root());
+            } else {
+                Set<String> createdUris = projectChange.createdSmithyFileUris();
+                Set<String> deletedUris = projectChange.deletedSmithyFileUris();
                 client.info("Project files changed, adding files "
                             + createdUris + " and removing files " + deletedUris);
 
@@ -433,7 +458,10 @@ public class SmithyLanguageServer implements
             }
         });
 
+        changes.newProjectRoots().forEach(this::tryInitProject);
+
         // TODO: Update watchers based on specific changes
+        // Note: We don't update build file watchers here - only on workspace changes
         unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
 
         sendFileDiagnosticsForManagedDocuments();
@@ -458,25 +486,58 @@ public class SmithyLanguageServer implements
         }
 
         for (WorkspaceFolder folder : params.getEvent().getAdded()) {
-            Path root = Paths.get(URI.create(folder.getUri()));
-            tryInitProject(folder.getName(), root);
+            loadWorkspace(folder);
         }
 
         for (WorkspaceFolder folder : params.getEvent().getRemoved()) {
-            Project removedProject = projects.removeProjectByName(folder.getName());
-            if (removedProject == null) {
-                continue;
-            }
-
-            resolveDetachedProjects(removedProject, Project.empty(removedProject.root()));
+            removeWorkspace(folder);
         }
 
         unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
+        unregisterWorkspaceBuildFileWatchers().thenRun(this::registerWorkspaceBuildFileWatchers);
         sendFileDiagnosticsForManagedDocuments();
 
         if (progressToken != null) {
             WorkDoneProgressEnd end = new WorkDoneProgressEnd();
             client.notifyProgress(new ProgressParams(progressToken, Either.forLeft(end)));
+        }
+    }
+
+    private void loadWorkspace(WorkspaceFolder workspaceFolder) {
+        Path workspaceRoot = Paths.get(URI.create(workspaceFolder.getUri()));
+        workspacePaths.add(workspaceRoot);
+        try {
+            List<Path> projectRoots = ProjectRootVisitor.findProjectRoots(workspaceRoot);
+            for (Path root : projectRoots) {
+                tryInitProject(root);
+            }
+        } catch (IOException e) {
+            LOGGER.severe(e.getMessage());
+        }
+    }
+
+    private void removeWorkspace(WorkspaceFolder folder) {
+        Path workspaceRoot = Paths.get(URI.create(folder.getUri()));
+        workspacePaths.remove(workspaceRoot);
+
+        // Have to do the removal separately, so we don't modify project.attachedProjects()
+        // while iterating through it
+        List<String> projectsToRemove = new ArrayList<>();
+        for (var entry : projects.attachedProjects().entrySet()) {
+            if (entry.getValue().root().startsWith(workspaceRoot)) {
+                projectsToRemove.add(entry.getKey());
+            }
+        }
+
+        for (String projectName : projectsToRemove) {
+            removeProjectAndResolveDetached(projectName);
+        }
+    }
+
+    private void removeProjectAndResolveDetached(String projectName) {
+        Project removedProject = this.projects.removeProjectByName(projectName);
+        if (removedProject != null) {
+            resolveDetachedProjects(removedProject, Project.empty(removedProject.root()));
         }
     }
 
