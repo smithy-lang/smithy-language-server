@@ -20,12 +20,13 @@ import software.amazon.smithy.utils.IoUtils;
  * A complete view of all a project's configuration that is needed to load it,
  * merged from all configuration sources.
  */
-final class ProjectConfig {
+public final class ProjectConfig {
     private final List<String> sources;
     private final List<String> imports;
     private final String outputDirectory;
     private final List<ProjectDependency> dependencies;
     private final MavenConfig mavenConfig;
+    private final List<Path> loadedConfigPaths;
 
     private ProjectConfig(Builder builder) {
         this.sources = builder.sources;
@@ -33,6 +34,7 @@ final class ProjectConfig {
         this.outputDirectory = builder.outputDirectory;
         this.dependencies = builder.dependencies;
         this.mavenConfig = builder.mavenConfig;
+        this.loadedConfigPaths = builder.loadedConfigPaths;
     }
 
     static ProjectConfig empty() {
@@ -78,12 +80,17 @@ final class ProjectConfig {
         return Optional.ofNullable(mavenConfig);
     }
 
+    public List<Path> loadedConfigPaths() {
+        return loadedConfigPaths;
+    }
+
     static final class Builder {
         final List<String> sources = new ArrayList<>();
         final List<String> imports = new ArrayList<>();
         String outputDirectory;
         final List<ProjectDependency> dependencies = new ArrayList<>();
         MavenConfig mavenConfig;
+        final List<Path> loadedConfigPaths = new ArrayList<>();
 
         private Builder() {
         }
@@ -145,6 +152,11 @@ final class ProjectConfig {
 
         public Builder mavenConfig(MavenConfig mavenConfig) {
             this.mavenConfig = mavenConfig;
+            return this;
+        }
+
+        public Builder loadedConfigPaths(List<Path> loadedConfigPaths) {
+            this.loadedConfigPaths.addAll(loadedConfigPaths);
             return this;
         }
 

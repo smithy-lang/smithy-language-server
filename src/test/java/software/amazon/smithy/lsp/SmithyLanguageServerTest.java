@@ -2,6 +2,7 @@ package software.amazon.smithy.lsp;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.anEmptyMap;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
@@ -30,6 +31,7 @@ import static software.amazon.smithy.lsp.project.ProjectTest.toPath;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -1766,7 +1768,6 @@ public class SmithyLanguageServerTest {
     @Test
     public void loadsMultipleRoots() {
         TestWorkspace workspaceFoo = TestWorkspace.builder()
-                .withName("foo")
                 .withPath("foo")
                 .withSourceFile("foo.smithy", """
                         $version: "2"
@@ -1776,7 +1777,6 @@ public class SmithyLanguageServerTest {
                 .build();
 
         TestWorkspace workspaceBar = TestWorkspace.builder()
-                .withName("bar")
                 .withPath("bar")
                 .withSourceFile("bar.smithy", """
                         $version: "2"
@@ -1787,14 +1787,14 @@ public class SmithyLanguageServerTest {
 
         SmithyLanguageServer server = initFromWorkspaces(workspaceFoo, workspaceBar);
 
-        assertThat(server.getProjects().attachedProjects(), hasKey("foo"));
-        assertThat(server.getProjects().attachedProjects(), hasKey("bar"));
+        assertThat(server.getProjects().attachedProjects(), hasKey(workspaceFoo.getName()));
+        assertThat(server.getProjects().attachedProjects(), hasKey(workspaceBar.getName()));
 
         assertThat(server.getProjects().getDocument(workspaceFoo.getUri("foo.smithy")), notNullValue());
         assertThat(server.getProjects().getDocument(workspaceBar.getUri("bar.smithy")), notNullValue());
 
-        Project projectFoo = server.getProjects().getProjectByName("foo");
-        Project projectBar = server.getProjects().getProjectByName("bar");
+        Project projectFoo = server.getProjects().getProjectByName(workspaceFoo.getName());
+        Project projectBar = server.getProjects().getProjectByName(workspaceBar.getName());
 
         assertThat(projectFoo.smithyFiles(), hasKey(endsWith("foo.smithy")));
         assertThat(projectBar.smithyFiles(), hasKey(endsWith("bar.smithy")));
@@ -1806,7 +1806,6 @@ public class SmithyLanguageServerTest {
     @Test
     public void multiRootLifecycleManagement() throws Exception {
         TestWorkspace workspaceFoo = TestWorkspace.builder()
-                .withName("foo")
                 .withPath("foo")
                 .withSourceFile("foo.smithy", """
                         $version: "2"
@@ -1816,7 +1815,6 @@ public class SmithyLanguageServerTest {
                 .build();
 
         TestWorkspace workspaceBar = TestWorkspace.builder()
-                .withName("bar")
                 .withPath("bar")
                 .withSourceFile("bar.smithy", """
                         $version: "2"
@@ -1857,8 +1855,8 @@ public class SmithyLanguageServerTest {
 
         server.getLifecycleManager().waitForAllTasks();
 
-        Project projectFoo = server.getProjects().getProjectByName("foo");
-        Project projectBar = server.getProjects().getProjectByName("bar");
+        Project projectFoo = server.getProjects().getProjectByName(workspaceFoo.getName());
+        Project projectBar = server.getProjects().getProjectByName(workspaceBar.getName());
 
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Bar")));
@@ -1870,14 +1868,12 @@ public class SmithyLanguageServerTest {
     @Test
     public void multiRootAddingWatchedFile() throws Exception {
         TestWorkspace workspaceFoo = TestWorkspace.builder()
-                .withName("foo")
                 .withPath("foo")
                 .withSourceDir(new TestWorkspace.Dir()
                         .withPath("model")
                         .withSourceFile("main.smithy", ""))
                 .build();
         TestWorkspace workspaceBar = TestWorkspace.builder()
-                .withName("bar")
                 .withPath("bar")
                 .withSourceDir(new TestWorkspace.Dir()
                         .withPath("model")
@@ -1930,8 +1926,8 @@ public class SmithyLanguageServerTest {
 
         server.getLifecycleManager().waitForAllTasks();
 
-        Project projectFoo = server.getProjects().getProjectByName("foo");
-        Project projectBar = server.getProjects().getProjectByName("bar");
+        Project projectFoo = server.getProjects().getProjectByName(workspaceFoo.getName());
+        Project projectBar = server.getProjects().getProjectByName(workspaceBar.getName());
 
         assertThat(projectFoo.smithyFiles(), hasKey(endsWith("main.smithy")));
         assertThat(projectBar.smithyFiles(), hasKey(endsWith("main.smithy")));
@@ -1945,14 +1941,12 @@ public class SmithyLanguageServerTest {
     @Test
     public void multiRootChangingBuildFile() throws Exception {
         TestWorkspace workspaceFoo = TestWorkspace.builder()
-                .withName("foo")
                 .withPath("foo")
                 .withSourceDir(new TestWorkspace.Dir()
                         .withPath("model")
                         .withSourceFile("main.smithy", ""))
                 .build();
         TestWorkspace workspaceBar = TestWorkspace.builder()
-                .withName("bar")
                 .withPath("bar")
                 .withSourceDir(new TestWorkspace.Dir()
                         .withPath("model")
@@ -2017,8 +2011,8 @@ public class SmithyLanguageServerTest {
         assertThat(server.getProjects().getProject(workspaceBar.getUri("model/main.smithy")), notNullValue());
         assertThat(server.getProjects().getProject(workspaceFoo.getUri("model/main.smithy")), notNullValue());
 
-        Project projectFoo = server.getProjects().getProjectByName("foo");
-        Project projectBar = server.getProjects().getProjectByName("bar");
+        Project projectFoo = server.getProjects().getProjectByName(workspaceFoo.getName());
+        Project projectBar = server.getProjects().getProjectByName(workspaceBar.getName());
 
         assertThat(projectFoo.smithyFiles(), hasKey(endsWith("main.smithy")));
         assertThat(projectBar.smithyFiles(), hasKey(endsWith("main.smithy")));
@@ -2038,7 +2032,6 @@ public class SmithyLanguageServerTest {
                         structure Foo {}
                         """;
         TestWorkspace workspaceFoo = TestWorkspace.builder()
-                .withName("foo")
                 .withPath("foo")
                 .withSourceFile("foo.smithy", fooModel)
                 .build();
@@ -2051,7 +2044,6 @@ public class SmithyLanguageServerTest {
                         structure Bar {}
                         """;
         TestWorkspace workspaceBar = TestWorkspace.builder()
-                .withName("bar")
                 .withPath("bar")
                 .withSourceFile("bar.smithy", barModel)
                 .build();
@@ -2072,14 +2064,14 @@ public class SmithyLanguageServerTest {
 
         server.getLifecycleManager().waitForAllTasks();
 
-        assertThat(server.getProjects().attachedProjects(), hasKey("foo"));
-        assertThat(server.getProjects().attachedProjects(), hasKey("bar"));
+        assertThat(server.getProjects().attachedProjects(), hasKey(workspaceFoo.getName()));
+        assertThat(server.getProjects().attachedProjects(), hasKey(workspaceBar.getName()));
 
         assertThat(server.getProjects().getDocument(workspaceFoo.getUri("foo.smithy")), notNullValue());
         assertThat(server.getProjects().getDocument(workspaceBar.getUri("bar.smithy")), notNullValue());
 
-        Project projectFoo = server.getProjects().getProjectByName("foo");
-        Project projectBar = server.getProjects().getProjectByName("bar");
+        Project projectFoo = server.getProjects().getProjectByName(workspaceFoo.getName());
+        Project projectBar = server.getProjects().getProjectByName(workspaceBar.getName());
 
         assertThat(projectFoo.smithyFiles(), hasKey(endsWith("foo.smithy")));
         assertThat(projectBar.smithyFiles(), hasKey(endsWith("bar.smithy")));
@@ -2096,7 +2088,6 @@ public class SmithyLanguageServerTest {
                         structure Foo {}
                         """;
         TestWorkspace workspaceFoo = TestWorkspace.builder()
-                .withName("foo")
                 .withPath("foo")
                 .withSourceFile("foo.smithy", fooModel)
                 .build();
@@ -2107,7 +2098,6 @@ public class SmithyLanguageServerTest {
                         structure Bar {}
                         """;
         TestWorkspace workspaceBar = TestWorkspace.builder()
-                .withName("bar")
                 .withPath("bar")
                 .withSourceFile("bar.smithy", barModel)
                 .build();
@@ -2128,15 +2118,15 @@ public class SmithyLanguageServerTest {
                 .removed(workspaceBar.getRoot().toUri().toString(), "bar")
                 .build());
 
-        assertThat(server.getProjects().attachedProjects(), hasKey("foo"));
-        assertThat(server.getProjects().attachedProjects(), not(hasKey("bar")));
+        assertThat(server.getProjects().attachedProjects(), hasKey(workspaceFoo.getName()));
+        assertThat(server.getProjects().attachedProjects(), not(hasKey(workspaceBar.getName())));
         assertThat(server.getProjects().detachedProjects(), hasKey(endsWith("bar.smithy")));
         assertThat(server.getProjects().isDetached(workspaceBar.getUri("bar.smithy")), is(true));
 
         assertThat(server.getProjects().getDocument(workspaceFoo.getUri("foo.smithy")), notNullValue());
         assertThat(server.getProjects().getDocument(workspaceBar.getUri("bar.smithy")), notNullValue());
 
-        Project projectFoo = server.getProjects().getProjectByName("foo");
+        Project projectFoo = server.getProjects().getProjectByName(workspaceFoo.getName());
         Project projectBar = server.getProjects().getProject(workspaceBar.getUri("bar.smithy"));
 
         assertThat(projectFoo.smithyFiles(), hasKey(endsWith("foo.smithy")));
@@ -2145,6 +2135,247 @@ public class SmithyLanguageServerTest {
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
         assertThat(projectBar.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.bar#Bar")));
     }
+
+    @Test
+    public void singleWorkspaceMultiRoot() throws Exception {
+        Path root = Files.createTempDirectory("test");
+        root.toFile().deleteOnExit();
+
+        String fooModel = """
+                        $version: "2"
+                        namespace com.foo
+                        structure Foo {}
+                        """;
+        TestWorkspace workspaceFoo = TestWorkspace.builder()
+                .withRoot(root)
+                .withPath("foo")
+                .withSourceFile("foo.smithy", fooModel)
+                .build();
+
+        String barModel = """
+                        $version: "2"
+                        namespace com.bar
+                        structure Bar {}
+                        """;
+        TestWorkspace workspaceBar = TestWorkspace.builder()
+                .withRoot(root)
+                .withPath("bar")
+                .withSourceFile("bar.smithy", barModel)
+                .build();
+
+        SmithyLanguageServer server = initFromRoot(root);
+
+        assertThat(server.getProjects().attachedProjects().keySet(), containsInAnyOrder(
+                workspaceFoo.getName(),
+                workspaceBar.getName()));
+        assertThat(server.getWorkspacePaths(), contains(root));
+    }
+
+    @Test
+    public void addingRootsToWorkspace() throws Exception {
+        Path root = Files.createTempDirectory("test");
+        root.toFile().deleteOnExit();
+
+        SmithyLanguageServer server = initFromRoot(root);
+
+        String fooModel = """
+                        $version: "2"
+                        namespace com.foo
+                        structure Foo {}
+                        """;
+        TestWorkspace workspaceFoo = TestWorkspace.builder()
+                .withRoot(root)
+                .withPath("foo")
+                .withSourceFile("foo.smithy", fooModel)
+                .build();
+
+        String barModel = """
+                        $version: "2"
+                        namespace com.bar
+                        structure Bar {}
+                        """;
+        TestWorkspace workspaceBar = TestWorkspace.builder()
+                .withRoot(root)
+                .withPath("bar")
+                .withSourceFile("bar.smithy", barModel)
+                .build();
+
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(workspaceFoo.getUri("smithy-build.json"), FileChangeType.Created)
+                .event(workspaceBar.getUri("smithy-build.json"), FileChangeType.Created)
+                .build());
+
+        assertThat(server.getWorkspacePaths(), contains(root));
+        assertThat(server.getProjects().attachedProjects().keySet(), containsInAnyOrder(
+                workspaceFoo.getName(),
+                workspaceBar.getName()));
+    }
+
+    @Test
+    public void removingRootsFromWorkspace() throws Exception {
+        Path root = Files.createTempDirectory("test");
+        root.toFile().deleteOnExit();
+
+        String fooModel = """
+                        $version: "2"
+                        namespace com.foo
+                        structure Foo {}
+                        """;
+        TestWorkspace workspaceFoo = TestWorkspace.builder()
+                .withRoot(root)
+                .withPath("foo")
+                .withSourceFile("foo.smithy", fooModel)
+                .build();
+
+        String barModel = """
+                        $version: "2"
+                        namespace com.bar
+                        structure Bar {}
+                        """;
+        TestWorkspace workspaceBar = TestWorkspace.builder()
+                .withRoot(root)
+                .withPath("bar")
+                .withSourceFile("bar.smithy", barModel)
+                .build();
+
+        SmithyLanguageServer server = initFromRoot(root);
+
+        assertThat(server.getProjects().attachedProjects().keySet(), containsInAnyOrder(
+                workspaceFoo.getName(),
+                workspaceBar.getName()));
+        assertThat(server.getWorkspacePaths(), contains(root));
+
+        workspaceFoo.deleteModel("smithy-build.json");
+
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(workspaceFoo.getUri("smithy-build.json"), FileChangeType.Deleted)
+                .build());
+
+        assertThat(server.getWorkspacePaths(), contains(root));
+        assertThat(server.getProjects().attachedProjects().keySet(), contains(workspaceBar.getName()));
+    }
+
+    @Test
+    public void addingConfigFile() throws Exception {
+        Path root = Files.createTempDirectory("test");
+        root.toFile().deleteOnExit();
+
+        String fooModel = """
+                        $version: "2"
+                        namespace com.foo
+                        structure Foo {}
+                        """;
+        TestWorkspace workspaceFoo = TestWorkspace.builder()
+                .withRoot(root)
+                .withPath("foo")
+                .withSourceFile("foo.smithy", fooModel)
+                .build();
+
+        String barModel = """
+                        $version: "2"
+                        namespace com.bar
+                        structure Bar {}
+                        """;
+        TestWorkspace workspaceBar = TestWorkspace.builder()
+                .withRoot(root)
+                .withPath("bar")
+                .withSourceFile("bar.smithy", barModel)
+                .build();
+
+        SmithyLanguageServer server = initFromRoot(root);
+
+        String bazModel = """
+                        $version: "2"
+                        namespace com.baz
+                        structure Baz {}
+                        """;
+        workspaceFoo.addModel("baz.smithy", bazModel);
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(workspaceFoo.getUri("baz.smithy"))
+                .text(bazModel)
+                .build());
+
+        assertThat(server.getWorkspacePaths(), contains(root));
+        assertThat(server.getProjects().attachedProjects().keySet(), containsInAnyOrder(
+                workspaceFoo.getName(),
+                workspaceBar.getName()));
+        assertThat(server.getProjects().detachedProjects().keySet(), contains(workspaceFoo.getUri("baz.smithy")));
+
+        workspaceFoo.addModel(".smithy-project.json", """
+                {
+                    "sources": ["baz.smithy"]
+                }""");
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(workspaceFoo.getUri(".smithy-project.json"), FileChangeType.Created)
+                .build());
+
+        assertThat(server.getProjects().attachedProjects().keySet(), containsInAnyOrder(
+                workspaceFoo.getName(),
+                workspaceBar.getName()));
+        assertThat(server.getProjects().detachedProjects().keySet(), empty());
+    }
+
+    @Test
+    public void removingConfigFile() throws Exception {
+        Path root = Files.createTempDirectory("test");
+        root.toFile().deleteOnExit();
+
+        String fooModel = """
+                        $version: "2"
+                        namespace com.foo
+                        structure Foo {}
+                        """;
+        TestWorkspace workspaceFoo = TestWorkspace.builder()
+                .withRoot(root)
+                .withPath("foo")
+                .withSourceFile("foo.smithy", fooModel)
+                .build();
+        String bazModel = """
+                        $version: "2"
+                        namespace com.baz
+                        structure Baz {}
+                        """;
+        workspaceFoo.addModel("baz.smithy", bazModel);
+        workspaceFoo.addModel(".smithy-project.json", """
+                {
+                    "sources": ["baz.smithy"]
+                }""");
+
+        String barModel = """
+                        $version: "2"
+                        namespace com.bar
+                        structure Bar {}
+                        """;
+        TestWorkspace workspaceBar = TestWorkspace.builder()
+                .withRoot(root)
+                .withPath("bar")
+                .withSourceFile("bar.smithy", barModel)
+                .build();
+
+        SmithyLanguageServer server = initFromRoot(root);
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(workspaceFoo.getUri("baz.smithy"))
+                .text(bazModel)
+                .build());
+
+        assertThat(server.getWorkspacePaths(), contains(root));
+        assertThat(server.getProjects().attachedProjects().keySet(), containsInAnyOrder(
+                workspaceFoo.getName(),
+                workspaceBar.getName()));
+        assertThat(server.getProjects().detachedProjects().keySet(), empty());
+
+        workspaceFoo.deleteModel(".smithy-project.json");
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(workspaceFoo.getUri(".smithy-project.json"), FileChangeType.Deleted)
+                .build());
+
+        assertThat(server.getProjects().attachedProjects().keySet(), containsInAnyOrder(
+                workspaceFoo.getName(),
+                workspaceBar.getName()));
+        assertThat(server.getProjects().detachedProjects().keySet(), contains(workspaceFoo.getUri("baz.smithy")));
+    }
+
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {
         return initFromWorkspace(workspace, new StubClient());
     }

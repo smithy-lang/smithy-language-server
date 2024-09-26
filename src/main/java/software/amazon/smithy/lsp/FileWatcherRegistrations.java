@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package software.amazon.smithy.lsp.handler;
+package software.amazon.smithy.lsp;
 
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -15,7 +16,6 @@ import org.eclipse.lsp4j.Unregistration;
 import org.eclipse.lsp4j.WatchKind;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import software.amazon.smithy.lsp.project.Project;
-import software.amazon.smithy.lsp.project.ProjectFilePatterns;
 
 /**
  * Handles computing the {@link Registration}s and {@link Unregistration}s for
@@ -32,7 +32,7 @@ import software.amazon.smithy.lsp.project.ProjectFilePatterns;
  * everything, since these events should be rarer. But we can optimize it in the
  * future.
  */
-public final class FileWatcherRegistrationHandler {
+final class FileWatcherRegistrations {
     private static final Integer SMITHY_WATCH_FILE_KIND = WatchKind.Delete | WatchKind.Create;
     private static final String WATCH_BUILD_FILES_ID = "WatchSmithyBuildFiles";
     private static final String WATCH_SMITHY_FILES_ID = "WatchSmithyFiles";
@@ -40,17 +40,23 @@ public final class FileWatcherRegistrationHandler {
     private static final List<Unregistration> SMITHY_FILE_WATCHER_UNREGISTRATIONS = List.of(new Unregistration(
             WATCH_SMITHY_FILES_ID,
             WATCH_FILES_METHOD));
+    private static final List<Unregistration> BUILD_FILE_WATCHER_UNREGISTRATIONS = List.of(new Unregistration(
+            WATCH_BUILD_FILES_ID,
+            WATCH_FILES_METHOD));
 
-    private FileWatcherRegistrationHandler() {
+    private FileWatcherRegistrations() {
     }
 
     /**
+     * Creates registrations to tell the client to watch for new or deleted
+     * Smithy files, specifically for files that are part of {@link Project}s.
+     *
      * @param projects The projects to get registrations for
      * @return The registrations to watch for Smithy file changes across all projects
      */
-    public static List<Registration> getSmithyFileWatcherRegistrations(Collection<Project> projects) {
+    static List<Registration> getSmithyFileWatcherRegistrations(Collection<Project> projects) {
         List<FileSystemWatcher> smithyFileWatchers = projects.stream()
-                .flatMap(project -> ProjectFilePatterns.getSmithyFileWatchPatterns(project).stream())
+                .flatMap(project -> FilePatterns.getSmithyFileWatchPatterns(project).stream())
                 .map(pattern -> new FileSystemWatcher(Either.forLeft(pattern), SMITHY_WATCH_FILE_KIND))
                 .toList();
 
@@ -63,17 +69,20 @@ public final class FileWatcherRegistrationHandler {
     /**
      * @return The unregistrations to stop watching for Smithy file changes
      */
-    public static List<Unregistration> getSmithyFileWatcherUnregistrations() {
+    static List<Unregistration> getSmithyFileWatcherUnregistrations() {
         return SMITHY_FILE_WATCHER_UNREGISTRATIONS;
     }
 
     /**
-     * @param projects The projects to get registrations for
-     * @return The registrations to watch for build file changes across all projects
+     * Creates registrations to tell the client to watch for any build file
+     * changes, creations, or deletions, across all workspaces.
+     *
+     * @param workspaceRoots The roots of the workspaces to get registrations for
+     * @return The registrations to watch for build file changes across all workspaces
      */
-    public static List<Registration> getBuildFileWatcherRegistrations(Collection<Project> projects) {
-        List<FileSystemWatcher> watchers = projects.stream()
-                .map(ProjectFilePatterns::getBuildFilesWatchPattern)
+    static List<Registration> getBuildFileWatcherRegistrations(Collection<Path> workspaceRoots) {
+        List<FileSystemWatcher> watchers = workspaceRoots.stream()
+                .map(FilePatterns::getWorkspaceBuildFilesWatchPattern)
                 .map(pattern -> new FileSystemWatcher(Either.forLeft(pattern)))
                 .toList();
 
@@ -81,5 +90,9 @@ public final class FileWatcherRegistrationHandler {
                 WATCH_BUILD_FILES_ID,
                 WATCH_FILES_METHOD,
                 new DidChangeWatchedFilesRegistrationOptions(watchers)));
+    }
+
+    static List<Unregistration> getBuildFileWatcherUnregistrations() {
+        return BUILD_FILE_WATCHER_UNREGISTRATIONS;
     }
 }
