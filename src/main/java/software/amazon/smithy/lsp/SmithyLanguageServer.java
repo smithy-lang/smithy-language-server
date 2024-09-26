@@ -33,9 +33,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -84,7 +82,6 @@ import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.Unregistration;
 import org.eclipse.lsp4j.UnregistrationParams;
 import org.eclipse.lsp4j.WorkDoneProgressBegin;
-import org.eclipse.lsp4j.WorkDoneProgressCreateParams;
 import org.eclipse.lsp4j.WorkDoneProgressEnd;
 import org.eclipse.lsp4j.WorkspaceFolder;
 import org.eclipse.lsp4j.WorkspaceFoldersOptions;
@@ -471,20 +468,6 @@ public class SmithyLanguageServer implements
     public void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params) {
         LOGGER.finest("DidChangeWorkspaceFolders");
 
-        Either<String, Integer> progressToken = Either.forLeft(UUID.randomUUID().toString());
-        try {
-            client.createProgress(new WorkDoneProgressCreateParams(progressToken)).get();
-        } catch (ExecutionException | InterruptedException e) {
-            client.error(String.format("Unable to create work done progress token: %s", e.getMessage()));
-            progressToken = null;
-        }
-
-        if (progressToken != null) {
-            WorkDoneProgressBegin begin = new WorkDoneProgressBegin();
-            begin.setTitle("Updating workspace");
-            client.notifyProgress(new ProgressParams(progressToken, Either.forLeft(begin)));
-        }
-
         for (WorkspaceFolder folder : params.getEvent().getAdded()) {
             loadWorkspace(folder);
         }
@@ -496,11 +479,6 @@ public class SmithyLanguageServer implements
         unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
         unregisterWorkspaceBuildFileWatchers().thenRun(this::registerWorkspaceBuildFileWatchers);
         sendFileDiagnosticsForManagedDocuments();
-
-        if (progressToken != null) {
-            WorkDoneProgressEnd end = new WorkDoneProgressEnd();
-            client.notifyProgress(new ProgressParams(progressToken, Either.forLeft(end)));
-        }
     }
 
     private void loadWorkspace(WorkspaceFolder workspaceFolder) {
