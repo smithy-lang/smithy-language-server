@@ -11,12 +11,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.eclipse.lsp4j.FileChangeType;
 import org.eclipse.lsp4j.FileEvent;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectChange;
-import software.amazon.smithy.lsp.project.ProjectManager;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 
 /**
@@ -31,19 +29,15 @@ final class WorkspaceChanges {
     private WorkspaceChanges() {
     }
 
-    static WorkspaceChanges computeWorkspaceChanges(
-            List<FileEvent> events,
-            ProjectManager projects,
-            Set<Path> workspacePaths
-    ) {
+    static WorkspaceChanges computeWorkspaceChanges(List<FileEvent> events, ServerState state) {
         WorkspaceChanges changes = new WorkspaceChanges();
 
-        List<ProjectFileMatcher> projectFileMatchers = new ArrayList<>(projects.attachedProjects().size());
-        projects.attachedProjects().forEach((projectName, project) ->
+        List<ProjectFileMatcher> projectFileMatchers = new ArrayList<>(state.attachedProjects().size());
+        state.attachedProjects().forEach((projectName, project) ->
                 projectFileMatchers.add(createProjectFileMatcher(projectName, project)));
 
-        List<PathMatcher> workspaceBuildFileMatchers = new ArrayList<>(workspacePaths.size());
-        workspacePaths.forEach(workspacePath ->
+        List<PathMatcher> workspaceBuildFileMatchers = new ArrayList<>(state.workspacePaths().size());
+        state.workspacePaths().forEach(workspacePath ->
                 workspaceBuildFileMatchers.add(FilePatterns.getWorkspaceBuildFilesPathMatcher(workspacePath)));
 
         for (FileEvent event : events) {
@@ -68,43 +62,45 @@ final class WorkspaceChanges {
     ) {
         String changedUri = event.getUri();
         Path changedPath = Path.of(LspAdapter.toPath(changedUri));
-        if (changedUri.endsWith(".smithy")) {
-            for (ProjectFileMatcher projectFileMatcher : projectFileMatchers) {
-                if (projectFileMatcher.smithyFileMatcher().matches(changedPath)) {
-                    ProjectChange projectChange = byProject.computeIfAbsent(
-                            projectFileMatcher.projectName(), ignored -> ProjectChange.empty());
-
-                    switch (event.getType()) {
-                        case Created -> projectChange.createdSmithyFileUris().add(changedUri);
-                        case Deleted -> projectChange.deletedSmithyFileUris().add(changedUri);
-                        default -> {
-                        }
-                    }
-                    return;
-                }
+        for (ProjectFileMatcher projectFileMatcher : projectFileMatchers) {
+            if (projectFileMatcher.smithyFileMatcher().matches(changedPath)) {
+                addSmithyFileChange(event.getType(), changedUri, projectFileMatcher.projectName());
+                return;
+            } else if (projectFileMatcher.buildFileMatcher().matches(changedPath)) {
+                addBuildFileChange(changedUri, projectFileMatcher.projectName());
+                return;
             }
-        } else {
-            for (ProjectFileMatcher projectFileMatcher : projectFileMatchers) {
-                if (projectFileMatcher.buildFileMatcher().matches(changedPath)) {
-                    byProject.computeIfAbsent(projectFileMatcher.projectName(), ignored -> ProjectChange.empty())
-                            .changedBuildFileUris()
-                            .add(changedUri);
-                    return;
-                }
-            }
+        }
 
-            // Only check if there's an added project. If there was a project we didn't match before, there's
-            // not much we could do at this point anyway.
-            if (event.getType() == FileChangeType.Created) {
-                for (PathMatcher workspaceBuildFileMatcher : workspaceBuildFileMatchers) {
-                    if (workspaceBuildFileMatcher.matches(changedPath)) {
-                        Path newProjectRoot = changedPath.getParent();
-                        this.newProjectRoots.add(newProjectRoot);
-                        return;
-                    }
+        // If no project matched, maybe there's an added project.
+        if (event.getType() == FileChangeType.Created) {
+            for (PathMatcher workspaceBuildFileMatcher : workspaceBuildFileMatchers) {
+                if (workspaceBuildFileMatcher.matches(changedPath)) {
+                    Path newProjectRoot = changedPath.getParent();
+                    this.newProjectRoots.add(newProjectRoot);
+                    return;
                 }
             }
         }
+    }
+
+    private void addSmithyFileChange(FileChangeType changeType, String changedUri, String projectName) {
+        ProjectChange projectChange = byProject.computeIfAbsent(
+                projectName, ignored -> ProjectChange.empty());
+
+        switch (changeType) {
+            case Created -> projectChange.createdSmithyFileUris().add(changedUri);
+            case Deleted -> projectChange.deletedSmithyFileUris().add(changedUri);
+            default -> {
+            }
+        }
+    }
+
+    private void addBuildFileChange(String changedUri, String projectName) {
+        ProjectChange projectChange = byProject.computeIfAbsent(
+                projectName, ignored -> ProjectChange.empty());
+
+        projectChange.changedBuildFileUris().add(changedUri);
     }
 
     private record ProjectFileMatcher(String projectName, PathMatcher smithyFileMatcher, PathMatcher buildFileMatcher) {

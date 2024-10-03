@@ -24,7 +24,7 @@ import software.amazon.smithy.model.shapes.Shape;
  * <p><b>Note:</b> This currently is only ever a .smithy file, but could represent
  * a .json file in the future.
  */
-public final class SmithyFile {
+public final class SmithyFile implements ProjectFile {
     private final String path;
     private final Document document;
     // TODO: If we have more complex use-cases for partially updating SmithyFile, we
