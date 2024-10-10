@@ -76,6 +76,10 @@ public final class Project {
         return root;
     }
 
+    public ProjectConfig config() {
+        return config;
+    }
+
     /**
      * @return The paths of all Smithy sources specified
      *  in this project's smithy build configuration files,
@@ -129,11 +133,25 @@ public final class Project {
      */
     public Document getDocument(String uri) {
         String path = LspAdapter.toPath(uri);
-        SmithyFile smithyFile = smithyFiles.get(path);
-        if (smithyFile == null) {
+        ProjectFile projectFile = getProjectFile(path);
+        if (projectFile == null) {
             return null;
         }
-        return smithyFile.document();
+        return projectFile.document();
+    }
+
+    /**
+     * @param path The path of the {@link ProjectFile} to get
+     * @return The {@link ProjectFile} corresponding to {@code path} if
+     *  it exists in this project, otherwise {@code null}.
+     */
+    public ProjectFile getProjectFile(String path) {
+        SmithyFile smithyFile = smithyFiles.get(path);
+        if (smithyFile != null) {
+            return smithyFile;
+        }
+
+        return config.buildFiles().get(path);
     }
 
     /**

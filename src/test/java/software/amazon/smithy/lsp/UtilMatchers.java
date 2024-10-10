@@ -53,4 +53,18 @@ public final class UtilMatchers {
             }
         };
     }
+
+    public static Matcher<Path> endsWith(Path path) {
+        return new CustomTypeSafeMatcher<Path>("A path that ends with " + path.toString()) {
+            @Override
+            protected boolean matchesSafely(Path item) {
+                return item.endsWith(path);
+            }
+
+            @Override
+            protected void describeMismatchSafely(Path item, Description mismatchDescription) {
+                mismatchDescription.appendText(item.toString() + " did not end with " + path.toString());
+            }
+        };
+    }
 }

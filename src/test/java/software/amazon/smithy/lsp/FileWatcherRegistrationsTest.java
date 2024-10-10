@@ -3,27 +3,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package software.amazon.smithy.lsp.handler;
+package software.amazon.smithy.lsp;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 
 import java.nio.file.FileSystems;
 import java.nio.file.PathMatcher;
-import java.util.HashSet;
 import java.util.List;
 import org.eclipse.lsp4j.DidChangeWatchedFilesRegistrationOptions;
 import org.eclipse.lsp4j.Registration;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
-import software.amazon.smithy.lsp.TestWorkspace;
-import software.amazon.smithy.lsp.UtilMatchers;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectLoader;
-import software.amazon.smithy.lsp.project.ProjectManager;
 import software.amazon.smithy.utils.ListUtils;
 
-public class FileWatcherRegistrationHandlerTest {
+public class FileWatcherRegistrationsTest {
     @Test
     public void createsCorrectRegistrations() {
         TestWorkspace workspace = TestWorkspace.builder()
@@ -44,8 +40,8 @@ public class FileWatcherRegistrationHandlerTest {
                         .build())
                 .build();
 
-        Project project = ProjectLoader.load(workspace.getRoot(), new ProjectManager(), new HashSet<>()).unwrap();
-        List<PathMatcher> matchers = FileWatcherRegistrationHandler.getSmithyFileWatcherRegistrations(List.of(project))
+        Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
+        List<PathMatcher> matchers = FileWatcherRegistrations.getSmithyFileWatcherRegistrations(List.of(project))
                 .stream()
                 .map(Registration::getRegisterOptions)
                 .map(o -> (DidChangeWatchedFilesRegistrationOptions) o)

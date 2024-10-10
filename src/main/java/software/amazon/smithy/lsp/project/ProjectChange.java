@@ -5,6 +5,7 @@
 
 package software.amazon.smithy.lsp.project;
 
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -14,22 +15,18 @@ import java.util.Set;
  * @param createdSmithyFileUris The uris of created Smithy files
  * @param deletedSmithyFileUris The uris of deleted Smithy files
  */
-public record ProjectChanges(
+public record ProjectChange(
         Set<String> changedBuildFileUris,
         Set<String> createdSmithyFileUris,
         Set<String> deletedSmithyFileUris
 ) {
     /**
-     * @return Whether there are any changed build files
+     * @return An empty and mutable set of project changes
      */
-    public boolean hasChangedBuildFiles() {
-        return !changedBuildFileUris.isEmpty();
-    }
-
-    /**
-     * @return Whether there are any changed Smithy files
-     */
-    public boolean hasChangedSmithyFiles() {
-        return !createdSmithyFileUris.isEmpty() || !deletedSmithyFileUris.isEmpty();
+    public static ProjectChange empty() {
+        return new ProjectChange(
+                new HashSet<>(),
+                new HashSet<>(),
+                new HashSet<>());
     }
 }

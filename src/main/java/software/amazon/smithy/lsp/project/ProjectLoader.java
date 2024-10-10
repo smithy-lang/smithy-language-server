@@ -16,7 +16,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,6 +25,7 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.Position;
+import software.amazon.smithy.lsp.ServerState;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.document.DocumentImports;
 import software.amazon.smithy.lsp.document.DocumentNamespace;
@@ -55,9 +55,9 @@ public final class ProjectLoader {
     }
 
     /**
-     * Loads a detached (single-file) {@link Project} with the given file.
+     * Loads a detachedProjects (single-file) {@link Project} with the given file.
      *
-     * <p>Unlike {@link #load(Path, ProjectManager, Set)}, this method isn't
+     * <p>Unlike {@link #load(Path, ServerState)}, this method isn't
      * fallible since it doesn't do any IO that we would want to recover an
      * error from.
      *
@@ -66,7 +66,7 @@ public final class ProjectLoader {
      * @return The loaded project
      */
     public static Project loadDetached(String uri, String text) {
-        LOGGER.info("Loading detached project at " + uri);
+        LOGGER.info("Loading detachedProjects project at " + uri);
         String asPath = LspAdapter.toPath(uri);
         ValidatedResult<Model> modelResult = Model.assembler()
                 .addUnparsedModel(asPath, text)
@@ -94,7 +94,7 @@ public final class ProjectLoader {
                 // TODO: Make generic 'please file a bug report' exception
                 throw new IllegalStateException(
                         "Attempted to load an unknown source file ("
-                        + filePath + ") in detached project at "
+                        + filePath + ") in detachedProjects project at "
                         + asPath + ". This is a bug in the language server.");
             }
         });
@@ -117,16 +117,11 @@ public final class ProjectLoader {
      * reason about how the project was structured.
      *
      * @param root Path of the project root
-     * @param projects Currently loaded projects, for getting content of managed documents
-     * @param managedDocuments URIs of documents managed by the client
+     * @param state Server's current state
      * @return Result of loading the project
      */
-    public static Result<Project, List<Exception>> load(
-            Path root,
-            ProjectManager projects,
-            Set<String> managedDocuments
-    ) {
-        Result<ProjectConfig, List<Exception>> configResult = ProjectConfigLoader.loadFromRoot(root);
+    public static Result<Project, List<Exception>> load(Path root, ServerState state) {
+        Result<ProjectConfig, List<Exception>> configResult = ProjectConfigLoader.loadFromRoot(root, state);
         if (configResult.isErr()) {
             return Result.err(configResult.unwrapErr());
         }
@@ -155,14 +150,9 @@ public final class ProjectLoader {
 
         Result<ValidatedResult<Model>, Exception> loadModelResult = Result.ofFallible(() -> {
             for (Path path : allSmithyFilePaths) {
-                if (!managedDocuments.isEmpty()) {
-                    String pathString = path.toString();
-                    String uri = LspAdapter.toUri(pathString);
-                    if (managedDocuments.contains(uri)) {
-                        assembler.addUnparsedModel(pathString, projects.getDocument(uri).copyText());
-                    } else {
-                        assembler.addImport(path);
-                    }
+                Document managed = state.getManagedDocument(path);
+                if (managed != null) {
+                    assembler.addUnparsedModel(path.toString(), managed.copyText());
                 } else {
                     assembler.addImport(path);
                 }
@@ -198,8 +188,9 @@ public final class ProjectLoader {
             // TODO: We recompute uri from path and vice-versa very frequently,
             //  maybe we can cache it.
             String uri = LspAdapter.toUri(filePath);
-            if (managedDocuments.contains(uri)) {
-                return projects.getDocument(uri);
+            Document managed = state.getManagedDocument(uri);
+            if (managed != null) {
+                return managed;
             }
             // There may be a more efficient way of reading this
             return Document.of(IoUtils.readUtf8File(filePath));
@@ -212,7 +203,7 @@ public final class ProjectLoader {
     }
 
     static Result<Project, List<Exception>> load(Path root) {
-        return load(root, new ProjectManager(), new HashSet<>(0));
+        return load(root, new ServerState());
     }
 
     private static Map<String, SmithyFile> computeSmithyFiles(
