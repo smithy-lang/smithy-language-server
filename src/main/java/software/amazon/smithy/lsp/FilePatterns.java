@@ -9,7 +9,6 @@ import java.io.File;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -21,8 +20,6 @@ import software.amazon.smithy.lsp.project.ProjectConfigLoader;
  * or build files in Projects and workspaces.
  */
 final class FilePatterns {
-    private static final int BUILD_FILE_COUNT = 2 + ProjectConfigLoader.SMITHY_BUILD_EXTS.length;
-
     private FilePatterns() {
     }
 
@@ -81,14 +78,6 @@ final class FilePatterns {
     // whereas patterns for projects only look at the top level (because project locations
     // are defined by the presence of these build files).
     private static String getBuildFilesPattern(Path root, boolean isWorkspacePattern) {
-        List<String> patterns = new ArrayList<>(BUILD_FILE_COUNT);
-        patterns.add(ProjectConfigLoader.SMITHY_BUILD);
-        patterns.add(ProjectConfigLoader.SMITHY_PROJECT);
-        for (String buildExt : ProjectConfigLoader.SMITHY_BUILD_EXTS) {
-            Path extPath = Path.of(buildExt); // buildExt may have file separators
-            patterns.add(extPath.toString());
-        }
-
         String rootString = root.toString();
         if (!rootString.endsWith(File.separator)) {
             rootString += File.separator;
@@ -98,7 +87,7 @@ final class FilePatterns {
             rootString += "**" + File.separator;
         }
 
-        return escapeBackslashes(rootString + "{" + String.join(",", patterns) + "}");
+        return escapeBackslashes(rootString + "{" + String.join(",", ProjectConfigLoader.PROJECT_BUILD_FILES) + "}");
     }
 
     // When computing the pattern used for telling the client which files to watch, we want

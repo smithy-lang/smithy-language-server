@@ -5,9 +5,11 @@
 
 package software.amazon.smithy.lsp.project;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Logger;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
@@ -63,12 +65,20 @@ import software.amazon.smithy.utils.IoUtils;
  */
 public final class ProjectConfigLoader {
     public static final String SMITHY_BUILD = "smithy-build.json";
-    public static final String[] SMITHY_BUILD_EXTS = {"build/smithy-dependencies.json", ".smithy.json"};
+    public static final String[] SMITHY_BUILD_EXTS = {
+            "build" + File.separator + "smithy-dependencies.json", ".smithy.json"};
     public static final String SMITHY_PROJECT = ".smithy-project.json";
+    public static final List<String> PROJECT_BUILD_FILES = new ArrayList<>(2 + SMITHY_BUILD_EXTS.length);
 
     private static final Logger LOGGER = Logger.getLogger(ProjectConfigLoader.class.getName());
     private static final SmithyBuildConfig DEFAULT_SMITHY_BUILD = SmithyBuildConfig.builder().version("1").build();
     private static final NodeMapper NODE_MAPPER = new NodeMapper();
+
+    static {
+        PROJECT_BUILD_FILES.add(SMITHY_BUILD);
+        PROJECT_BUILD_FILES.add(SMITHY_PROJECT);
+        PROJECT_BUILD_FILES.addAll(Arrays.asList(SMITHY_BUILD_EXTS));
+    }
 
     private ProjectConfigLoader() {
     }
