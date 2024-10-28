@@ -25,10 +25,10 @@ public final class TestWorkspace {
     private SmithyBuildConfig config;
     private final String name;
 
-    private TestWorkspace(Path root, SmithyBuildConfig config, String name) {
+    private TestWorkspace(Path root, SmithyBuildConfig config) {
         this.root = root;
         this.config = config;
-        this.name = name;
+        this.name = root.toString();
     }
 
     /**
@@ -183,7 +183,7 @@ public final class TestWorkspace {
 
     public static final class Builder extends Dir {
         private SmithyBuildConfig config = null;
-        private String name = "";
+        private Path root = null;
 
         private Builder() {}
 
@@ -222,8 +222,8 @@ public final class TestWorkspace {
             return this;
         }
 
-        public Builder withName(String name) {
-            this.name = name;
+        public Builder withRoot(Path root) {
+            this.root = root;
             return this;
         }
 
@@ -232,8 +232,13 @@ public final class TestWorkspace {
                 if (path == null) {
                     path = "test";
                 }
-                Path root = Files.createTempDirectory(path);
-                root.toFile().deleteOnExit();
+                Path projectRoot;
+                if (this.root != null) {
+                    projectRoot = Files.createDirectory(this.root.resolve(path));
+                } else {
+                    projectRoot = Files.createTempDirectory(path);
+                    projectRoot.toFile().deleteOnExit();
+                }
 
                 List<String> sources = new ArrayList<>();
                 sources.addAll(sourceModels.keySet());
@@ -250,11 +255,11 @@ public final class TestWorkspace {
                             .imports(imports)
                             .build();
                 }
-                writeConfig(root, config);
+                writeConfig(projectRoot, config);
 
-                writeModels(root);
+                writeModels(projectRoot);
 
-                return new TestWorkspace(root, config, name);
+                return new TestWorkspace(projectRoot, config);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

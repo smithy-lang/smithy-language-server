@@ -76,6 +76,10 @@ public final class Project {
         return root;
     }
 
+    public ProjectConfig config() {
+        return config;
+    }
+
     /**
      * @return The paths of all Smithy sources specified
      *  in this project's smithy build configuration files,

@@ -5,16 +5,9 @@
 
 package software.amazon.smithy.lsp.project;
 
-import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
-import org.eclipse.lsp4j.FileChangeType;
-import org.eclipse.lsp4j.FileEvent;
-import org.eclipse.lsp4j.WorkspaceFolder;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 
@@ -31,7 +24,7 @@ public final class ProjectManager {
     }
 
     /**
-     * @param name Name of the project, usually comes from {@link WorkspaceFolder#getName()}
+     * @param name Name of the project, should be path of the project directory
      * @return The project with the given name, if it exists
      */
     public Project getProjectByName(String name) {
@@ -159,57 +152,5 @@ public final class ProjectManager {
             return null;
         }
         return project.getDocument(uri);
-    }
-
-    /**
-     * Computes per-project file changes from the given file events.
-     *
-     * <p>>Note: if you have lots of projects, this will create a bunch of
-     * garbage because most times you aren't getting multiple sets of large
-     * updates to a project. Project changes are relatively rare, so this
-     * shouldn't have a huge impact.
-     *
-     * @param events The file events to compute per-project file changes from
-     * @return A map of project name to the corresponding project's changes
-     */
-    public Map<String, ProjectChanges> computeProjectChanges(List<FileEvent> events) {
-        // Note: we could eagerly compute these and store them, but project changes are relatively rare,
-        //  and doing it this way means we don't need to manage the state.
-        Map<String, PathMatcher> projectSmithyFileMatchers = new HashMap<>(attachedProjects().size());
-        Map<String, PathMatcher> projectBuildFileMatchers = new HashMap<>(attachedProjects().size());
-
-        Map<String, ProjectChanges> changes = new HashMap<>(attachedProjects().size());
-
-        attachedProjects().forEach((projectName, project) -> {
-            projectSmithyFileMatchers.put(projectName, ProjectFilePatterns.getSmithyFilesPathMatcher(project));
-            projectBuildFileMatchers.put(projectName, ProjectFilePatterns.getBuildFilesPathMatcher(project));
-
-            // Need these to be hash sets so they are mutable
-            changes.put(projectName, new ProjectChanges(new HashSet<>(), new HashSet<>(), new HashSet<>()));
-        });
-
-        for (FileEvent event : events) {
-            String changedUri = event.getUri();
-            Path changedPath = Path.of(LspAdapter.toPath(changedUri));
-            if (changedUri.endsWith(".smithy")) {
-                projectSmithyFileMatchers.forEach((projectName, matcher) -> {
-                    if (matcher.matches(changedPath)) {
-                        if (event.getType() == FileChangeType.Created) {
-                            changes.get(projectName).createdSmithyFileUris().add(changedUri);
-                        } else if (event.getType() == FileChangeType.Deleted) {
-                            changes.get(projectName).deletedSmithyFileUris().add(changedUri);
-                        }
-                    }
-                });
-            } else {
-                projectBuildFileMatchers.forEach((projectName, matcher) -> {
-                    if (matcher.matches(changedPath)) {
-                        changes.get(projectName).changedBuildFileUris().add(changedUri);
-                    }
-                });
-            }
-        }
-
-        return changes;
     }
 }
