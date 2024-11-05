@@ -30,7 +30,7 @@ import software.amazon.smithy.model.traits.RequiredTrait;
 import software.amazon.smithy.model.traits.TraitDefinition;
 
 /**
- * Maps {@link Candidates.Shapes} to {@link CompletionItem}s.
+ * Maps {@link CompletionCandidates.Shapes} to {@link CompletionItem}s.
  */
 final class ShapeCompletions {
     private final Model model;
@@ -45,14 +45,14 @@ final class ShapeCompletions {
         this.mapper = mapper;
     }
 
-    List<CompletionItem> getCompletionItems(Candidates.Shapes candidates) {
+    List<CompletionItem> getCompletionItems(CompletionCandidates.Shapes candidates) {
         return streamShapes(candidates)
                 .filter(matcher::test)
                 .mapMulti(mapper::accept)
                 .toList();
     }
 
-    private Stream<? extends Shape> streamShapes(Candidates.Shapes candidates) {
+    private Stream<? extends Shape> streamShapes(CompletionCandidates.Shapes candidates) {
         return switch (candidates) {
             case ANY_SHAPE -> model.shapes();
             case STRING_SHAPES -> model.getStringShapes().stream();
@@ -202,7 +202,7 @@ final class ShapeCompletions {
 
         @Override
         protected String getDefault(Shape shape) {
-            return Candidates.defaultCandidates(shape).value();
+            return CompletionCandidates.defaultCandidates(shape).value();
         }
 
         @Override

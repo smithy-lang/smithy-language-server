@@ -267,7 +267,6 @@ public final class ProjectLoader {
                 .documentShapes(documentShapes)
                 .documentVersion(documentVersion)
                 .statements(statements);
-                // .changeVersion(document.changeVersion());
     }
 
     // This is gross, but necessary to deal with the way that array metadata gets merged.
