@@ -72,22 +72,22 @@ public final class CompletionHandler {
             case IdlPosition.ControlKey ignored -> builder
                     .literalKind(CompletionItemKind.Constant)
                     .buildSimpleCompletions()
-                    .getCompletionItems(Candidates.BUILTIN_CONTROLS);
+                    .getCompletionItems(CompletionCandidates.BUILTIN_CONTROLS);
 
             case IdlPosition.MetadataKey ignored -> builder
                     .literalKind(CompletionItemKind.Field)
                     .buildSimpleCompletions()
-                    .getCompletionItems(Candidates.BUILTIN_METADATA);
+                    .getCompletionItems(CompletionCandidates.BUILTIN_METADATA);
 
             case IdlPosition.StatementKeyword ignored -> builder
                     .literalKind(CompletionItemKind.Keyword)
                     .buildSimpleCompletions()
-                    .getCompletionItems(Candidates.KEYWORD);
+                    .getCompletionItems(CompletionCandidates.KEYWORD);
 
             case IdlPosition.Namespace ignored -> builder
                     .literalKind(CompletionItemKind.Module)
                     .buildSimpleCompletions()
-                    .getCompletionItems(Candidates.Custom.PROJECT_NAMESPACES);
+                    .getCompletionItems(CompletionCandidates.Custom.PROJECT_NAMESPACES);
 
             case IdlPosition.MetadataValue metadataValue -> metadataValueCompletions(metadataValue, builder);
 
@@ -129,7 +129,7 @@ public final class CompletionHandler {
     ) {
         var result = ShapeSearch.searchMetadataValue(metadataValue);
         Set<String> excludeKeys = getOtherPresentKeys(result);
-        Candidates candidates = Candidates.fromSearchResult(result);
+        CompletionCandidates candidates = CompletionCandidates.fromSearchResult(result);
         return builder.exclude(excludeKeys).buildSimpleCompletions().getCompletionItems(candidates);
     }
 
@@ -176,10 +176,10 @@ public final class CompletionHandler {
             return traitValueCompletions(traitValue, model, builder);
         }
 
-        Candidates candidates = shapeCandidates(idlPosition);
-        if (candidates instanceof Candidates.Shapes shapes) {
+        CompletionCandidates candidates = CompletionCandidates.shapeCandidates(idlPosition);
+        if (candidates instanceof CompletionCandidates.Shapes shapes) {
             return builder.buildShapeCompletions(idlPosition, model).getCompletionItems(shapes);
-        } else if (candidates != Candidates.NONE) {
+        } else if (candidates != CompletionCandidates.NONE) {
             return builder.buildSimpleCompletions().getCompletionItems(candidates);
         }
 
@@ -191,7 +191,7 @@ public final class CompletionHandler {
             Model model,
             SimpleCompletions.Builder builder
     ) {
-        Candidates candidates = getElidableMemberCandidates(elidedMember.statementIndex(), model);
+        CompletionCandidates candidates = getElidableMemberCandidates(elidedMember.statementIndex(), model);
         if (candidates == null) {
             return List.of();
         }
@@ -210,22 +210,8 @@ public final class CompletionHandler {
     ) {
         var result = ShapeSearch.searchTraitValue(traitValue, model);
         Set<String> excludeKeys = getOtherPresentKeys(result);
-        Candidates candidates = Candidates.fromSearchResult(result);
+        CompletionCandidates candidates = CompletionCandidates.fromSearchResult(result);
         return builder.exclude(excludeKeys).buildSimpleCompletions().getCompletionItems(candidates);
-    }
-
-    private Candidates shapeCandidates(IdlPosition idlPosition) {
-        return switch (idlPosition) {
-            case IdlPosition.UseTarget ignored -> Candidates.Shapes.USE_TARGET;
-            case IdlPosition.TraitId ignored -> Candidates.Shapes.TRAITS;
-            case IdlPosition.Mixin ignored -> Candidates.Shapes.MIXINS;
-            case IdlPosition.ForResource ignored -> Candidates.Shapes.RESOURCE_SHAPES;
-            case IdlPosition.MemberTarget ignored -> Candidates.Shapes.MEMBER_TARGETABLE;
-            case IdlPosition.ApplyTarget ignored -> Candidates.Shapes.ANY_SHAPE;
-            case IdlPosition.NodeMemberTarget nodeMemberTarget -> Candidates.fromSearchResult(
-                    ShapeSearch.searchNodeMemberTarget(nodeMemberTarget));
-            default -> Candidates.NONE;
-        };
     }
 
     private List<CompletionItem> memberNameCompletions(
@@ -243,20 +229,20 @@ public final class CompletionHandler {
         String shapeType = shapeDef.shapeType().copyValueFrom(smithyFile.document());
         StructureShape shapeMembersDef = Builtins.getMembersForShapeType(shapeType);
 
-        Candidates candidates = null;
+        CompletionCandidates candidates = null;
         if (shapeMembersDef != null) {
-            candidates = Candidates.membersCandidates(Builtins.MODEL, shapeMembersDef);
+            candidates = CompletionCandidates.membersCandidates(Builtins.MODEL, shapeMembersDef);
         }
 
         if (project.modelResult().getResult().isPresent()) {
-            Candidates elidedCandidates = getElidableMemberCandidates(
+            CompletionCandidates elidedCandidates = getElidableMemberCandidates(
                     memberName.statementIndex(),
                     project.modelResult().getResult().get());
 
             if (elidedCandidates != null) {
                 candidates = candidates == null
                         ? elidedCandidates
-                        : new Candidates.And(candidates, elidedCandidates);
+                        : new CompletionCandidates.And(candidates, elidedCandidates);
             }
         }
 
@@ -271,7 +257,7 @@ public final class CompletionHandler {
         return builder.exclude(otherMembers).buildSimpleCompletions().getCompletionItems(candidates);
     }
 
-    private Candidates getElidableMemberCandidates(int statementIndex, Model model) {
+    private CompletionCandidates getElidableMemberCandidates(int statementIndex, Model model) {
         var resourceAndMixins = ShapeSearch.findForResourceAndMixins(
                 SyntaxSearch.closestForResourceAndMixinsBeforeMember(smithyFile.statements(), statementIndex),
                 smithyFile,
@@ -291,6 +277,6 @@ public final class CompletionHandler {
             return null;
         }
 
-        return new Candidates.ElidedMembers(memberNames);
+        return new CompletionCandidates.ElidedMembers(memberNames);
     }
 }

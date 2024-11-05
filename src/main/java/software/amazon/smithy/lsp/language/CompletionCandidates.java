@@ -22,13 +22,13 @@ import software.amazon.smithy.model.traits.DefaultTrait;
 import software.amazon.smithy.model.traits.IdRefTrait;
 
 /**
- * Candidates for code-completions.
+ * Candidates for code completions.
  *
  * <p>There are different kinds of completion candidates, each of which may
  * need to be represented differently, filtered, and/or mapped to IDE-specific
  * data structures in their own way.</p>
  */
-sealed interface Candidates {
+sealed interface CompletionCandidates {
     Constant NONE = new Constant("");
     Constant EMPTY_STRING = new Constant("\"\"");
     Constant EMPTY_OBJ = new Constant("{}");
@@ -43,14 +43,12 @@ sealed interface Candidates {
             "apply"));
     // TODO: Maybe BUILTIN_CONTROLS and BUILTIN_METADATA should be regular
     //  Labeled/Members, with custom mappers.
-    Literals BUILTIN_CONTROLS = new Candidates.Literals(
-            Builtins.CONTROL.members().stream()
-                    .map(member -> "$" + member.getMemberName() + ": " + Candidates.defaultCandidates(member).value())
-                    .toList());
-    Literals BUILTIN_METADATA = new Candidates.Literals(
-            Builtins.METADATA.members().stream()
-                    .map(member -> member.getMemberName() + " = []")
-                    .toList());
+    Literals BUILTIN_CONTROLS = new Literals(Builtins.CONTROL.members().stream()
+            .map(member -> "$" + member.getMemberName() + ": " + defaultCandidates(member).value())
+            .toList());
+    Literals BUILTIN_METADATA = new Literals(Builtins.METADATA.members().stream()
+            .map(member -> member.getMemberName() + " = []")
+            .toList());
     Labeled SMITHY_IDL_VERSION = new Labeled(Stream.of("1.0", "2.0")
             .collect(StreamUtils.toWrappedMap()));
     Labeled VALIDATOR_NAMES = new Labeled(Builtins.VALIDATOR_CONFIG_MAPPING.keySet().stream()
@@ -64,7 +62,7 @@ sealed interface Candidates {
      * @return A constant value corresponding to the 'default' or 'empty' value
      *  of a shape.
      */
-    static Candidates.Constant defaultCandidates(Shape shape) {
+    static Constant defaultCandidates(Shape shape) {
         if (shape.hasTrait(DefaultTrait.class)) {
             DefaultTrait defaultTrait = shape.expectTrait(DefaultTrait.class);
             return new Constant(Node.printJson(defaultTrait.toNode()));
@@ -85,7 +83,7 @@ sealed interface Candidates {
      * @param result The search result to get candidates from.
      * @return The completion candidates for {@code result}.
      */
-    static Candidates fromSearchResult(NodeSearch.Result result) {
+    static CompletionCandidates fromSearchResult(NodeSearch.Result result) {
         return switch (result) {
             case NodeSearch.Result.TerminalShape(Shape shape, var ignored) ->
                     terminalCandidates(shape);
@@ -98,10 +96,28 @@ sealed interface Candidates {
 
             case NodeSearch.Result.ArrayShape(var ignored, ListShape shape, Model model) ->
                     model.getShape(shape.getMember().getTarget())
-                            .map(Candidates::terminalCandidates)
+                            .map(CompletionCandidates::terminalCandidates)
                             .orElse(NONE);
 
             default -> NONE;
+        };
+    }
+
+    /**
+     * @param idlPosition The position in the idl to get candidates for.
+     * @return The candidates for shape completions.
+     */
+    static CompletionCandidates shapeCandidates(IdlPosition idlPosition) {
+        return switch (idlPosition) {
+            case IdlPosition.UseTarget ignored -> Shapes.USE_TARGET;
+            case IdlPosition.TraitId ignored -> Shapes.TRAITS;
+            case IdlPosition.Mixin ignored -> Shapes.MIXINS;
+            case IdlPosition.ForResource ignored -> Shapes.RESOURCE_SHAPES;
+            case IdlPosition.MemberTarget ignored -> Shapes.MEMBER_TARGETABLE;
+            case IdlPosition.ApplyTarget ignored -> Shapes.ANY_SHAPE;
+            case IdlPosition.NodeMemberTarget nodeMemberTarget -> fromSearchResult(
+                    ShapeSearch.searchNodeMemberTarget(nodeMemberTarget));
+            default -> CompletionCandidates.NONE;
         };
     }
 
@@ -111,26 +127,22 @@ sealed interface Candidates {
      * @return If a struct or union shape, returns {@link Members} candidates.
      *  Otherwise, {@link #NONE}.
      */
-    static Candidates membersCandidates(Model model, Shape shape) {
+    static CompletionCandidates membersCandidates(Model model, Shape shape) {
         if (shape.isStructureShape() || shape.isUnionShape()) {
             return new Members(shape.getAllMembers().entrySet().stream()
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey,
-                            entry -> model.getShape(entry.getValue().getTarget())
-                                        .map(Candidates::defaultCandidates)
-                                        .orElse(NONE))));
+                    .collect(StreamUtils.mappingValue(member -> model.getShape(member.getTarget())
+                            .map(CompletionCandidates::defaultCandidates)
+                            .orElse(NONE))));
         } else if (shape instanceof MapShape mapShape) {
-            EnumShape enumKey = model.getShape(mapShape.getKey().getTarget())
+            return model.getShape(mapShape.getKey().getTarget())
                     .flatMap(Shape::asEnumShape)
-                    .orElse(null);
-            if (enumKey != null) {
-                return terminalCandidates(enumKey);
-            }
+                    .map(CompletionCandidates::terminalCandidates)
+                    .orElse(NONE);
         }
         return NONE;
     }
 
-    private static Candidates terminalCandidates(Shape shape) {
+    private static CompletionCandidates terminalCandidates(Shape shape) {
         Builtins.BuiltinShape builtinShape = Builtins.BUILTIN_SHAPES.get(shape.getId());
         if (builtinShape != null) {
             return forBuiltin(builtinShape);
@@ -155,7 +167,7 @@ sealed interface Candidates {
         };
     }
 
-    private static Candidates forBuiltin(Builtins.BuiltinShape builtinShape) {
+    private static CompletionCandidates forBuiltin(Builtins.BuiltinShape builtinShape) {
         return switch (builtinShape) {
             case SmithyIdlVersion -> SMITHY_IDL_VERSION;
             case AnyNamespace -> Custom.NAMESPACE_FILTER;
@@ -176,40 +188,46 @@ sealed interface Candidates {
      *
      * @param value The completion value.
      */
-    record Constant(String value) implements Candidates {}
+    record Constant(String value) implements CompletionCandidates {}
 
     /**
      * Multiple values to be completed as literals, like keywords.
      *
      * @param literals The completion values.
      */
-    record Literals(List<String> literals) implements Candidates {}
+    record Literals(List<String> literals) implements CompletionCandidates {}
 
     /**
      * Multiple label -> value pairs, where the label is displayed to the user,
      * and may be used for matching, and the value is the literal text to complete.
      *
+     * <p>For example, completing enum value in a trait may display and match on the
+     * name, like FOO, but complete the actual value, like "foo".
+     *
      * @param labeled The labeled completion values.
      */
-    record Labeled(Map<String, String> labeled) implements Candidates {}
+    record Labeled(Map<String, String> labeled) implements CompletionCandidates {}
 
     /**
      * Multiple name -> constant pairs, where the name corresponds to a member
      * name, and the constant is a default/empty value for that member.
      *
+     * <p>For example, shape members can be completed as {@code name: constant}.
+     *
      * @param members The members completion values.
      */
-    record Members(Map<String, Candidates.Constant> members) implements Candidates {}
+    record Members(Map<String, Constant> members) implements CompletionCandidates {}
 
     /**
      * Multiple member names to complete as elided members.
+     *
      * @apiNote These are distinct from {@link Literals} because they may have
      * custom filtering/mapping, and may appear _with_ {@link Literals} in an
      * {@link And}.
      *
      * @param memberNames The member names completion values.
      */
-    record ElidedMembers(Collection<String> memberNames) implements Candidates {}
+    record ElidedMembers(Collection<String> memberNames) implements CompletionCandidates {}
 
     /**
      * A combination of two sets of completion candidates, of possibly different
@@ -218,13 +236,13 @@ sealed interface Candidates {
      * @param one The first set of completion candidates.
      * @param two The second set of completion candidates.
      */
-    record And(Candidates one, Candidates two) implements Candidates {}
+    record And(CompletionCandidates one, CompletionCandidates two) implements CompletionCandidates {}
 
     /**
      * Shape completion candidates, each corresponding to a different set of
      * shapes that will be selected from the model.
      */
-    enum Shapes implements Candidates {
+    enum Shapes implements CompletionCandidates {
         ANY_SHAPE,
         USE_TARGET,
         TRAITS,
@@ -239,7 +257,7 @@ sealed interface Candidates {
     /**
      * Candidates that require a custom computation to generate, lazily.
      */
-    enum Custom implements Candidates {
+    enum Custom implements CompletionCandidates {
         NAMESPACE_FILTER,
         VALIDATOR_NAME,
         PROJECT_NAMESPACES,

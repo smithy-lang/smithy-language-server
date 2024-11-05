@@ -274,7 +274,7 @@ public class CompletionHandlerTest {
                 app%""");
         List<String> comps = getCompLabels(text);
 
-        String[] keywords = Candidates.KEYWORD.literals().toArray(new String[0]);
+        String[] keywords = CompletionCandidates.KEYWORD.literals().toArray(new String[0]);
         assertThat(comps, containsInAnyOrder(keywords));
     }
 

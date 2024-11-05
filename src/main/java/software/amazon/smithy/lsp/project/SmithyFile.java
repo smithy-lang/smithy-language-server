@@ -40,7 +40,6 @@ public final class SmithyFile implements ProjectFile {
     private final Map<Position, DocumentShape> documentShapes;
     private final DocumentVersion documentVersion;
     private List<Syntax.Statement> statements;
-    private int changeVersion;
 
     private SmithyFile(Builder builder) {
         this.path = builder.path;
@@ -51,7 +50,6 @@ public final class SmithyFile implements ProjectFile {
         this.documentShapes = builder.documentShapes;
         this.documentVersion = builder.documentVersion;
         this.statements = builder.statements;
-        this.changeVersion = builder.changeVersion;
     }
 
     /**
@@ -155,14 +153,6 @@ public final class SmithyFile implements ProjectFile {
                 || !shape.hasTrait(PrivateTrait.ID);
     }
 
-    public int changeVersion() {
-        return changeVersion;
-    }
-
-    public void setChangeVersion(int changeVersion) {
-        this.changeVersion = changeVersion;
-    }
-
     /**
      * @return The parsed statements in this file
      */
@@ -204,7 +194,6 @@ public final class SmithyFile implements ProjectFile {
         private Map<Position, DocumentShape> documentShapes;
         private DocumentVersion documentVersion;
         private List<Syntax.Statement> statements;
-        private int changeVersion;
 
         private Builder() {
         }
@@ -246,11 +235,6 @@ public final class SmithyFile implements ProjectFile {
 
         public Builder statements(List<Syntax.Statement> statements) {
             this.statements = statements;
-            return this;
-        }
-
-        public Builder changeVersion(int changeVersion) {
-            this.changeVersion = changeVersion;
             return this;
         }
 

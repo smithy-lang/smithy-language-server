@@ -32,36 +32,36 @@ final class SimpleCompletions {
         this.mapper = mapper;
     }
 
-    List<CompletionItem> getCompletionItems(Candidates candidates) {
+    List<CompletionItem> getCompletionItems(CompletionCandidates candidates) {
         return switch (candidates) {
-            case Candidates.Constant(var value)
+            case CompletionCandidates.Constant(var value)
                     when !value.isEmpty() && matcher.testConstant(value) -> List.of(mapper.constant(value));
 
-            case Candidates.Literals(var literals) -> literals.stream()
+            case CompletionCandidates.Literals(var literals) -> literals.stream()
                     .filter(matcher::testLiteral)
                     .map(mapper::literal)
                     .toList();
 
-            case Candidates.Labeled(var labeled) -> labeled.entrySet().stream()
+            case CompletionCandidates.Labeled(var labeled) -> labeled.entrySet().stream()
                     .filter(matcher::testLabeled)
                     .map(mapper::labeled)
                     .toList();
 
-            case Candidates.Members(var members) -> members.entrySet().stream()
+            case CompletionCandidates.Members(var members) -> members.entrySet().stream()
                     .filter(matcher::testMember)
                     .map(mapper::member)
                     .toList();
 
-            case Candidates.ElidedMembers(var memberNames) -> memberNames.stream()
+            case CompletionCandidates.ElidedMembers(var memberNames) -> memberNames.stream()
                     .filter(matcher::testElided)
                     .map(mapper::elided)
                     .toList();
 
-            case Candidates.Custom custom
+            case CompletionCandidates.Custom custom
                     // TODO: Need to get rid of this stupid null check
                     when project != null -> getCompletionItems(customCandidates(custom));
 
-            case Candidates.And(var one, var two) -> {
+            case CompletionCandidates.And(var one, var two) -> {
                 List<CompletionItem> oneItems = getCompletionItems(one);
                 List<CompletionItem> twoItems = getCompletionItems(two);
                 List<CompletionItem> completionItems = new ArrayList<>(oneItems.size() + twoItems.size());
@@ -73,14 +73,14 @@ final class SimpleCompletions {
         };
     }
 
-    private Candidates customCandidates(Candidates.Custom custom) {
+    private CompletionCandidates customCandidates(CompletionCandidates.Custom custom) {
         return switch (custom) {
-            case NAMESPACE_FILTER -> new Candidates.Labeled(Stream.concat(Stream.of("*"), streamNamespaces())
+            case NAMESPACE_FILTER -> new CompletionCandidates.Labeled(Stream.concat(Stream.of("*"), streamNamespaces())
                     .collect(StreamUtils.toWrappedMap()));
 
-            case VALIDATOR_NAME -> Candidates.VALIDATOR_NAMES;
+            case VALIDATOR_NAME -> CompletionCandidates.VALIDATOR_NAMES;
 
-            case PROJECT_NAMESPACES -> new Candidates.Literals(streamNamespaces().toList());
+            case PROJECT_NAMESPACES -> new CompletionCandidates.Literals(streamNamespaces().toList());
         };
     }
 
@@ -162,7 +162,7 @@ final class SimpleCompletions {
             return test(labeled.getKey()) || test(labeled.getValue());
         }
 
-        default boolean testMember(Map.Entry<String, Candidates.Constant> member) {
+        default boolean testMember(Map.Entry<String, CompletionCandidates.Constant> member) {
             return test(member.getKey());
         }
 
@@ -206,7 +206,7 @@ final class SimpleCompletions {
             return textEditCompletion(entry.getKey(), CompletionItemKind.EnumMember, entry.getValue());
         }
 
-        CompletionItem member(Map.Entry<String, Candidates.Constant> entry) {
+        CompletionItem member(Map.Entry<String, CompletionCandidates.Constant> entry) {
             String value = entry.getKey() + ": " + entry.getValue().value();
             return textEditCompletion(entry.getKey(), CompletionItemKind.Field, value);
         }
