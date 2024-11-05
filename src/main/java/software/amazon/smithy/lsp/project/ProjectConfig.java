@@ -5,16 +5,16 @@
 
 package software.amazon.smithy.lsp.project;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import software.amazon.smithy.build.model.MavenConfig;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.node.ObjectNode;
 import software.amazon.smithy.model.node.StringNode;
-import software.amazon.smithy.utils.IoUtils;
 
 /**
  * A complete view of all a project's configuration that is needed to load it,
@@ -26,7 +26,7 @@ public final class ProjectConfig {
     private final String outputDirectory;
     private final List<ProjectDependency> dependencies;
     private final MavenConfig mavenConfig;
-    private final List<Path> loadedConfigPaths;
+    private final Map<String, BuildFile> buildFiles;
 
     private ProjectConfig(Builder builder) {
         this.sources = builder.sources;
@@ -34,7 +34,7 @@ public final class ProjectConfig {
         this.outputDirectory = builder.outputDirectory;
         this.dependencies = builder.dependencies;
         this.mavenConfig = builder.mavenConfig;
-        this.loadedConfigPaths = builder.loadedConfigPaths;
+        this.buildFiles = builder.buildFiles;
     }
 
     static ProjectConfig empty() {
@@ -80,8 +80,11 @@ public final class ProjectConfig {
         return Optional.ofNullable(mavenConfig);
     }
 
-    public List<Path> loadedConfigPaths() {
-        return loadedConfigPaths;
+    /**
+     * @return Map of path to each {@link BuildFile} loaded in the project
+     */
+    public Map<String, BuildFile> buildFiles() {
+        return buildFiles;
     }
 
     static final class Builder {
@@ -90,14 +93,13 @@ public final class ProjectConfig {
         String outputDirectory;
         final List<ProjectDependency> dependencies = new ArrayList<>();
         MavenConfig mavenConfig;
-        final List<Path> loadedConfigPaths = new ArrayList<>();
+        private final Map<String, BuildFile> buildFiles = new HashMap<>();
 
         private Builder() {
         }
 
-        static Builder load(Path path) {
-            String json = IoUtils.readUtf8File(path);
-            Node node = Node.parseJsonWithComments(json, path.toString());
+        static Builder load(BuildFile buildFile) {
+            Node node = Node.parseJsonWithComments(buildFile.document().copyText(), buildFile.path());
             ObjectNode objectNode = node.expectObjectNode();
             ProjectConfig.Builder projectConfigBuilder = ProjectConfig.builder();
             objectNode.getArrayMember("sources").ifPresent(arrayNode ->
@@ -155,8 +157,8 @@ public final class ProjectConfig {
             return this;
         }
 
-        public Builder loadedConfigPaths(List<Path> loadedConfigPaths) {
-            this.loadedConfigPaths.addAll(loadedConfigPaths);
+        public Builder buildFiles(Map<String, BuildFile> buildFiles) {
+            this.buildFiles.putAll(buildFiles);
             return this;
         }
 

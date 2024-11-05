@@ -10,7 +10,6 @@ import static org.hamcrest.Matchers.hasItem;
 
 import java.nio.file.FileSystems;
 import java.nio.file.PathMatcher;
-import java.util.HashSet;
 import java.util.List;
 import org.eclipse.lsp4j.DidChangeWatchedFilesRegistrationOptions;
 import org.eclipse.lsp4j.Registration;
@@ -18,7 +17,6 @@ import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectLoader;
-import software.amazon.smithy.lsp.project.ProjectManager;
 import software.amazon.smithy.utils.ListUtils;
 
 public class FileWatcherRegistrationsTest {
@@ -42,7 +40,7 @@ public class FileWatcherRegistrationsTest {
                         .build())
                 .build();
 
-        Project project = ProjectLoader.load(workspace.getRoot(), new ProjectManager(), new HashSet<>()).unwrap();
+        Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
         List<PathMatcher> matchers = FileWatcherRegistrations.getSmithyFileWatcherRegistrations(List.of(project))
                 .stream()
                 .map(Registration::getRegisterOptions)

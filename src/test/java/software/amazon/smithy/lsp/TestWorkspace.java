@@ -87,6 +87,14 @@ public final class TestWorkspace {
         this.config = newConfig;
     }
 
+    public String readFile(String relativePath) {
+        try {
+            return Files.readString(root.resolve(relativePath));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     /**
      * @param model String of the model to create in the workspace
      * @return A workspace with a single model, "main.smithy", with the given contents, and

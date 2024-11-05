@@ -12,12 +12,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
-import java.util.HashSet;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectLoader;
-import software.amazon.smithy.lsp.project.ProjectManager;
 import software.amazon.smithy.utils.ListUtils;
 
 public class FilePatternsTest {
@@ -41,7 +39,7 @@ public class FilePatternsTest {
                         .build())
                 .build();
 
-        Project project = ProjectLoader.load(workspace.getRoot(), new ProjectManager(), new HashSet<>()).unwrap();
+        Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
         PathMatcher smithyMatcher = FilePatterns.getSmithyFilesPathMatcher(project);
         PathMatcher buildMatcher = FilePatterns.getProjectBuildFilesPathMatcher(project);
 
@@ -67,7 +65,7 @@ public class FilePatternsTest {
         workspaceRoot.resolve("bar").toFile().mkdir();
         workspaceRoot.resolve("bar/smithy-build.json").toFile().createNewFile();
 
-        Project fooProject = ProjectLoader.load(fooWorkspace.getRoot(), new ProjectManager(), new HashSet<>()).unwrap();
+        Project fooProject = ProjectLoader.load(fooWorkspace.getRoot(), new ServerState()).unwrap();
 
         PathMatcher fooBuildMatcher = FilePatterns.getProjectBuildFilesPathMatcher(fooProject);
         PathMatcher workspaceBuildMatcher = FilePatterns.getWorkspaceBuildFilesPathMatcher(workspaceRoot);

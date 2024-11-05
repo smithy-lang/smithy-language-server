@@ -10,9 +10,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
+import software.amazon.smithy.lsp.ServerState;
+import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.node.NodeMapper;
@@ -84,19 +88,23 @@ public final class ProjectConfigLoader {
     }
 
     static Result<ProjectConfig, List<Exception>> loadFromRoot(Path workspaceRoot) {
-        List<Path> loadedConfigPaths = new ArrayList<>();
+        return loadFromRoot(workspaceRoot, new ServerState());
+    }
+
+    static Result<ProjectConfig, List<Exception>> loadFromRoot(Path workspaceRoot, ServerState state) {
         SmithyBuildConfig.Builder builder = SmithyBuildConfig.builder();
         List<Exception> exceptions = new ArrayList<>();
+        Map<String, BuildFile> buildFiles = new HashMap<>();
 
         Path smithyBuildPath = workspaceRoot.resolve(SMITHY_BUILD);
         if (Files.isRegularFile(smithyBuildPath)) {
             LOGGER.info("Loading smithy-build.json from " + smithyBuildPath);
-            Result<SmithyBuildConfig, Exception> result = Result.ofFallible(() ->
-                    SmithyBuildConfig.load(smithyBuildPath));
-            result.get().ifPresent(config -> {
-                    builder.merge(config);
-                    loadedConfigPaths.add(smithyBuildPath);
+            Result<SmithyBuildConfig, Exception> result = Result.ofFallible(() -> {
+                BuildFile buildFile = addBuildFile(buildFiles, smithyBuildPath, state);
+                return SmithyBuildConfig.fromNode(
+                        Node.parseJsonWithComments(buildFile.document().copyText(), buildFile.path()));
             });
+            result.get().ifPresent(builder::merge);
             result.getErr().ifPresent(exceptions::add);
         } else {
             LOGGER.info("No smithy-build.json found at " + smithyBuildPath + ", defaulting to empty config.");
@@ -107,12 +115,11 @@ public final class ProjectConfigLoader {
         for (String ext : SMITHY_BUILD_EXTS) {
             Path extPath = workspaceRoot.resolve(ext);
             if (Files.isRegularFile(extPath)) {
-                Result<SmithyBuildExtensions, Exception> result = Result.ofFallible(() ->
-                        loadSmithyBuildExtensions(extPath));
-                result.get().ifPresent(config -> {
-                    extensionsBuilder.merge(config);
-                    loadedConfigPaths.add(extPath);
+                Result<SmithyBuildExtensions, Exception> result = Result.ofFallible(() -> {
+                    BuildFile buildFile = addBuildFile(buildFiles, extPath, state);
+                    return loadSmithyBuildExtensions(buildFile);
                 });
+                result.get().ifPresent(extensionsBuilder::merge);
                 result.getErr().ifPresent(exceptions::add);
             }
         }
@@ -121,11 +128,12 @@ public final class ProjectConfigLoader {
         Path smithyProjectPath = workspaceRoot.resolve(SMITHY_PROJECT);
         if (Files.isRegularFile(smithyProjectPath)) {
             LOGGER.info("Loading .smithy-project.json from " + smithyProjectPath);
-            Result<ProjectConfig.Builder, Exception> result = Result.ofFallible(() ->
-                    ProjectConfig.Builder.load(smithyProjectPath));
+            Result<ProjectConfig.Builder, Exception> result = Result.ofFallible(() -> {
+                BuildFile buildFile = addBuildFile(buildFiles, smithyProjectPath, state);
+                return ProjectConfig.Builder.load(buildFile);
+            });
             if (result.isOk()) {
                 finalConfigBuilder = result.unwrap();
-                loadedConfigPaths.add(smithyProjectPath);
             } else {
                 exceptions.add(result.unwrapErr());
             }
@@ -142,16 +150,29 @@ public final class ProjectConfigLoader {
         if (finalConfigBuilder.outputDirectory == null) {
             config.getOutputDirectory().ifPresent(finalConfigBuilder::outputDirectory);
         }
-        finalConfigBuilder.loadedConfigPaths(loadedConfigPaths);
+        finalConfigBuilder.buildFiles(buildFiles);
         return Result.ok(finalConfigBuilder.build());
     }
 
-    private static SmithyBuildExtensions loadSmithyBuildExtensions(Path path) {
+    private static BuildFile addBuildFile(Map<String, BuildFile> buildFiles, Path path, ServerState state) {
+        Document managed = state.getManagedDocument(path);
+        BuildFile buildFile;
+        if (managed != null) {
+            buildFile = new BuildFile(path.toString(), managed);
+        } else {
+            Document document = Document.of(IoUtils.readUtf8File(path));
+            buildFile = new BuildFile(path.toString(), document);
+        }
+        buildFiles.put(buildFile.path(), buildFile);
+        return buildFile;
+    }
+
+    private static SmithyBuildExtensions loadSmithyBuildExtensions(BuildFile buildFile) {
         // NOTE: This is the legacy way we loaded build extensions. It used to throw a checked exception.
-        String content = IoUtils.readUtf8File(path);
-        ObjectNode node = Node.parseJsonWithComments(content, path.toString()).expectObjectNode();
+        ObjectNode node = Node.parseJsonWithComments(
+                buildFile.document().copyText(), buildFile.path()).expectObjectNode();
         SmithyBuildExtensions config = NODE_MAPPER.deserialize(node, SmithyBuildExtensions.class);
-        config.mergeMavenFromSmithyBuildConfig(SmithyBuildConfig.load(path));
+        config.mergeMavenFromSmithyBuildConfig(SmithyBuildConfig.fromNode(node));
         return config;
     }
 }

@@ -6,29 +6,16 @@
 package software.amazon.smithy.lsp;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.logging.Logger;
 
 /**
- * Tracks asynchronous lifecycle tasks and client-managed documents.
- * Allows cancelling of an ongoing task if a new task needs to be started.
+ * Tracks asynchronous lifecycle tasks, allowing for cancellation of an ongoing
+ * task if a new task needs to be started.
  */
 final class DocumentLifecycleManager {
-    private static final Logger LOGGER = Logger.getLogger(DocumentLifecycleManager.class.getName());
     private final Map<String, CompletableFuture<Void>> tasks = new HashMap<>();
-    private final Set<String> managedDocumentUris = new HashSet<>();
-
-    Set<String> managedDocuments() {
-        return managedDocumentUris;
-    }
-
-    boolean isManaged(String uri) {
-        return managedDocuments().contains(uri);
-    }
 
     CompletableFuture<Void> getTask(String uri) {
         return tasks.get(uri);
