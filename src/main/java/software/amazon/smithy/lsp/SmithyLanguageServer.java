@@ -806,28 +806,38 @@ public class SmithyLanguageServer implements
     private static Diagnostic toDiagnostic(ValidationEvent validationEvent, SmithyFile smithyFile) {
         DiagnosticSeverity severity = toDiagnosticSeverity(validationEvent.getSeverity());
         SourceLocation sourceLocation = validationEvent.getSourceLocation();
+        Range range = determineRange(validationEvent, sourceLocation, smithyFile);
+        String message = validationEvent.getId() + ": " + validationEvent.getMessage();
+        return new Diagnostic(range, message, severity, "Smithy");
+    }
 
-        // TODO: Improve location of diagnostics
-        Range range = LspAdapter.lineOffset(LspAdapter.toPosition(sourceLocation));
+    private static Range determineRange(ValidationEvent validationEvent,
+                                        SourceLocation sourceLocation,
+                                        SmithyFile smithyFile) {
+        final Range defaultRange = LspAdapter.lineOffset(LspAdapter.toPosition(sourceLocation));
+
+        if (smithyFile == null) {
+            return defaultRange;
+        }
+
+        DocumentParser parser = DocumentParser.forDocument(smithyFile.document());
+
+        // Case where we have shapes present
         if (validationEvent.getShapeId().isPresent()) {
             // Event is (probably) on a member target
             if (validationEvent.containsId("Target")) {
                 DocumentShape documentShape = smithyFile.documentShapesByStartPosition()
                         .get(LspAdapter.toPosition(sourceLocation));
                 if (documentShape != null && documentShape.hasMemberTarget()) {
-                    range = documentShape.targetReference().range();
+                    return documentShape.targetReference().range();
                 }
-            }  else {
+            } else {
                 // Check if the event location is on a trait application
-                Range traitRange = DocumentParser.forDocument(smithyFile.document()).traitIdRange(sourceLocation);
-                if (traitRange != null) {
-                    range = traitRange;
-                }
+                return Objects.requireNonNullElse(parser.traitIdRange(sourceLocation), defaultRange);
             }
         }
 
-        String message = validationEvent.getId() + ": " + validationEvent.getMessage();
-        return new Diagnostic(range, message, severity, "Smithy");
+        return Objects.requireNonNullElse(parser.findContiguousRange(sourceLocation), defaultRange);
     }
 
     private static DiagnosticSeverity toDiagnosticSeverity(Severity severity) {

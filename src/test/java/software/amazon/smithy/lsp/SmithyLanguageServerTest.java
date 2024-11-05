@@ -58,6 +58,7 @@ import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextEdit;
@@ -799,6 +800,56 @@ public class SmithyLanguageServerTest {
 
         Document document = server.getFirstProject().getDocument(uri);
         assertThat(diagnostic.getRange(), hasText(document, equalTo("Bar")));
+    }
+
+    @Test
+    public void diagnosticsOnInvalidStructureMember() {
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+                
+                structure Foo {
+                    abc
+                }
+                """);
+        TestWorkspace workspace = TestWorkspace.singleModel(model);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+        String uri = workspace.getUri("main.smithy");
+
+        List<Diagnostic> diagnostics = server.getFileDiagnostics(uri);
+        assertThat(diagnostics, hasSize(1));
+
+        Diagnostic diagnostic = diagnostics.getFirst();
+        Document document = server.getFirstProject().getDocument(uri);
+
+        assertThat(diagnostic.getRange(), equalTo(
+                new Range(
+                        new Position(4, 7),
+                        new Position(4, 8)
+                    )
+                )
+        );
+    }
+
+    @Test
+    public void diagnosticsOnUse() {
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+                
+                use mything#SomeUnknownThing
+                """);
+        TestWorkspace workspace = TestWorkspace.singleModel(model);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+        String uri = workspace.getUri("main.smithy");
+
+        List<Diagnostic> diagnostics = server.getFileDiagnostics(uri);
+
+        Diagnostic diagnostic = diagnostics.getFirst();
+        Document document = server.getFirstProject().getDocument(uri);
+
+        assertThat(diagnostic.getRange(), hasText(document, equalTo("mything#SomeUnknownThing")));
+
     }
 
     @Test
