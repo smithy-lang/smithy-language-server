@@ -93,7 +93,7 @@ public final class ProjectConfig {
         String outputDirectory;
         final List<ProjectDependency> dependencies = new ArrayList<>();
         MavenConfig mavenConfig;
-        final Map<String, BuildFile> buildFiles = new HashMap<>();
+        private final Map<String, BuildFile> buildFiles = new HashMap<>();
 
         private Builder() {
         }

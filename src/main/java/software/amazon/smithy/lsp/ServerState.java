@@ -86,19 +86,14 @@ public record ServerState(
     }
 
     ProjectAndFile findProjectAndFile(String uri) {
-        String path = LspAdapter.toPath(uri);
-        // TODO: From isDetached
-        for (Project project : attachedProjects.values()) {
-            ProjectFile projectFile = project.getProjectFile(path);
-            if (projectFile != null) {
-                detachedProjects.remove(uri);
-
-                return new ProjectAndFile(project, projectFile);
-            }
+        ProjectAndFile attached = findAttachedAndRemoveDetached(uri);
+        if (attached != null) {
+            return attached;
         }
 
         Project detachedProject = detachedProjects.get(uri);
         if (detachedProject != null) {
+            String path = LspAdapter.toPath(uri);
             ProjectFile projectFile = detachedProject.getProjectFile(path);
             if (projectFile != null) {
                 return new ProjectAndFile(detachedProject, projectFile);
@@ -111,21 +106,38 @@ public record ServerState(
     }
 
     boolean isDetached(String uri) {
+        if (detachedProjects.containsKey(uri)) {
+            ProjectAndFile attached = findAttachedAndRemoveDetached(uri);
+            // The file is only truly detached if the above didn't find an attached project
+            // for the given file
+            return attached == null;
+        }
+
+        return false;
+    }
+
+    /**
+     * Searches for the given {@code uri} in attached projects, and if found,
+     * makes sure any old detached projects for that file are removed.
+     *
+     * @param uri The uri of the project and file to find
+     * @return The attached project and file, or null if not found
+     */
+    private ProjectAndFile findAttachedAndRemoveDetached(String uri) {
+        String path = LspAdapter.toPath(uri);
         // We might be in a state where a file was added to a tracked project,
         // but was opened before the project loaded. This would result in it
         // being placed in a detachedProjects project. Removing it here is basically
         // like removing it lazily, although it does feel a little hacky.
-        String path = LspAdapter.toPath(uri);
-        if (detachedProjects.containsKey(uri)) {
-            for (Project project : attachedProjects.values()) {
-                if (project.smithyFiles().containsKey(path)) {
-                    detachedProjects.remove(uri);
-                    return false;
-                }
+        for (Project project : attachedProjects.values()) {
+            ProjectFile projectFile = project.getProjectFile(path);
+            if (projectFile != null) {
+                detachedProjects.remove(uri);
+                return new ProjectAndFile(project, projectFile);
             }
-            return true;
         }
-        return false;
+
+        return null;
     }
 
     Project createDetachedProject(String uri, String text) {
