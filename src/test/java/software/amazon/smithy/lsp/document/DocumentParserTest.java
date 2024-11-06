@@ -11,6 +11,7 @@ import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static software.amazon.smithy.lsp.document.DocumentTest.safeIndex;
 import static software.amazon.smithy.lsp.document.DocumentTest.safeString;
 import static software.amazon.smithy.lsp.document.DocumentTest.string;
@@ -18,9 +19,14 @@ import static software.amazon.smithy.lsp.document.DocumentTest.string;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
@@ -318,5 +324,79 @@ public class DocumentParserTest {
         assertThat(getInput.kind(), equalTo(DocumentShape.Kind.Inline));
         assertThat(getInputA.kind(), equalTo(DocumentShape.Kind.DefinedMember));
         assertThat(getInputA.shapeName(), string("a"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("contiguousRangeTestCases")
+    public void findsContiguousRange(SourceLocation input, Range expected) {
+        String text = """
+            abc def
+              ghi jkl
+            mno  pqr
+            """;
+        DocumentParser parser = DocumentParser.of(safeString(text));
+
+        Range actual = parser.findContiguousRange(input);
+
+        if (expected == null) {
+            assertNull(actual);
+        } else {
+            assertEquals(expected, actual);
+        }
+    }
+
+    private static Stream<Arguments> contiguousRangeTestCases() {
+        return Stream.of(
+                // Middle of a word
+                Arguments.of(
+                        new SourceLocation("test.smithy", 1, 2),
+                        new Range(new Position(0, 0), new Position(0, 3))
+                ),
+                // Start of a word
+                Arguments.of(
+                        new SourceLocation("test.smithy", 1, 5),
+                        new Range(new Position(0, 4), new Position(0, 7))
+                ),
+                // End of a word
+                Arguments.of(
+                        new SourceLocation("test.smithy", 1, 7),
+                        new Range(new Position(0, 4), new Position(0, 7))
+                ),
+                // Start of line
+                Arguments.of(
+                        new SourceLocation("test.smithy", 3, 1),
+                        new Range(new Position(2, 0), new Position(2, 3))
+                ),
+                // End of line
+                Arguments.of(
+                        new SourceLocation("test.smithy", 3, 6),
+                        new Range(new Position(2, 5), new Position(2, 8))
+                ),
+                // Invalid location
+                Arguments.of(
+                        new SourceLocation("test.smithy", 10, 1),
+                        null
+                ),
+                // At whitespace between words
+                Arguments.of(
+                        new SourceLocation("test.smithy", 1, 4),
+                        new Range(new Position(0, 3), new Position(0, 4))
+                ),
+                // At start of file
+                Arguments.of(
+                        new SourceLocation("test.smithy", 1, 1),
+                        new Range(new Position(0, 0), new Position(0, 3))
+                ),
+                // At end of file - last character
+                Arguments.of(
+                        new SourceLocation("test.smithy", 3, 8),
+                        new Range(new Position(2, 5), new Position(2, 8))
+                ),
+                // At end of file - after last character
+                Arguments.of(
+                        new SourceLocation("test.smithy", 3, 9),
+                        new Range(new Position(2, 8), new Position(2, 9))
+                )
+        );
     }
 }

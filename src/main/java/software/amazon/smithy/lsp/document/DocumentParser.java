@@ -704,4 +704,58 @@ public final class DocumentParser extends SimpleParser {
     private void reset() {
         rewind(0, 1, 1);
     }
+
+    /**
+     * Finds a contiguous range of non-whitespace characters starting from the given SourceLocation.
+     * If the sourceLocation happens to be a whitespace character, it returns a Range representing that column.
+     *
+     * Here is how it works:
+     * 1. We first jump to sourceLocation. If we can't, we return null.
+     * 2. We then check if the sourceLocation is a whitespace character. If it is, we return that column.
+     * 3. We then find the start of the contiguous range by traversing backwards until a whitespace character is found.
+     * 4. We then find the end of the contiguous range by traversing forwards until a whitespace character is found.
+     *
+     * @param sourceLocation The starting location to search from.
+     * @return A Range object representing the contiguous non-whitespace characters,
+     *         or null if not found.
+     */
+    public Range findContiguousRange(SourceLocation sourceLocation) {
+        if (!jumpToSource(sourceLocation)) {
+            return null;
+        }
+
+        Position startPosition = LspAdapter.toPosition(sourceLocation);
+        int startLine = startPosition.getLine();
+        int startColumn = startPosition.getCharacter();
+
+        if (isWs()) {
+            return new Range(
+                        new Position(startLine, startColumn),
+                        // As per LSP docs the end postion is exclusive,
+                        // so adding `+1` makes it highlight the startColumn.
+                        new Position(startLine, startColumn + 1)
+                    );
+        }
+
+        // The column offset is NOT the position, but an offset from the sourceLocation column.
+        // This is required as the `isWs` uses offset, and not position to determine whether the token at the offset
+        // is whitespace or not.
+        int startColumnOffset = 0;
+        // Find the start of the contiguous range by traversing backwards until a whitespace.
+        while (startColumn + startColumnOffset > 0 && !isWs(startColumnOffset - 1)) {
+            startColumnOffset--;
+        }
+
+        int endColumn = startColumn;
+        // Find the end of the contiguous range
+        while (!isEof() && !isWs()) {
+            endColumn++;
+            skip();
+        }
+
+        // We add one to the column as it helps us shift it to correct character.
+        return new Range(
+                new Position(startLine, startColumn + startColumnOffset),
+                new Position(startLine, endColumn));
+    }
 }
