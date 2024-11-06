@@ -1,5 +1,14 @@
 # Smithy Language Server Changelog
 
+## 0.5.0 (2024-11-06)
+
+### Features
+* Added support for projects nested in subdirectories of a workspace. The server can now load multiple projects within the same workspace. ([#167](https://github.com/smithy-lang/smithy-language-server/pull/167))
+* Improved location of diagnostics. Diagnostics now appear only on the token, rather than including a bunch of whitespace. ([#179](https://github.com/smithy-lang/smithy-language-server/pull/179))
+
+### Bug fixes
+* Fixed potential deadlock in `didChangeWorkspaceFolders`. ([#167](https://github.com/smithy-lang/smithy-language-server/pull/167))
+
 ## 0.4.1 (2024-09-09)
 
 ### Features
