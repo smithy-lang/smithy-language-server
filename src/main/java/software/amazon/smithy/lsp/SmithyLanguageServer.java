@@ -298,6 +298,7 @@ public class SmithyLanguageServer implements
         changeBuildOpts.setDocumentSelector(buildDocumentSelector);
         var saveBuildOpts = new TextDocumentSaveRegistrationOptions();
         saveBuildOpts.setDocumentSelector(buildDocumentSelector);
+        saveBuildOpts.setIncludeText(true);
 
         client.registerCapability(new RegistrationParams(List.of(
                 new Registration("SyncSmithyBuildFiles/Open", "textDocument/didOpen", openCloseBuildOpts),
@@ -320,12 +321,13 @@ public class SmithyLanguageServer implements
         changeSmithyOpts.setDocumentSelector(smithyDocumentSelector);
         var saveSmithyOpts = new TextDocumentSaveRegistrationOptions();
         saveSmithyOpts.setDocumentSelector(smithyDocumentSelector);
+        saveSmithyOpts.setIncludeText(true);
 
         client.registerCapability(new RegistrationParams(List.of(
                 new Registration("SyncSmithyFiles/Open", "textDocument/didOpen", openCloseSmithyOpts),
                 new Registration("SyncSmithyFiles/Close", "textDocument/didClose", openCloseSmithyOpts),
                 new Registration("SyncSmithyFiles/Change", "textDocument/didChange", changeSmithyOpts),
-                new Registration("SyncSmithyFiles/Save", "textDocument/didSave", saveBuildOpts))));
+                new Registration("SyncSmithyFiles/Save", "textDocument/didSave", saveSmithyOpts))));
     }
 
     @Override
