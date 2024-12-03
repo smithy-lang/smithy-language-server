@@ -104,9 +104,9 @@ import software.amazon.smithy.lsp.ext.OpenProject;
 import software.amazon.smithy.lsp.ext.SelectorParams;
 import software.amazon.smithy.lsp.ext.ServerStatus;
 import software.amazon.smithy.lsp.ext.SmithyProtocolExtensions;
-import software.amazon.smithy.lsp.handler.CompletionHandler;
-import software.amazon.smithy.lsp.handler.DefinitionHandler;
-import software.amazon.smithy.lsp.handler.HoverHandler;
+import software.amazon.smithy.lsp.language.CompletionHandler;
+import software.amazon.smithy.lsp.language.DefinitionHandler;
+import software.amazon.smithy.lsp.language.HoverHandler;
 import software.amazon.smithy.lsp.project.BuildFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectAndFile;
@@ -500,10 +500,11 @@ public class SmithyLanguageServer implements
         }
 
         // Don't reload or update the project on build file changes, only on save
-        if (projectAndFile.file() instanceof BuildFile) {
+        if (!(projectAndFile.file() instanceof SmithyFile smithyFile)) {
             return;
         }
 
+        smithyFile.reparse();
         if (!onlyReloadOnSave) {
             Project project = projectAndFile.project();
 
@@ -715,7 +716,7 @@ public class SmithyLanguageServer implements
         Project project = projectAndFile.project();
 
         // TODO: Abstract away passing minimum severity
-        Hover hover = new HoverHandler(project, smithyFile).handle(params, minimumSeverity);
+        Hover hover = new HoverHandler(project, smithyFile, minimumSeverity).handle(params);
         return completedFuture(hover);
     }
 

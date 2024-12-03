@@ -6,21 +6,16 @@
 package software.amazon.smithy.lsp.document;
 
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static software.amazon.smithy.lsp.document.DocumentTest.safeIndex;
 import static software.amazon.smithy.lsp.document.DocumentTest.safeString;
 import static software.amazon.smithy.lsp.document.DocumentTest.string;
 
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.junit.jupiter.api.Test;
@@ -28,99 +23,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
-import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
-import software.amazon.smithy.model.shapes.Shape;
 
 public class DocumentParserTest {
-    @Test
-    public void jumpsToLines() {
-        String text = """
-                abc
-                def
-                ghi
-
-
-                """;
-        DocumentParser parser = DocumentParser.of(safeString(text));
-        assertEquals(0, parser.position());
-        assertEquals(1, parser.line());
-        assertEquals(1, parser.column());
-
-        parser.jumpToLine(0);
-        assertEquals(0, parser.position());
-        assertEquals(1, parser.line());
-        assertEquals(1, parser.column());
-
-        parser.jumpToLine(1);
-        assertEquals(safeIndex(4, 1), parser.position());
-        assertEquals(2, parser.line());
-        assertEquals(1, parser.column());
-
-        parser.jumpToLine(2);
-        assertEquals(safeIndex(8, 2), parser.position());
-        assertEquals(3, parser.line());
-        assertEquals(1, parser.column());
-
-        parser.jumpToLine(3);
-        assertEquals(safeIndex(12, 3), parser.position());
-        assertEquals(4, parser.line());
-        assertEquals(1, parser.column());
-
-        parser.jumpToLine(4);
-        assertEquals(safeIndex(13, 4), parser.position());
-        assertEquals(5, parser.line());
-        assertEquals(1, parser.column());
-    }
-
-    @Test
-    public void jumpsToSource() {
-        String text = "abc\ndef\nghi\n";
-        DocumentParser parser = DocumentParser.of(safeString(text));
-        assertThat(parser.position(), is(0));
-        assertThat(parser.line(), is(1));
-        assertThat(parser.column(), is(1));
-        assertThat(parser.currentPosition(), equalTo(new Position(0, 0)));
-
-        boolean ok = parser.jumpToSource(new SourceLocation("", 1, 2));
-        assertThat(ok, is(true));
-        assertThat(parser.position(), is(1));
-        assertThat(parser.line(), is(1));
-        assertThat(parser.column(), is(2));
-        assertThat(parser.currentPosition(), equalTo(new Position(0, 1)));
-
-        ok = parser.jumpToSource(new SourceLocation("", 1, 4));
-        assertThat(ok, is(true));
-        assertThat(parser.position(), is(3));
-        assertThat(parser.line(), is(1));
-        assertThat(parser.column(), is(4));
-        assertThat(parser.currentPosition(), equalTo(new Position(0, 3)));
-
-        ok = parser.jumpToSource(new SourceLocation("", 1, 6));
-        assertThat(ok, is(false));
-        assertThat(parser.position(), is(3));
-        assertThat(parser.line(), is(1));
-        assertThat(parser.column(), is(4));
-        assertThat(parser.currentPosition(), equalTo(new Position(0, 3)));
-
-        ok = parser.jumpToSource(new SourceLocation("", 2, 1));
-        assertThat(ok, is(true));
-        assertThat(parser.position(), is(safeIndex(4, 1)));
-        assertThat(parser.line(), is(2));
-        assertThat(parser.column(), is(1));
-        assertThat(parser.currentPosition(), equalTo(new Position(1, 0)));
-
-        ok = parser.jumpToSource(new SourceLocation("", 4, 1));
-        assertThat(ok, is(false));
-
-        ok = parser.jumpToSource(new SourceLocation("", 3, 4));
-        assertThat(ok, is(true));
-        assertThat(parser.position(), is(safeIndex(11, 2)));
-        assertThat(parser.line(), is(3));
-        assertThat(parser.column(), is(4));
-        assertThat(parser.currentPosition(), equalTo(new Position(2, 3)));
-    }
-
     @Test
     public void getsDocumentNamespace() {
         DocumentParser noNamespace = DocumentParser.of(safeString("abc\ndef\n"));
@@ -148,7 +53,7 @@ public class DocumentParserTest {
         assertThat(wsPrefixedNamespace.documentNamespace().statementRange(), equalTo(LspAdapter.of(1, 4, 1, 21)));
         assertThat(notNamespace.documentNamespace(), nullValue());
         assertThat(trailingComment.documentNamespace().namespace().toString(), equalTo("com.foo"));
-        assertThat(trailingComment.documentNamespace().statementRange(), equalTo(LspAdapter.of(0, 0, 0, 22)));
+        assertThat(trailingComment.documentNamespace().statementRange(), equalTo(LspAdapter.of(0, 0, 0, 17)));
     }
 
     @Test
@@ -206,7 +111,7 @@ public class DocumentParserTest {
         assertThat(noVersion.documentVersion(), nullValue());
         assertThat(notVersion.documentVersion(), nullValue());
         assertThat(noDollar.documentVersion(), nullValue());
-        assertThat(noColon.documentVersion(), nullValue());
+        assertThat(noColon.documentVersion().version(), equalTo("2"));
         assertThat(commented.documentVersion(), nullValue());
         assertThat(leadingWs.documentVersion().version(), equalTo("2"));
         assertThat(leadingLines.documentVersion().version(), equalTo("2"));
@@ -259,16 +164,8 @@ public class DocumentParserTest {
                     }
                 }
                 """;
-        Set<Shape> shapes = Model.assembler()
-                .addUnparsedModel("main.smithy", text)
-                .assemble()
-                .unwrap()
-                .shapes()
-                .filter(shape -> shape.getId().getNamespace().equals("com.foo"))
-                .collect(Collectors.toSet());
-
         DocumentParser parser = DocumentParser.of(safeString(text));
-        Map<Position, DocumentShape> documentShapes = parser.documentShapes(shapes);
+        Map<Position, DocumentShape> documentShapes = parser.documentShapes();
 
         DocumentShape fooDef = documentShapes.get(new Position(2, 7));
         DocumentShape barDef = documentShapes.get(new Position(3, 10));
@@ -285,7 +182,6 @@ public class DocumentParserTest {
         DocumentShape mixedDef = documentShapes.get(new Position(17, 10));
         DocumentShape elided = documentShapes.get(new Position(18, 4));
         DocumentShape get = documentShapes.get(new Position(20, 10));
-        DocumentShape getInput = documentShapes.get(new Position(21, 13));
         DocumentShape getInputA = documentShapes.get(new Position(22, 8));
 
         assertThat(fooDef.kind(), equalTo(DocumentShape.Kind.DefinedShape));
@@ -321,7 +217,6 @@ public class DocumentParserTest {
         assertThat(parser.getDocument().borrowRange(elided.range()), string("$elided"));
         assertThat(get.kind(), equalTo(DocumentShape.Kind.DefinedShape));
         assertThat(get.shapeName(), string("Get"));
-        assertThat(getInput.kind(), equalTo(DocumentShape.Kind.Inline));
         assertThat(getInputA.kind(), equalTo(DocumentShape.Kind.DefinedMember));
         assertThat(getInputA.shapeName(), string("a"));
     }

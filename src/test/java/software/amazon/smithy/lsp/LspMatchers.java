@@ -5,6 +5,7 @@
 
 package software.amazon.smithy.lsp;
 
+import java.util.Collection;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.Range;
@@ -48,6 +49,34 @@ public final class LspMatchers {
             public void describeMismatchSafely(TextEdit textEdit, Description description) {
                 Document copy = document.copy();
                 copy.applyEdit(textEdit.getRange(), textEdit.getNewText());
+                String actual = copy.copyText();
+                description.appendText(String.format("""
+                        expected:
+                        '%s'
+                        but was:
+                        '%s'
+                        """, expected, actual));
+            }
+        };
+    }
+
+    public static Matcher<Collection<TextEdit>> togetherMakeEditedDocument(Document document, String expected) {
+        return new CustomTypeSafeMatcher<>("make edited document " + expected) {
+            @Override
+            protected boolean matchesSafely(Collection<TextEdit> item) {
+                Document copy = document.copy();
+                for (TextEdit edit : item) {
+                    copy.applyEdit(edit.getRange(), edit.getNewText());
+                }
+                return copy.copyText().equals(expected);
+            }
+
+            @Override
+            public void describeMismatchSafely(Collection<TextEdit> item, Description description) {
+                Document copy = document.copy();
+                for (TextEdit edit : item) {
+                    copy.applyEdit(edit.getRange(), edit.getNewText());
+                }
                 String actual = copy.copyText();
                 description.appendText(String.format("""
                         expected:

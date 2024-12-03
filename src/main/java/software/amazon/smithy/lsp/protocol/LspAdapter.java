@@ -15,6 +15,7 @@ import java.util.logging.Logger;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
+import software.amazon.smithy.model.FromSourceLocation;
 import software.amazon.smithy.model.SourceLocation;
 
 /**
@@ -126,10 +127,11 @@ public final class LspAdapter {
      * Get a {@link Location} from a {@link SourceLocation}, with the filename
      * transformed to a URI, and the line/column made 0-indexed.
      *
-     * @param sourceLocation The source location to get a Location from
+     * @param fromSourceLocation The source location to get a Location from
      * @return The equivalent Location
      */
-    public static Location toLocation(SourceLocation sourceLocation) {
+    public static Location toLocation(FromSourceLocation fromSourceLocation) {
+        SourceLocation sourceLocation = fromSourceLocation.getSourceLocation();
         return new Location(toUri(sourceLocation.getFilename()), point(
                 new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1)));
     }
