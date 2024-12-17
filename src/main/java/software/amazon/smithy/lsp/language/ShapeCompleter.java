@@ -15,44 +15,60 @@ import org.eclipse.lsp4j.CompletionItemLabelDetails;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
-import software.amazon.smithy.lsp.document.DocumentImports;
 import software.amazon.smithy.lsp.document.DocumentNamespace;
-import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
+import software.amazon.smithy.lsp.syntax.Syntax;
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.loader.Prelude;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.Shape;
+import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.ShapeVisitor;
 import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.traits.ErrorTrait;
 import software.amazon.smithy.model.traits.MixinTrait;
+import software.amazon.smithy.model.traits.PrivateTrait;
 import software.amazon.smithy.model.traits.RequiredTrait;
 import software.amazon.smithy.model.traits.TraitDefinition;
 
 /**
  * Maps {@link CompletionCandidates.Shapes} to {@link CompletionItem}s.
+ *
+ * @param idlPosition The position of the cursor in the IDL file.
+ * @param model The model to get shape completions from.
+ * @param context The context for creating completions.
  */
-final class ShapeCompletions {
-    private final Model model;
-    private final SmithyFile smithyFile;
-    private final Matcher matcher;
-    private final Mapper mapper;
-
-    private ShapeCompletions(Model model, SmithyFile smithyFile, Matcher matcher, Mapper mapper) {
-        this.model = model;
-        this.smithyFile = smithyFile;
-        this.matcher = matcher;
-        this.mapper = mapper;
-    }
-
+record ShapeCompleter(IdlPosition idlPosition, Model model, CompleterContext context) {
     List<CompletionItem> getCompletionItems(CompletionCandidates.Shapes candidates) {
-        return streamShapes(candidates)
+        AddItems addItems;
+        if (idlPosition instanceof IdlPosition.TraitId) {
+            addItems = new AddDeepTraitBodyItem(model);
+        } else {
+            addItems = AddItems.NOOP;
+        }
+
+        ToLabel toLabel;
+        ModifyItems modifyItems;
+        boolean shouldMatchFullId = idlPosition instanceof IdlPosition.UseTarget
+                || context.matchToken().contains("#")
+                || context.matchToken().contains(".");
+        if (shouldMatchFullId) {
+            toLabel = (shape) -> shape.getId().toString();
+            modifyItems = ModifyItems.NOOP;
+        } else {
+            toLabel = (shape) -> shape.getId().getName();
+            modifyItems = new AddImportTextEdits(idlPosition.view().parseResult());
+        }
+
+        Matcher matcher = new Matcher(context.matchToken(), toLabel, idlPosition.view().parseResult().namespace());
+        Mapper mapper = new Mapper(context.insertRange(), toLabel, addItems, modifyItems);
+        return streamCandidates(candidates)
                 .filter(matcher::test)
                 .mapMulti(mapper::accept)
                 .toList();
     }
 
-    private Stream<? extends Shape> streamShapes(CompletionCandidates.Shapes candidates) {
+    private Stream<? extends Shape> streamCandidates(CompletionCandidates.Shapes candidates) {
         return switch (candidates) {
             case ANY_SHAPE -> model.shapes();
             case STRING_SHAPES -> model.getStringShapes().stream();
@@ -65,43 +81,15 @@ final class ShapeCompletions {
                     .filter(shape -> !shape.isMemberShape()
                                      && !shape.hasTrait(TraitDefinition.ID)
                                      && !shape.hasTrait(MixinTrait.ID));
-            case USE_TARGET -> model.shapes()
-                    .filter(shape -> !shape.isMemberShape()
-                                     && !shape.getId().getNamespace().contentEquals(smithyFile.namespace())
-                                     && !smithyFile.hasImport(shape.getId().toString()));
+            case USE_TARGET -> model.shapes().filter(this::shouldImport);
         };
     }
 
-    static ShapeCompletions create(
-            IdlPosition idlPosition,
-            Model model,
-            String matchToken,
-            Range insertRange
-    ) {
-        AddItems addItems = AddItems.DEFAULT;
-        ModifyItems modifyItems = ModifyItems.DEFAULT;
-
-        if (idlPosition instanceof IdlPosition.TraitId) {
-            addItems = new AddDeepTraitBodyItem(model);
-        }
-
-        ToLabel toLabel;
-        if (shouldMatchFullId(idlPosition, matchToken)) {
-            toLabel = (shape) -> shape.getId().toString();
-        } else {
-            toLabel = (shape) -> shape.getId().getName();
-            modifyItems = new AddImportTextEdits(idlPosition.smithyFile());
-        }
-
-        Matcher matcher = new Matcher(matchToken, toLabel, idlPosition.smithyFile());
-        Mapper mapper = new Mapper(insertRange, toLabel, addItems, modifyItems);
-        return new ShapeCompletions(model, idlPosition.smithyFile(), matcher, mapper);
-    }
-
-    private static boolean shouldMatchFullId(IdlPosition idlPosition, String matchToken) {
-        return idlPosition instanceof IdlPosition.UseTarget
-               || matchToken.contains("#")
-               || matchToken.contains(".");
+    private boolean shouldImport(Shape shape) {
+        return !shape.isMemberShape()
+               && !shape.getId().getNamespace().equals(idlPosition.view().parseResult().namespace().namespace())
+               && !idlPosition.view().parseResult().imports().imports().contains(shape.getId().toString())
+               && !shape.hasTrait(PrivateTrait.ID);
     }
 
     /**
@@ -111,11 +99,12 @@ final class ShapeCompletions {
      * @param matchToken The token to match shapes against, i.e. the token
      *                   being typed.
      * @param toLabel The way to get the label to match against from a shape.
-     * @param smithyFile The current Smithy file.
+     * @param namespace The namespace of the current Smithy file.
      */
-    private record Matcher(String matchToken, ToLabel toLabel, SmithyFile smithyFile) {
+    private record Matcher(String matchToken, ToLabel toLabel, DocumentNamespace namespace) {
         boolean test(Shape shape) {
-            return smithyFile.isAccessible(shape) && toLabel.toLabel(shape).toLowerCase().startsWith(matchToken);
+            return toLabel.toLabel(shape).toLowerCase().startsWith(matchToken)
+                   && (shape.getId().getNamespace().equals(namespace.namespace()) || !shape.hasTrait(PrivateTrait.ID));
         }
     }
 
@@ -165,7 +154,7 @@ final class ShapeCompletions {
      * shape.
      */
     private interface AddItems {
-        AddItems DEFAULT = new AddItems() {
+        AddItems NOOP = new AddItems() {
         };
 
         default void add(Mapper mapper, String shapeLabel, Shape shape, Consumer<CompletionItem> consumer) {
@@ -229,7 +218,7 @@ final class ShapeCompletions {
      * context, additional text edits, etc.
      */
     private interface ModifyItems {
-        ModifyItems DEFAULT = new ModifyItems() {
+        ModifyItems NOOP = new ModifyItems() {
         };
 
         default void modify(Mapper mapper, String shapeLabel, Shape shape, CompletionItem completionItem) {
@@ -238,29 +227,35 @@ final class ShapeCompletions {
 
     /**
      * Adds text edits for use statements for shapes that need to be imported.
+     *
+     * @param syntaxInfo Syntax info of the current Smithy file.
      */
-    private static final class AddImportTextEdits implements ModifyItems {
-        private final SmithyFile smithyFile;
-
-        AddImportTextEdits(SmithyFile smithyFile) {
-            this.smithyFile = smithyFile;
-        }
-
+    private record AddImportTextEdits(Syntax.IdlParseResult syntaxInfo) implements ModifyItems {
         @Override
         public void modify(Mapper mapper, String shapeLabel, Shape shape, CompletionItem completionItem) {
-            if (smithyFile.inScope(shape.getId())) {
+            if (inScope(shape.getId())) {
                 return;
             }
 
             // We can only know where to put the import if there's already use statements, or a namespace
-            smithyFile.documentImports().map(DocumentImports::importsRange)
-                    .or(() -> smithyFile.documentNamespace().map(DocumentNamespace::statementRange))
-                    .ifPresent(range -> {
-                        Range editRange = LspAdapter.point(range.getEnd());
-                        String insertText = System.lineSeparator() + "use " + shape.getId().toString();
-                        TextEdit importEdit = new TextEdit(editRange, insertText);
-                        completionItem.setAdditionalTextEdits(List.of(importEdit));
-                    });
+            if (!syntaxInfo.imports().imports().isEmpty()) {
+                addEdit(completionItem, syntaxInfo.imports().importsRange(), shape);
+            } else if (!syntaxInfo.namespace().namespace().isEmpty()) {
+                addEdit(completionItem, syntaxInfo.namespace().statementRange(), shape);
+            }
+        }
+
+        private boolean inScope(ShapeId shapeId) {
+            return Prelude.isPublicPreludeShape(shapeId)
+                   || shapeId.getNamespace().equals(syntaxInfo.namespace().namespace())
+                   || syntaxInfo.imports().imports().contains(shapeId.toString());
+        }
+
+        private void addEdit(CompletionItem completionItem, Range range, Shape shape) {
+            Range editRange = LspAdapter.point(range.getEnd());
+            String insertText = System.lineSeparator() + "use " + shape.getId().toString();
+            TextEdit importEdit = new TextEdit(editRange, insertText);
+            completionItem.setAdditionalTextEdits(List.of(importEdit));
         }
     }
 }

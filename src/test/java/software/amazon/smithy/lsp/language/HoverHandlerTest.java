@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import software.amazon.smithy.lsp.RequestBuilders;
 import software.amazon.smithy.lsp.ServerState;
 import software.amazon.smithy.lsp.TestWorkspace;
+import software.amazon.smithy.lsp.TextWithPositions;
+import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectLoader;
 import software.amazon.smithy.lsp.project.SmithyFile;
@@ -106,6 +108,24 @@ public class HoverHandlerTest {
         assertThat(hovers, contains(containsString("operation Bar")));
     }
 
+    @Test
+    public void absoluteShapeId() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                structure Foo {
+                    bar: %smithy.api#String
+                }
+                """);
+        List<String> hovers = getHovers(text);
+
+        assertThat(hovers, contains(containsString("string String")));
+    }
+
+    private static List<String> getHovers(TextWithPositions text) {
+        return getHovers(text.text(), text.positions());
+    }
+
     private static List<String> getHovers(String text, Position... positions) {
         TestWorkspace workspace = TestWorkspace.singleModel(text);
         Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
@@ -113,7 +133,7 @@ public class HoverHandlerTest {
         SmithyFile smithyFile = project.getSmithyFile(uri);
 
         List<String> hover = new ArrayList<>();
-        HoverHandler handler = new HoverHandler(project, smithyFile, Severity.WARNING);
+        HoverHandler handler = new HoverHandler(project, (IdlFile) smithyFile, Severity.WARNING);
         for (Position position : positions) {
             HoverParams params = RequestBuilders.positionRequest()
                     .uri(uri)

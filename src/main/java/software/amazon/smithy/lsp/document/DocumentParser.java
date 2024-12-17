@@ -5,16 +5,13 @@
 
 package software.amazon.smithy.lsp.document;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.syntax.Syntax;
-import software.amazon.smithy.lsp.syntax.SyntaxSearch;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.utils.SimpleParser;
 
@@ -34,16 +31,9 @@ public final class DocumentParser extends SimpleParser {
     }
 
     static DocumentParser of(String text) {
-        return DocumentParser.forDocument(Document.of(text));
-    }
-
-    /**
-     * @param document Document to create a parser for
-     * @return A parser for the given document
-     */
-    public static DocumentParser forDocument(Document document) {
-        Syntax.IdlParse parse = Syntax.parseIdl(document);
-        return new DocumentParser(document, parse.statements());
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        return DocumentParser.forStatements(document, parse.statements());
     }
 
     /**
@@ -56,23 +46,23 @@ public final class DocumentParser extends SimpleParser {
     }
 
     /**
-     * @return The {@link DocumentNamespace} for the underlying document, or
-     *  {@code null} if it couldn't be found
+     * @return The {@link DocumentNamespace} for the underlying document.
      */
     public DocumentNamespace documentNamespace() {
         for (Syntax.Statement statement : statements) {
             if (statement instanceof Syntax.Statement.Namespace namespace) {
-                Range range = namespace.rangeIn(document);
-                String namespaceValue = namespace.namespace().copyValueFrom(document);
+                Range range = document.rangeBetween(namespace.start(), namespace.end());
+                String namespaceValue = namespace.namespace().stringValue();
                 return new DocumentNamespace(range, namespaceValue);
+            } else if (statement instanceof Syntax.Statement.ShapeDef) {
+                break;
             }
         }
-        return null;
+        return DocumentNamespace.NONE;
     }
 
     /**
-     * @return The {@link DocumentImports} for the underlying document, or
-     *  {@code null} if they couldn't be found
+     * @return The {@link DocumentImports} for the underlying document.
      */
     public DocumentImports documentImports() {
         Set<String> imports;
@@ -80,116 +70,47 @@ public final class DocumentParser extends SimpleParser {
             Syntax.Statement statement = statements.get(i);
             if (statement instanceof Syntax.Statement.Use firstUse) {
                 imports = new HashSet<>();
-                imports.add(firstUse.use().copyValueFrom(document));
-                Range useRange = firstUse.rangeIn(document);
+                imports.add(firstUse.use().stringValue());
+                Range useRange = document.rangeBetween(firstUse.start(), firstUse.end());
                 Position start = useRange.getStart();
                 Position end = useRange.getEnd();
                 i++;
                 while (i < statements.size()) {
                     statement = statements.get(i);
                     if (statement instanceof Syntax.Statement.Use use) {
-                        imports.add(use.use().copyValueFrom(document));
-                        end = use.rangeIn(document).getEnd();
+                        imports.add(use.use().stringValue());
+                        end = document.rangeBetween(use.start(), use.end()).getEnd();
                         i++;
                     } else {
                         break;
                     }
                 }
                 return new DocumentImports(new Range(start, end), imports);
+            } else if (statement instanceof Syntax.Statement.ShapeDef) {
+                break;
             }
         }
-        return null;
+        return DocumentImports.EMPTY;
     }
 
     /**
-     * @return A map of start position to {@link DocumentShape} for each shape
-     * and/or shape reference in the document.
-     */
-    public Map<Position, DocumentShape> documentShapes() {
-        Map<Position, DocumentShape> documentShapes = new HashMap<>();
-        for (Syntax.Statement statement : statements) {
-            switch (statement) {
-                case Syntax.Statement.ShapeDef shapeDef -> {
-                    String shapeName = shapeDef.shapeName().copyValueFrom(document);
-                    Range range = shapeDef.shapeName().rangeIn(document);
-                    var shape = new DocumentShape(range, shapeName, DocumentShape.Kind.DefinedShape, null);
-                    documentShapes.put(range.getStart(), shape);
-                }
-                case Syntax.Statement.MemberDef memberDef -> {
-                    String shapeName = memberDef.name().copyValueFrom(document);
-                    Range range = memberDef.name().rangeIn(document);
-                    DocumentShape target = null;
-                    if (memberDef.target() != null && !memberDef.target().isEmpty()) {
-                        String targetName = memberDef.target().copyValueFrom(document);
-                        Range targetRange = memberDef.target().rangeIn(document);
-                        target = new DocumentShape(targetRange, targetName, DocumentShape.Kind.Targeted, null);
-                        documentShapes.put(targetRange.getStart(), target);
-                    }
-                    var shape = new DocumentShape(range, shapeName, DocumentShape.Kind.DefinedMember, target);
-                    documentShapes.put(range.getStart(), shape);
-                }
-                case Syntax.Statement.ElidedMemberDef elidedMemberDef -> {
-                    String shapeName = elidedMemberDef.name().copyValueFrom(document);
-                    Range range = elidedMemberDef.rangeIn(document);
-                    var shape = new DocumentShape(range, shapeName, DocumentShape.Kind.Elided, null);
-                    documentShapes.put(range.getStart(), shape);
-                }
-                case Syntax.Statement.EnumMemberDef enumMemberDef -> {
-                    String shapeName = enumMemberDef.name().copyValueFrom(document);
-                    Range range = enumMemberDef.rangeIn(document);
-                    var shape = new DocumentShape(range, shapeName, DocumentShape.Kind.DefinedMember, null);
-                    documentShapes.put(range.getStart(), shape);
-                }
-                default -> {
-                }
-            }
-        }
-        return documentShapes;
-    }
-
-    /**
-     * @return The {@link DocumentVersion} for the underlying document, or
-     *  {@code null} if it couldn't be found
+     * @return The {@link DocumentVersion} for the underlying document.
      */
     public DocumentVersion documentVersion() {
         for (Syntax.Statement statement : statements) {
             if (statement instanceof Syntax.Statement.Control control
                 && control.value() instanceof Syntax.Node.Str str) {
-                String key = control.key().copyValueFrom(document);
+                String key = control.key().stringValue();
                 if (key.equals("version")) {
-                    String version = str.copyValueFrom(document);
-                    Range range = control.rangeIn(document);
+                    String version = str.stringValue();
+                    Range range = document.rangeBetween(control.start(), control.end());
                     return new DocumentVersion(range, version);
                 }
             } else if (statement instanceof Syntax.Statement.Namespace) {
                 break;
             }
         }
-        return null;
-    }
-
-    /**
-     * @param sourceLocation The source location of the start of the trait
-     *                       application. The filename must be the same as
-     *                       the underlying document's (this is not checked),
-     *                       and the position must be on the {@code @}
-     * @return The range of the trait id from the {@code @} up to the trait's
-     *  body or end, or null if the {@code sourceLocation} isn't on an {@code @}
-     *  or there's no id next to the {@code @}
-     */
-    public Range traitIdRange(SourceLocation sourceLocation) {
-        int position = document.indexOfPosition(LspAdapter.toPosition(sourceLocation));
-        int statementIndex = SyntaxSearch.statementIndex(statements, position);
-        if (statementIndex < 0) {
-            return null;
-        }
-
-        if (statements.get(statementIndex) instanceof Syntax.Statement.TraitApplication traitApplication) {
-            Range range = traitApplication.id().rangeIn(document);
-            range.getStart().setCharacter(range.getStart().getCharacter() - 1); // include @
-            return range;
-        }
-        return null;
+        return DocumentVersion.EMPTY;
     }
 
     /**

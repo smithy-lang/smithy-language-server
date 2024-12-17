@@ -41,8 +41,6 @@ sealed interface CompletionCandidates {
             "list", "map", "structure", "union",
             "service", "resource", "operation",
             "apply"));
-    // TODO: Maybe BUILTIN_CONTROLS and BUILTIN_METADATA should be regular
-    //  Labeled/Members, with custom mappers.
     Literals BUILTIN_CONTROLS = new Literals(Builtins.CONTROL.members().stream()
             .map(member -> "$" + member.getMemberName() + ": " + defaultCandidates(member).value())
             .toList());

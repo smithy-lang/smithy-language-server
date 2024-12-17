@@ -6,8 +6,6 @@
 package software.amazon.smithy.lsp.language;
 
 import java.util.Map;
-import software.amazon.smithy.lsp.document.Document;
-import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.syntax.NodeCursor;
 import software.amazon.smithy.lsp.syntax.Syntax;
 import software.amazon.smithy.model.Model;
@@ -38,13 +36,13 @@ sealed interface DynamicMemberTarget {
     Shape getTarget(NodeCursor cursor, Model model);
 
     static Map<ShapeId, DynamicMemberTarget> forTrait(Shape traitShape, IdlPosition.TraitValue traitValue) {
-        SmithyFile smithyFile = traitValue.smithyFile();
+        Syntax.IdlParseResult syntaxInfo = traitValue.view().parseResult();
         return switch (traitShape.getId().toString()) {
             case "smithy.test#smokeTests" -> Map.of(
                     ShapeId.from("smithy.test#SmokeTestCase$params"),
                         new OperationInput(traitValue),
                     ShapeId.from("smithy.test#SmokeTestCase$vendorParams"),
-                        new ShapeIdDependent("vendorParamsShape", smithyFile));
+                        new ShapeIdDependent("vendorParamsShape", syntaxInfo));
 
             case "smithy.api#examples" -> Map.of(
                     ShapeId.from("smithy.api#Example$input"),
@@ -56,24 +54,23 @@ sealed interface DynamicMemberTarget {
                     ShapeId.from("smithy.test#HttpRequestTestCase$params"),
                         new OperationInput(traitValue),
                     ShapeId.from("smithy.test#HttpRequestTestCase$vendorParams"),
-                        new ShapeIdDependent("vendorParamsShape", smithyFile));
+                        new ShapeIdDependent("vendorParamsShape", syntaxInfo));
 
             case "smithy.test#httpResponseTests" -> Map.of(
                     ShapeId.from("smithy.test#HttpResponseTestCase$params"),
                         new OperationOutput(traitValue),
                     ShapeId.from("smithy.test#HttpResponseTestCase$vendorParams"),
-                        new ShapeIdDependent("vendorParamsShape", smithyFile));
+                        new ShapeIdDependent("vendorParamsShape", syntaxInfo));
 
             default -> null;
         };
     }
 
-    static Map<ShapeId, DynamicMemberTarget> forMetadata(String metadataKey, SmithyFile smithyFile) {
+    static Map<ShapeId, DynamicMemberTarget> forMetadata(String metadataKey) {
         return switch (metadataKey) {
             case "validators" -> Map.of(
                     ShapeId.from("smithy.lang.server#Validator$configuration"), new MappedDependent(
                             "name",
-                            smithyFile.document(),
                             Builtins.VALIDATOR_CONFIG_MAPPING));
             default -> null;
         };
@@ -116,15 +113,15 @@ sealed interface DynamicMemberTarget {
      * using that as the id of the target shape.
      *
      * @param memberName The name of the other member to compute the value of.
-     * @param smithyFile The file the node is within.
+     * @param parseResult The parse result of the file the node is within.
      */
-    record ShapeIdDependent(String memberName, SmithyFile smithyFile) implements DynamicMemberTarget {
+    record ShapeIdDependent(String memberName, Syntax.IdlParseResult parseResult) implements DynamicMemberTarget {
         @Override
         public Shape getTarget(NodeCursor cursor, Model model) {
-            Syntax.Node.Kvp matchingKvp = findMatchingKvp(memberName, cursor, smithyFile.document());
-            if (matchingKvp.value() instanceof Syntax.Node.Str str) {
-                String id = str.copyValueFrom(smithyFile.document());
-                return ShapeSearch.findShape(smithyFile, model, id).orElse(null);
+            Syntax.Node.Kvp matchingKvp = findMatchingKvp(memberName, cursor);
+            if (matchingKvp != null && matchingKvp.value() instanceof Syntax.Node.Str str) {
+                String id = str.stringValue();
+                return ShapeSearch.findShape(parseResult, id, model).orElse(null);
             }
             return null;
         }
@@ -136,17 +133,15 @@ sealed interface DynamicMemberTarget {
      * value.
      *
      * @param memberName The name of the member to compute the value of.
-     * @param document The document the node is within.
      * @param mapping A mapping of {@code memberName} values to corresponding
      *                member target ids.
      */
-    record MappedDependent(String memberName, Document document, Map<String, ShapeId> mapping)
-            implements DynamicMemberTarget {
+    record MappedDependent(String memberName, Map<String, ShapeId> mapping) implements DynamicMemberTarget {
         @Override
         public Shape getTarget(NodeCursor cursor, Model model) {
-            Syntax.Node.Kvp matchingKvp = findMatchingKvp(memberName, cursor, document);
-            if (matchingKvp.value() instanceof Syntax.Node.Str str) {
-                String value = str.copyValueFrom(document);
+            Syntax.Node.Kvp matchingKvp = findMatchingKvp(memberName, cursor);
+            if (matchingKvp != null && matchingKvp.value() instanceof Syntax.Node.Str str) {
+                String value = str.stringValue();
                 ShapeId targetId = mapping.get(value);
                 if (targetId != null) {
                     return model.getShape(targetId).orElse(null);
@@ -160,7 +155,7 @@ sealed interface DynamicMemberTarget {
     // comparison to parsing or NodeCursor construction, which are optimized for
     // speed and memory usage (instead of key lookup), and the number of keys
     // is assumed to be low in most cases.
-    private static Syntax.Node.Kvp findMatchingKvp(String keyName, NodeCursor cursor, Document document) {
+    private static Syntax.Node.Kvp findMatchingKvp(String keyName, NodeCursor cursor) {
         // This will be called after skipping a ValueForKey, so that will be previous
         if (!cursor.hasPrevious()) {
             // TODO: Log
@@ -169,7 +164,7 @@ sealed interface DynamicMemberTarget {
         NodeCursor.Edge edge = cursor.previous();
         if (edge instanceof NodeCursor.ValueForKey(var ignored, Syntax.Node.Kvps parent)) {
             for (Syntax.Node.Kvp kvp : parent.kvps()) {
-                String key = kvp.key().copyValueFrom(document);
+                String key = kvp.key().stringValue();
                 if (!keyName.equals(key)) {
                     continue;
                 }

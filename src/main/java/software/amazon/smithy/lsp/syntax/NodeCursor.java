@@ -7,7 +7,6 @@ package software.amazon.smithy.lsp.syntax;
 
 import java.util.ArrayList;
 import java.util.List;
-import software.amazon.smithy.lsp.document.Document;
 
 /**
  * A moveable index into a path from the root of a {@link Syntax.Node} to a
@@ -25,13 +24,12 @@ public final class NodeCursor {
     }
 
     /**
-     * @param document The document the node value is within
      * @param value The node value to create the cursor for
      * @param documentIndex The index within the document to create the cursor for
      * @return A node cursor from the start of {@code value} to {@code documentIndex}
      *  within {@code document}.
      */
-    public static NodeCursor create(Document document, Syntax.Node value, int documentIndex) {
+    public static NodeCursor create(Syntax.Node value, int documentIndex) {
         List<NodeCursor.Edge> edges = new ArrayList<>();
         NodeCursor cursor = new NodeCursor(edges);
 
@@ -47,7 +45,7 @@ public final class NodeCursor {
                     Syntax.Node.Kvp lastKvp = null;
                     for (Syntax.Node.Kvp kvp : kvps.kvps()) {
                         if (kvp.key.isIn(documentIndex)) {
-                            String key = kvp.key.copyValueFrom(document);
+                            String key = kvp.key.stringValue();
                             edges.add(new NodeCursor.Key(key, kvps));
                             edges.add(new NodeCursor.Terminal(kvp));
                             return cursor;
@@ -56,7 +54,7 @@ public final class NodeCursor {
                                 lastKvp = kvp;
                                 break;
                             }
-                            String key = kvp.key.copyValueFrom(document);
+                            String key = kvp.key.stringValue();
                             edges.add(new NodeCursor.ValueForKey(key, kvps));
                             next = kvp.value;
                             break iteration;
@@ -65,7 +63,7 @@ public final class NodeCursor {
                         }
                     }
                     if (lastKvp != null && lastKvp.value == null) {
-                        edges.add(new NodeCursor.ValueForKey(lastKvp.key.copyValueFrom(document), kvps));
+                        edges.add(new NodeCursor.ValueForKey(lastKvp.key.stringValue(), kvps));
                         edges.add(new NodeCursor.Terminal(lastKvp));
                         return cursor;
                     }
@@ -139,7 +137,7 @@ public final class NodeCursor {
      * @return Whether the path consists of a single, terminal, node.
      */
     public boolean isTerminal() {
-        return edges.size() == 1 && edges.get(0) instanceof Terminal;
+        return edges.size() == 1 && edges.getFirst() instanceof Terminal;
     }
 
     /**

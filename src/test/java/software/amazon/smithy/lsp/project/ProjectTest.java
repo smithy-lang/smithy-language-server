@@ -19,13 +19,13 @@ import static org.hamcrest.Matchers.hasSize;
 import static software.amazon.smithy.lsp.SmithyMatchers.eventWithMessage;
 import static software.amazon.smithy.lsp.SmithyMatchers.hasShapeWithId;
 import static software.amazon.smithy.lsp.UtilMatchers.anOptionalOf;
-import static software.amazon.smithy.lsp.document.DocumentTest.string;
 
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -36,6 +36,7 @@ import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.ToShapeId;
 import software.amazon.smithy.model.traits.LengthTrait;
 import software.amazon.smithy.model.traits.PatternTrait;
 import software.amazon.smithy.model.traits.TagsTrait;
@@ -120,24 +121,19 @@ public class ProjectTest {
         assertThat(eventIds, hasItem("Model"));
 
         assertThat(project.smithyFiles().keySet(), hasItem(containsString("main.smithy")));
-        SmithyFile main = project.getSmithyFile(LspAdapter.toUri(root.resolve("main.smithy").toString()));
+        IdlFile main = (IdlFile) project.getSmithyFile(LspAdapter.toUri(root.resolve("main.smithy").toString()));
         assertThat(main, not(nullValue()));
         assertThat(main.document(), not(nullValue()));
-        assertThat(main.namespace(), string("com.foo"));
-        assertThat(main.imports(), empty());
+        assertThat(main.getParse().namespace().namespace(), equalTo("com.foo"));
+        assertThat(main.getParse().imports().imports(), empty());
 
-        assertThat(main.shapes(), hasSize(2));
-        List<String> shapeIds = main.shapes().stream()
-                .map(Shape::toShapeId)
+        assertThat(project.definedShapesByFile().keySet(), hasItem(main.path()));
+        Set<ToShapeId> mainShapes = project.definedShapesByFile().get(main.path());
+        List<String> shapeIds = mainShapes.stream()
+                .map(ToShapeId::toShapeId)
                 .map(ShapeId::toString)
                 .collect(Collectors.toList());
         assertThat(shapeIds, hasItems("com.foo#Foo", "com.foo#Foo$bar"));
-
-        assertThat(main.documentShapes(), hasSize(4));
-        List<String> documentShapeNames = main.documentShapes().stream()
-                .map(documentShape -> documentShape.shapeName().toString())
-                .collect(Collectors.toList());
-        assertThat(documentShapeNames, hasItems("Foo", "bar", "String", "A"));
     }
 
     @Test
@@ -149,31 +145,29 @@ public class ProjectTest {
         assertThat(project.modelResult().getValidationEvents(), empty());
         assertThat(project.smithyFiles().keySet(), hasItems(containsString("a.smithy"), containsString("b.smithy")));
 
-        SmithyFile a = project.getSmithyFile(LspAdapter.toUri(root.resolve("model/a.smithy").toString()));
+        IdlFile a = (IdlFile) project.getSmithyFile(LspAdapter.toUri(root.resolve("model/a.smithy").toString()));
         assertThat(a.document(), not(nullValue()));
-        assertThat(a.namespace(), string("a"));
-        List<String> aShapeIds = a.shapes().stream()
-                .map(Shape::toShapeId)
+        assertThat(a.getParse().namespace().namespace(), equalTo("a"));
+
+        assertThat(project.definedShapesByFile().keySet(), hasItem(a.path()));
+        Set<ToShapeId> aShapes = project.definedShapesByFile().get(a.path());
+        List<String> aShapeIds = aShapes.stream()
+                .map(ToShapeId::toShapeId)
                 .map(ShapeId::toString)
                 .collect(Collectors.toList());
         assertThat(aShapeIds, hasItems("a#Hello", "a#HelloInput", "a#HelloOutput"));
-        List<String> aDocumentShapeNames = a.documentShapes().stream()
-                .map(documentShape -> documentShape.shapeName().toString())
-                .collect(Collectors.toList());
-        assertThat(aDocumentShapeNames, hasItems("Hello", "name", "String"));
 
-        SmithyFile b = project.getSmithyFile(LspAdapter.toUri(root.resolve("model/b.smithy").toString()));
+        IdlFile b = (IdlFile) project.getSmithyFile(LspAdapter.toUri(root.resolve("model/b.smithy").toString()));
         assertThat(b.document(), not(nullValue()));
-        assertThat(b.namespace(), string("b"));
-        List<String> bShapeIds = b.shapes().stream()
-                .map(Shape::toShapeId)
+        assertThat(b.getParse().namespace().namespace(), equalTo("b"));
+
+        assertThat(project.definedShapesByFile().keySet(), hasItem(b.path()));
+        Set<ToShapeId> bShapes = project.definedShapesByFile().get(b.path());
+        List<String> bShapeIds = bShapes.stream()
+                .map(ToShapeId::toShapeId)
                 .map(ShapeId::toString)
                 .collect(Collectors.toList());
         assertThat(bShapeIds, hasItems("b#Hello", "b#HelloInput", "b#HelloOutput"));
-        List<String> bDocumentShapeNames = b.documentShapes().stream()
-                .map(documentShape -> documentShape.shapeName().toString())
-                .collect(Collectors.toList());
-        assertThat(bDocumentShapeNames, hasItems("Hello", "name", "String"));
     }
 
     @Test

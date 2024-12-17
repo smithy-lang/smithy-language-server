@@ -45,7 +45,6 @@ import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Diagnostic;
-import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeConfigurationParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
@@ -74,7 +73,6 @@ import org.eclipse.lsp4j.RegistrationParams;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.SetTraceParams;
 import org.eclipse.lsp4j.SymbolInformation;
-import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.TextDocumentChangeRegistrationOptions;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
@@ -100,26 +98,25 @@ import org.eclipse.lsp4j.services.WorkspaceService;
 import software.amazon.smithy.lsp.codeactions.SmithyCodeActions;
 import software.amazon.smithy.lsp.diagnostics.SmithyDiagnostics;
 import software.amazon.smithy.lsp.document.Document;
-import software.amazon.smithy.lsp.document.DocumentParser;
-import software.amazon.smithy.lsp.document.DocumentShape;
 import software.amazon.smithy.lsp.ext.OpenProject;
 import software.amazon.smithy.lsp.ext.SelectorParams;
 import software.amazon.smithy.lsp.ext.ServerStatus;
 import software.amazon.smithy.lsp.ext.SmithyProtocolExtensions;
 import software.amazon.smithy.lsp.language.CompletionHandler;
 import software.amazon.smithy.lsp.language.DefinitionHandler;
+import software.amazon.smithy.lsp.language.DocumentSymbolHandler;
 import software.amazon.smithy.lsp.language.HoverHandler;
 import software.amazon.smithy.lsp.project.BuildFile;
+import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectAndFile;
 import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
-import software.amazon.smithy.model.SourceLocation;
+import software.amazon.smithy.lsp.syntax.Syntax;
 import software.amazon.smithy.model.loader.IdlTokenizer;
 import software.amazon.smithy.model.selector.Selector;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.validation.Severity;
-import software.amazon.smithy.model.validation.ValidationEvent;
 import software.amazon.smithy.syntax.Formatter;
 import software.amazon.smithy.syntax.TokenTree;
 import software.amazon.smithy.utils.IoUtils;
@@ -161,6 +158,10 @@ public class SmithyLanguageServer implements
 
     ServerState getState() {
         return state;
+    }
+
+    Severity getMinimumSeverity() {
+        return minimumSeverity;
     }
 
     @Override
@@ -530,7 +531,7 @@ public class SmithyLanguageServer implements
             // Report any parse/shape/trait loading errors
             CompletableFuture<Void> future = CompletableFuture
                     .runAsync(() -> project.updateModelWithoutValidating(uri))
-                    .thenComposeAsync(unused -> sendFileDiagnostics(uri));
+                    .thenComposeAsync(unused -> sendFileDiagnostics(projectAndFile));
             state.lifecycleManager().putTask(uri, future);
         }
     }
@@ -550,9 +551,10 @@ public class SmithyLanguageServer implements
             projectAndFile.file().document().applyEdit(null, text);
         } else {
             state.createDetachedProject(uri, text);
+            projectAndFile = state.findProjectAndFile(uri); // Note: This will always be present
         }
 
-        state.lifecycleManager().putTask(uri, sendFileDiagnostics(uri));
+        state.lifecycleManager().putTask(uri, sendFileDiagnostics(projectAndFile));
     }
 
     @Override
@@ -598,7 +600,7 @@ public class SmithyLanguageServer implements
         } else {
             CompletableFuture<Void> future = CompletableFuture
                     .runAsync(() -> project.updateAndValidateModel(uri))
-                    .thenCompose(unused -> sendFileDiagnostics(uri));
+                    .thenCompose(unused -> sendFileDiagnostics(projectAndFile));
             state.lifecycleManager().putTask(uri, future);
         }
     }
@@ -614,15 +616,13 @@ public class SmithyLanguageServer implements
             return completedFuture(Either.forLeft(Collections.emptyList()));
         }
 
-        if (!(projectAndFile.file() instanceof SmithyFile smithyFile)) {
+        if (!(projectAndFile.file() instanceof IdlFile smithyFile)) {
             return completedFuture(Either.forLeft(List.of()));
         }
 
         Project project = projectAndFile.project();
-        return CompletableFutures.computeAsync((cc) -> {
-            CompletionHandler handler = new CompletionHandler(project, smithyFile);
-            return Either.forLeft(handler.handle(params, cc));
-        });
+        var handler = new CompletionHandler(project, smithyFile);
+        return CompletableFutures.computeAsync((cc) -> Either.forLeft(handler.handle(params, cc)));
     }
 
     @Override
@@ -644,54 +644,13 @@ public class SmithyLanguageServer implements
             return completedFuture(Collections.emptyList());
         }
 
-        if (!(projectAndFile.file() instanceof SmithyFile smithyFile)) {
+        if (!(projectAndFile.file() instanceof IdlFile idlFile)) {
             return completedFuture(List.of());
         }
 
-        return CompletableFutures.computeAsync((cc) -> {
-            Collection<DocumentShape> documentShapes = smithyFile.documentShapes();
-            if (documentShapes.isEmpty()) {
-                return Collections.emptyList();
-            }
-
-            if (cc.isCanceled()) {
-                return Collections.emptyList();
-            }
-
-            List<Either<SymbolInformation, DocumentSymbol>> documentSymbols = new ArrayList<>(documentShapes.size());
-            for (DocumentShape documentShape : documentShapes) {
-                SymbolKind symbolKind;
-                switch (documentShape.kind()) {
-                    case Inline:
-                        // No shape name in the document text, so no symbol
-                        continue;
-                    case DefinedMember:
-                    case Elided:
-                        symbolKind = SymbolKind.Property;
-                        break;
-                    case DefinedShape:
-                    case Targeted:
-                    default:
-                        symbolKind = SymbolKind.Class;
-                        break;
-                }
-
-                // Check before copying shapeName, which is actually a reference to the underlying document, and may
-                // be changed.
-                cc.checkCanceled();
-
-                String symbolName = documentShape.shapeName().toString();
-                if (symbolName.isEmpty()) {
-                    LOGGER.warning("[DocumentSymbols] Empty shape name for " + documentShape);
-                    continue;
-                }
-                Range symbolRange = documentShape.range();
-                DocumentSymbol symbol = new DocumentSymbol(symbolName, symbolKind, symbolRange, symbolRange);
-                documentSymbols.add(Either.forRight(symbol));
-            }
-
-            return documentSymbols;
-        });
+        List<Syntax.Statement> statements = idlFile.getParse().statements();
+        var handler = new DocumentSymbolHandler(idlFile.document(), statements);
+        return CompletableFuture.supplyAsync(handler::handle);
     }
 
     @Override
@@ -706,13 +665,13 @@ public class SmithyLanguageServer implements
             return completedFuture(null);
         }
 
-        if (!(projectAndFile.file() instanceof SmithyFile smithyFile)) {
+        if (!(projectAndFile.file() instanceof IdlFile smithyFile)) {
             return completedFuture(null);
         }
 
         Project project = projectAndFile.project();
-        List<Location> locations = new DefinitionHandler(project, smithyFile).handle(params);
-        return completedFuture(Either.forLeft(locations));
+        var handler = new DefinitionHandler(project, smithyFile);
+        return CompletableFuture.supplyAsync(() -> Either.forLeft(handler.handle(params)));
     }
 
     @Override
@@ -726,15 +685,15 @@ public class SmithyLanguageServer implements
             return completedFuture(null);
         }
 
-        if (!(projectAndFile.file() instanceof SmithyFile smithyFile)) {
+        if (!(projectAndFile.file() instanceof IdlFile smithyFile)) {
             return completedFuture(null);
         }
 
         Project project = projectAndFile.project();
 
         // TODO: Abstract away passing minimum severity
-        Hover hover = new HoverHandler(project, smithyFile, minimumSeverity).handle(params);
-        return completedFuture(hover);
+        var handler = new HoverHandler(project, smithyFile, minimumSeverity);
+        return CompletableFuture.supplyAsync(() -> handler.handle(params));
     }
 
     @Override
@@ -773,99 +732,16 @@ public class SmithyLanguageServer implements
 
     private void sendFileDiagnosticsForManagedDocuments() {
         for (String managedDocumentUri : state.managedUris()) {
-            state.lifecycleManager().putOrComposeTask(managedDocumentUri, sendFileDiagnostics(managedDocumentUri));
+            ProjectAndFile projectAndFile = state.findProjectAndFile(managedDocumentUri);
+            state.lifecycleManager().putOrComposeTask(managedDocumentUri, sendFileDiagnostics(projectAndFile));
         }
     }
 
-    private CompletableFuture<Void> sendFileDiagnostics(String uri) {
+    private CompletableFuture<Void> sendFileDiagnostics(ProjectAndFile projectAndFile) {
         return CompletableFuture.runAsync(() -> {
-            List<Diagnostic> diagnostics = getFileDiagnostics(uri);
-            PublishDiagnosticsParams publishDiagnosticsParams = new PublishDiagnosticsParams(uri, diagnostics);
+            List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(projectAndFile, minimumSeverity);
+            var publishDiagnosticsParams = new PublishDiagnosticsParams(projectAndFile.uri(), diagnostics);
             client.publishDiagnostics(publishDiagnosticsParams);
         });
-    }
-
-    List<Diagnostic> getFileDiagnostics(String uri) {
-        if (LspAdapter.isJarFile(uri) || LspAdapter.isSmithyJarFile(uri)) {
-            // Don't send diagnostics to jar files since they can't be edited
-            // and diagnostics could be misleading.
-            return Collections.emptyList();
-        }
-
-        ProjectAndFile projectAndFile = state.findProjectAndFile(uri);
-        if (projectAndFile == null) {
-            client.unknownFileError(uri, "diagnostics");
-            return List.of();
-        }
-
-        if (!(projectAndFile.file() instanceof SmithyFile smithyFile)) {
-            return List.of();
-        }
-
-        Project project = projectAndFile.project();
-        String path = LspAdapter.toPath(uri);
-
-        List<Diagnostic> diagnostics = project.modelResult().getValidationEvents().stream()
-                .filter(validationEvent -> validationEvent.getSeverity().compareTo(minimumSeverity) >= 0)
-                .filter(validationEvent -> validationEvent.getSourceLocation().getFilename().equals(path))
-                .map(validationEvent -> toDiagnostic(validationEvent, smithyFile))
-                .collect(Collectors.toCollection(ArrayList::new));
-
-        Diagnostic versionDiagnostic = SmithyDiagnostics.versionDiagnostic(smithyFile);
-        if (versionDiagnostic != null) {
-            diagnostics.add(versionDiagnostic);
-        }
-
-        if (state.isDetached(uri)) {
-            diagnostics.add(SmithyDiagnostics.detachedDiagnostic(smithyFile));
-        }
-
-        return diagnostics;
-    }
-
-    private static Diagnostic toDiagnostic(ValidationEvent validationEvent, SmithyFile smithyFile) {
-        DiagnosticSeverity severity = toDiagnosticSeverity(validationEvent.getSeverity());
-        SourceLocation sourceLocation = validationEvent.getSourceLocation();
-        Range range = determineRange(validationEvent, sourceLocation, smithyFile);
-        String message = validationEvent.getId() + ": " + validationEvent.getMessage();
-        return new Diagnostic(range, message, severity, "Smithy");
-    }
-
-    private static Range determineRange(ValidationEvent validationEvent,
-                                        SourceLocation sourceLocation,
-                                        SmithyFile smithyFile) {
-        final Range defaultRange = LspAdapter.lineOffset(LspAdapter.toPosition(sourceLocation));
-
-        if (smithyFile == null) {
-            return defaultRange;
-        }
-
-        DocumentParser parser = DocumentParser.forDocument(smithyFile.document());
-
-        // Case where we have shapes present
-        if (validationEvent.getShapeId().isPresent()) {
-            // Event is (probably) on a member target
-            if (validationEvent.containsId("Target")) {
-                DocumentShape documentShape = smithyFile.documentShapesByStartPosition()
-                        .get(LspAdapter.toPosition(sourceLocation));
-                if (documentShape != null && documentShape.hasMemberTarget()) {
-                    return documentShape.targetReference().range();
-                }
-            } else {
-                // Check if the event location is on a trait application
-                return Objects.requireNonNullElse(parser.traitIdRange(sourceLocation), defaultRange);
-            }
-        }
-
-        return Objects.requireNonNullElse(parser.findContiguousRange(sourceLocation), defaultRange);
-    }
-
-    private static DiagnosticSeverity toDiagnosticSeverity(Severity severity) {
-        return switch (severity) {
-            case ERROR, DANGER -> DiagnosticSeverity.Error;
-            case WARNING -> DiagnosticSeverity.Warning;
-            case NOTE -> DiagnosticSeverity.Information;
-            default -> DiagnosticSeverity.Hint;
-        };
     }
 }

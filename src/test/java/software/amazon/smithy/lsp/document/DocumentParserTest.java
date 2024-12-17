@@ -6,15 +6,12 @@
 package software.amazon.smithy.lsp.document;
 
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static software.amazon.smithy.lsp.document.DocumentTest.safeString;
-import static software.amazon.smithy.lsp.document.DocumentTest.string;
 
-import java.util.Map;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
@@ -40,19 +37,19 @@ public class DocumentParserTest {
         DocumentParser notNamespace = DocumentParser.of(safeString("namespace !foo"));
         DocumentParser trailingComment = DocumentParser.of(safeString("namespace com.foo//foo\n"));
 
-        assertThat(noNamespace.documentNamespace(), nullValue());
-        assertThat(incompleteNamespace.documentNamespace(), nullValue());
-        assertThat(incompleteNamespaceValue.documentNamespace(), nullValue());
-        assertThat(likeNamespace.documentNamespace(), nullValue());
-        assertThat(otherLikeNamespace.documentNamespace(), nullValue());
-        assertThat(namespaceAtEnd.documentNamespace().namespace().toString(), equalTo("com.foo"));
+        assertThat(noNamespace.documentNamespace().statementRange(), equalTo(LspAdapter.origin()));
+        assertThat(incompleteNamespace.documentNamespace().statementRange(), equalTo(LspAdapter.origin()));
+        assertThat(incompleteNamespaceValue.documentNamespace().statementRange(), equalTo(LspAdapter.origin()));
+        assertThat(likeNamespace.documentNamespace().statementRange(), equalTo(LspAdapter.origin()));
+        assertThat(otherLikeNamespace.documentNamespace().statementRange(), equalTo(LspAdapter.origin()));
+        assertThat(namespaceAtEnd.documentNamespace().namespace(), equalTo("com.foo"));
         assertThat(namespaceAtEnd.documentNamespace().statementRange(), equalTo(LspAdapter.of(2, 0, 2, 17)));
-        assertThat(brokenNamespace.documentNamespace(), nullValue());
-        assertThat(commentedNamespace.documentNamespace(), nullValue());
-        assertThat(wsPrefixedNamespace.documentNamespace().namespace().toString(), equalTo("com.foo"));
+        assertThat(brokenNamespace.documentNamespace().statementRange(), equalTo(LspAdapter.origin()));
+        assertThat(commentedNamespace.documentNamespace().statementRange(), equalTo(LspAdapter.origin()));
+        assertThat(wsPrefixedNamespace.documentNamespace().namespace(), equalTo("com.foo"));
         assertThat(wsPrefixedNamespace.documentNamespace().statementRange(), equalTo(LspAdapter.of(1, 4, 1, 21)));
-        assertThat(notNamespace.documentNamespace(), nullValue());
-        assertThat(trailingComment.documentNamespace().namespace().toString(), equalTo("com.foo"));
+        assertThat(notNamespace.documentNamespace().statementRange(), equalTo(LspAdapter.origin()));
+        assertThat(trailingComment.documentNamespace().namespace(), equalTo("com.foo"));
         assertThat(trailingComment.documentNamespace().statementRange(), equalTo(LspAdapter.of(0, 0, 0, 17)));
     }
 
@@ -68,15 +65,15 @@ public class DocumentParserTest {
         DocumentParser multiImports = DocumentParser.of(safeString("use com.foo#bar\nuse com.foo#baz"));
         DocumentParser notImport = DocumentParser.of(safeString("usea com.foo#bar"));
 
-        assertThat(noImports.documentImports(), nullValue());
-        assertThat(incompleteImport.documentImports(), nullValue());
-        assertThat(incompleteImportValue.documentImports(), nullValue());
+        assertThat(noImports.documentImports().importsRange(), equalTo(LspAdapter.origin()));
+        assertThat(incompleteImport.documentImports().importsRange(), equalTo(LspAdapter.origin()));
+        assertThat(incompleteImportValue.documentImports().importsRange(), equalTo(LspAdapter.origin()));
         assertThat(oneImport.documentImports().imports(), containsInAnyOrder("com.foo#bar"));
         assertThat(leadingWsImport.documentImports().imports(), containsInAnyOrder("com.foo#bar"));
         assertThat(trailingCommentImport.documentImports().imports(), containsInAnyOrder("com.foo#bar"));
-        assertThat(commentedImport.documentImports(), nullValue());
+        assertThat(commentedImport.documentImports().importsRange(), equalTo(LspAdapter.origin()));
         assertThat(multiImports.documentImports().imports(), containsInAnyOrder("com.foo#bar", "com.foo#baz"));
-        assertThat(notImport.documentImports(), nullValue());
+        assertThat(notImport.documentImports().importsRange(), equalTo(LspAdapter.origin()));
 
         // Some of these aren't shape ids, but its ok
         DocumentParser brokenImport = DocumentParser.of(safeString("use com.foo"));
@@ -108,20 +105,20 @@ public class DocumentParserTest {
         DocumentParser notSecond = DocumentParser.of(safeString("$foo: \"bar\"\n$bar: 1\n// abc\n$baz: 2\n    $version: \"2\""));
         DocumentParser notFirstNoVersion = DocumentParser.of(safeString("$foo: \"bar\"\nfoo\n"));
 
-        assertThat(noVersion.documentVersion(), nullValue());
-        assertThat(notVersion.documentVersion(), nullValue());
-        assertThat(noDollar.documentVersion(), nullValue());
+        assertThat(noVersion.documentVersion().range(), equalTo(LspAdapter.origin()));
+        assertThat(notVersion.documentVersion().range(), equalTo(LspAdapter.origin()));
+        assertThat(noDollar.documentVersion().range(), equalTo(LspAdapter.origin()));
         assertThat(noColon.documentVersion().version(), equalTo("2"));
-        assertThat(commented.documentVersion(), nullValue());
+        assertThat(commented.documentVersion().range(), equalTo(LspAdapter.origin()));
         assertThat(leadingWs.documentVersion().version(), equalTo("2"));
         assertThat(leadingLines.documentVersion().version(), equalTo("2"));
-        assertThat(notStringNode.documentVersion(), nullValue());
+        assertThat(notStringNode.documentVersion().range(), equalTo(LspAdapter.origin()));
         assertThat(trailingComment.documentVersion().version(), equalTo("2"));
         assertThat(trailingLine.documentVersion().version(), equalTo("2"));
-        assertThat(invalidNode.documentVersion(), nullValue());
+        assertThat(invalidNode.documentVersion().range(), equalTo(LspAdapter.origin()));
         assertThat(notFirst.documentVersion().version(), equalTo("2"));
         assertThat(notSecond.documentVersion().version(), equalTo("2"));
-        assertThat(notFirstNoVersion.documentVersion(), nullValue());
+        assertThat(notFirstNoVersion.documentVersion().range(), equalTo(LspAdapter.origin()));
 
         Range leadingWsRange = leadingWs.documentVersion().range();
         Range trailingCommentRange = trailingComment.documentVersion().range();
@@ -133,92 +130,6 @@ public class DocumentParserTest {
         assertThat(trailingLine.getDocument().copyRange(trailingLineRange), equalTo("$version: \"2\""));
         assertThat(notFirst.getDocument().copyRange(notFirstRange), equalTo("$version: \"2\""));
         assertThat(notSecond.getDocument().copyRange(notSecondRange), equalTo("$version: \"2\""));
-    }
-
-    @Test
-    public void getsDocumentShapes() {
-        String text = """
-                $version: "2"
-                namespace com.foo
-                string Foo
-                structure Bar {
-                    bar: Foo
-                }
-                enum Baz {
-                    ONE
-                    TWO
-                }
-                intEnum Biz {
-                    ONE = 1
-                }
-                @mixin
-                structure Boz {
-                    elided: String
-                }
-                structure Mixed with [Boz] {
-                    $elided
-                }
-                operation Get {
-                    input := {
-                        a: Integer
-                    }
-                }
-                """;
-        DocumentParser parser = DocumentParser.of(safeString(text));
-        Map<Position, DocumentShape> documentShapes = parser.documentShapes();
-
-        DocumentShape fooDef = documentShapes.get(new Position(2, 7));
-        DocumentShape barDef = documentShapes.get(new Position(3, 10));
-        DocumentShape barMemberDef = documentShapes.get(new Position(4, 4));
-        DocumentShape targetFoo = documentShapes.get(new Position(4, 9));
-        DocumentShape bazDef = documentShapes.get(new Position(6, 5));
-        DocumentShape bazOneDef = documentShapes.get(new Position(7, 4));
-        DocumentShape bazTwoDef = documentShapes.get(new Position(8, 4));
-        DocumentShape bizDef = documentShapes.get(new Position(10, 8));
-        DocumentShape bizOneDef = documentShapes.get(new Position(11, 4));
-        DocumentShape bozDef = documentShapes.get(new Position(14, 10));
-        DocumentShape elidedDef = documentShapes.get(new Position(15, 4));
-        DocumentShape targetString = documentShapes.get(new Position(15, 12));
-        DocumentShape mixedDef = documentShapes.get(new Position(17, 10));
-        DocumentShape elided = documentShapes.get(new Position(18, 4));
-        DocumentShape get = documentShapes.get(new Position(20, 10));
-        DocumentShape getInputA = documentShapes.get(new Position(22, 8));
-
-        assertThat(fooDef.kind(), equalTo(DocumentShape.Kind.DefinedShape));
-        assertThat(fooDef.shapeName(), string("Foo"));
-        assertThat(barDef.kind(), equalTo(DocumentShape.Kind.DefinedShape));
-        assertThat(barDef.shapeName(), string("Bar"));
-        assertThat(barMemberDef.kind(), equalTo(DocumentShape.Kind.DefinedMember));
-        assertThat(barMemberDef.shapeName(), string("bar"));
-        assertThat(barMemberDef.targetReference(), equalTo(targetFoo));
-        assertThat(targetFoo.kind(), equalTo(DocumentShape.Kind.Targeted));
-        assertThat(targetFoo.shapeName(), string("Foo"));
-        assertThat(bazDef.kind(), equalTo(DocumentShape.Kind.DefinedShape));
-        assertThat(bazDef.shapeName(), string("Baz"));
-        assertThat(bazOneDef.kind(), equalTo(DocumentShape.Kind.DefinedMember));
-        assertThat(bazOneDef.shapeName(), string("ONE"));
-        assertThat(bazTwoDef.kind(), equalTo(DocumentShape.Kind.DefinedMember));
-        assertThat(bazTwoDef.shapeName(), string("TWO"));
-        assertThat(bizDef.kind(), equalTo(DocumentShape.Kind.DefinedShape));
-        assertThat(bizDef.shapeName(), string("Biz"));
-        assertThat(bizOneDef.kind(), equalTo(DocumentShape.Kind.DefinedMember));
-        assertThat(bizOneDef.shapeName(), string("ONE"));
-        assertThat(bozDef.kind(), equalTo(DocumentShape.Kind.DefinedShape));
-        assertThat(bozDef.shapeName(), string("Boz"));
-        assertThat(elidedDef.kind(), equalTo(DocumentShape.Kind.DefinedMember));
-        assertThat(elidedDef.shapeName(), string("elided"));
-        assertThat(elidedDef.targetReference(), equalTo(targetString));
-        assertThat(targetString.kind(), equalTo(DocumentShape.Kind.Targeted));
-        assertThat(targetString.shapeName(), string("String"));
-        assertThat(mixedDef.kind(), equalTo(DocumentShape.Kind.DefinedShape));
-        assertThat(mixedDef.shapeName(), string("Mixed"));
-        assertThat(elided.kind(), equalTo(DocumentShape.Kind.Elided));
-        assertThat(elided.shapeName(), string("elided"));
-        assertThat(parser.getDocument().borrowRange(elided.range()), string("$elided"));
-        assertThat(get.kind(), equalTo(DocumentShape.Kind.DefinedShape));
-        assertThat(get.shapeName(), string("Get"));
-        assertThat(getInputA.kind(), equalTo(DocumentShape.Kind.DefinedMember));
-        assertThat(getInputA.shapeName(), string("a"));
     }
 
     @ParameterizedTest

@@ -7,6 +7,8 @@ package software.amazon.smithy.lsp.syntax;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.math.BigDecimal;
@@ -140,7 +142,7 @@ public class NodeParserTest {
         Document document = Document.of(text);
         Syntax.Node value = Syntax.parseNode(document).value();
         if (value instanceof Syntax.Node.Str s) {
-            String actualValue = s.copyValueFrom(document);
+            String actualValue = s.stringValue();
             if (!expectedValue.equals(actualValue)) {
                 fail(String.format("expected text of %s to be parsed as a string with value %s, but was %s",
                         text, expectedValue, actualValue));
@@ -164,7 +166,7 @@ public class NodeParserTest {
         Document document = Document.of(text);
         Syntax.Node value = Syntax.parseNode(document).value();
         if (value instanceof Syntax.Ident ident) {
-            String actualValue = ident.copyValueFrom(document);
+            String actualValue = ident.stringValue();
             if (!expectedValue.equals(actualValue)) {
                 fail(String.format("expected text of %s to be parsed as an ident with value %s, but was %s",
                         text, expectedValue, actualValue));
@@ -211,7 +213,7 @@ public class NodeParserTest {
     @ParameterizedTest
     @MethodSource("brokenProvider")
     public void broken(String desc, String text, List<String> expectedErrorMessages, List<Syntax.Node.Type> expectedTypes) {
-        Syntax.NodeParse parse = Syntax.parseNode(Document.of(text));
+        Syntax.NodeParseResult parse = Syntax.parseNode(Document.of(text));
         List<String> errorMessages = parse.errors().stream().map(Syntax.Err::message).toList();
         List<Syntax.Node.Type> types = getNodeTypes(parse.value());
 
@@ -361,6 +363,35 @@ public class NodeParserTest {
                 Syntax.Node.Type.Str,
                 Syntax.Node.Type.Num,
                 Syntax.Node.Type.Str);
+    }
+
+    @Test
+    public void stringValues() {
+        Syntax.Node node = Syntax.parseNode(Document.of("""
+                [
+                    "abc",
+                    "",
+                    \"""
+                    foo
+                    \"""
+                ]
+                """)).value();
+
+        assertThat(node, instanceOf(Syntax.Node.Arr.class));
+        Syntax.Node.Arr arr = (Syntax.Node.Arr) node;
+        assertThat(arr.elements(), hasSize(3));
+
+        Syntax.Node first = arr.elements().get(0);
+        assertThat(first, instanceOf(Syntax.Node.Str.class));
+        assertThat(((Syntax.Node.Str) first).stringValue(), equalTo("abc"));
+
+        Syntax.Node second = arr.elements().get(1);
+        assertThat(second, instanceOf(Syntax.Node.Str.class));
+        assertThat(((Syntax.Node.Str) second).stringValue(), equalTo(""));
+
+        Syntax.Node third = arr.elements().get(2);
+        assertThat(third, instanceOf(Syntax.Node.Str.class));
+        assertThat(((Syntax.Node.Str) third).stringValue().trim(), equalTo("foo"));
     }
 
     private static void assertTypesEqual(String text, Syntax.Node.Type... types) {

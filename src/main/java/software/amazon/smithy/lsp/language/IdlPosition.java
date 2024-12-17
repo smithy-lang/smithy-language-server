@@ -5,12 +5,12 @@
 
 package software.amazon.smithy.lsp.language;
 
-import java.util.Optional;
-import org.eclipse.lsp4j.Position;
-import software.amazon.smithy.lsp.project.SmithyFile;
+import software.amazon.smithy.lsp.syntax.StatementView;
 import software.amazon.smithy.lsp.syntax.Syntax;
-import software.amazon.smithy.lsp.syntax.SyntaxSearch;
 
+/**
+ * Represents different kinds of positions within an IDL file.
+ */
 sealed interface IdlPosition {
     default boolean isEasyShapeReference() {
         return switch (this) {
@@ -25,128 +25,97 @@ sealed interface IdlPosition {
         };
     }
 
-    SmithyFile smithyFile();
+    StatementView view();
 
-    record TraitId(SmithyFile smithyFile) implements IdlPosition {}
+    record TraitId(StatementView view) implements IdlPosition {}
 
-    record MemberTarget(SmithyFile smithyFile) implements IdlPosition {}
+    record MemberTarget(StatementView view) implements IdlPosition {}
 
-    record ShapeDef(SmithyFile smithyFile) implements IdlPosition {}
+    record ShapeDef(StatementView view) implements IdlPosition {}
 
-    record Mixin(SmithyFile smithyFile) implements IdlPosition {}
+    record Mixin(StatementView view) implements IdlPosition {}
 
-    record ApplyTarget(SmithyFile smithyFile) implements IdlPosition {}
+    record ApplyTarget(StatementView view) implements IdlPosition {}
 
-    record UseTarget(SmithyFile smithyFile) implements IdlPosition {}
+    record UseTarget(StatementView view) implements IdlPosition {}
 
-    record Namespace(SmithyFile smithyFile) implements IdlPosition {}
+    record Namespace(StatementView view) implements IdlPosition {}
 
-    record TraitValue(
-            int documentIndex,
-            int statementIndex,
-            Syntax.Statement.TraitApplication traitApplication,
-            SmithyFile smithyFile
-    ) implements IdlPosition {}
+    record TraitValue(StatementView view, Syntax.Statement.TraitApplication application) implements IdlPosition {}
 
-    record NodeMemberTarget(
-            int documentIndex,
-            int statementIndex,
-            Syntax.Statement.NodeMemberDef nodeMemberDef,
-            SmithyFile smithyFile
-    ) implements IdlPosition {}
+    record NodeMemberTarget(StatementView view, Syntax.Statement.NodeMemberDef nodeMember) implements IdlPosition {}
 
-    record ControlKey(SmithyFile smithyFile) implements IdlPosition {}
+    record ControlKey(StatementView view) implements IdlPosition {}
 
-    record MetadataKey(SmithyFile smithyFile) implements IdlPosition {}
+    record MetadataKey(StatementView view) implements IdlPosition {}
 
-    record MetadataValue(
-            int documentIndex,
-            Syntax.Statement.Metadata metadata,
-            SmithyFile smithyFile
-    ) implements IdlPosition {}
+    record MetadataValue(StatementView view, Syntax.Statement.Metadata metadata) implements IdlPosition {}
 
-    record StatementKeyword(SmithyFile smithyFile) implements IdlPosition {}
+    record StatementKeyword(StatementView view) implements IdlPosition {}
 
-    record MemberName(int documentIndex, int statementIndex, SmithyFile smithyFile) implements IdlPosition {}
+    record MemberName(StatementView view) implements IdlPosition {}
 
-    record ElidedMember(int documentIndex, int statementIndex, SmithyFile smithyFile) implements IdlPosition {}
+    record ElidedMember(StatementView view) implements IdlPosition {}
 
-    record ForResource(SmithyFile smithyFile) implements IdlPosition {}
+    record ForResource(StatementView view) implements IdlPosition {}
 
-    static Optional<IdlPosition> at(SmithyFile smithyFile, Position position) {
-        int documentIndex = smithyFile.document().indexOfPosition(position);
-        if (documentIndex < 0) {
-            return Optional.empty();
-        }
+    record Unknown(StatementView view) implements IdlPosition {}
 
-        int statementIndex = SyntaxSearch.statementIndex(smithyFile.statements(), documentIndex);
-        if (statementIndex < 0) {
-            return Optional.empty();
-        }
-
-        Syntax.Statement statement = smithyFile.statements().get(statementIndex);
-        IdlPosition idlPosition = switch (statement) {
+    static IdlPosition of(StatementView view) {
+        int documentIndex = view.documentIndex();
+        return switch (view.getStatement()) {
             case Syntax.Statement.Incomplete incomplete
-                    when incomplete.ident().isIn(documentIndex) -> new IdlPosition.StatementKeyword(smithyFile);
+                    when incomplete.ident().isIn(documentIndex) -> new IdlPosition.StatementKeyword(view);
 
             case Syntax.Statement.ShapeDef shapeDef
-                    when shapeDef.shapeType().isIn(documentIndex) -> new IdlPosition.StatementKeyword(smithyFile);
+                    when shapeDef.shapeType().isIn(documentIndex) -> new IdlPosition.StatementKeyword(view);
 
             case Syntax.Statement.Apply apply
-                    when apply.id().isIn(documentIndex) -> new IdlPosition.ApplyTarget(smithyFile);
+                    when apply.id().isIn(documentIndex) -> new IdlPosition.ApplyTarget(view);
 
             case Syntax.Statement.Metadata m
-                    when m.key().isIn(documentIndex) -> new IdlPosition.MetadataKey(smithyFile);
+                    when m.key().isIn(documentIndex) -> new IdlPosition.MetadataKey(view);
 
             case Syntax.Statement.Metadata m
-                    when m.value() != null && m.value().isIn(documentIndex) -> new IdlPosition.MetadataValue(
-                            documentIndex, m, smithyFile);
+                    when m.value() != null && m.value().isIn(documentIndex) -> new IdlPosition.MetadataValue(view, m);
 
             case Syntax.Statement.Control c
-                    when c.key().isIn(documentIndex) -> new IdlPosition.ControlKey(smithyFile);
+                    when c.key().isIn(documentIndex) -> new IdlPosition.ControlKey(view);
 
             case Syntax.Statement.TraitApplication t
-                    when t.id().isEmpty() || t.id().isIn(documentIndex) -> new IdlPosition.TraitId(smithyFile);
+                    when t.id().isEmpty() || t.id().isIn(documentIndex) -> new IdlPosition.TraitId(view);
 
             case Syntax.Statement.Use u
-                    when u.use().isIn(documentIndex) -> new IdlPosition.UseTarget(smithyFile);
+                    when u.use().isIn(documentIndex) -> new IdlPosition.UseTarget(view);
 
             case Syntax.Statement.MemberDef m
-                    when m.inTarget(documentIndex) -> new IdlPosition.MemberTarget(smithyFile);
+                    when m.inTarget(documentIndex) -> new IdlPosition.MemberTarget(view);
 
             case Syntax.Statement.MemberDef m
-                    when m.name().isIn(documentIndex) -> new IdlPosition.MemberName(
-                            documentIndex, statementIndex, smithyFile);
+                    when m.name().isIn(documentIndex) -> new IdlPosition.MemberName(view);
 
             case Syntax.Statement.NodeMemberDef m
-                    when m.inValue(documentIndex) -> new IdlPosition.NodeMemberTarget(
-                            documentIndex, statementIndex, m, smithyFile);
+                    when m.inValue(documentIndex) -> new IdlPosition.NodeMemberTarget(view, m);
 
             case Syntax.Statement.Namespace n
-                    when n.namespace().isIn(documentIndex) -> new IdlPosition.Namespace(smithyFile);
+                    when n.namespace().isIn(documentIndex) -> new IdlPosition.Namespace(view);
 
             case Syntax.Statement.TraitApplication t
-                    when t.value() != null && t.value().isIn(documentIndex) -> new IdlPosition.TraitValue(
-                            documentIndex, statementIndex, t, smithyFile);
+                    when t.value() != null && t.value().isIn(documentIndex) -> new IdlPosition.TraitValue(view, t);
 
-            case Syntax.Statement.ElidedMemberDef ignored -> new IdlPosition.ElidedMember(
-                    documentIndex, statementIndex, smithyFile);
+            case Syntax.Statement.ElidedMemberDef ignored -> new IdlPosition.ElidedMember(view);
 
-            case Syntax.Statement.Mixins ignored -> new IdlPosition.Mixin(smithyFile);
+            case Syntax.Statement.Mixins ignored -> new IdlPosition.Mixin(view);
 
-            case Syntax.Statement.ShapeDef ignored -> new IdlPosition.ShapeDef(smithyFile);
+            case Syntax.Statement.ShapeDef ignored -> new IdlPosition.ShapeDef(view);
 
-            case Syntax.Statement.NodeMemberDef ignored -> new IdlPosition.MemberName(
-                    documentIndex, statementIndex, smithyFile);
+            case Syntax.Statement.NodeMemberDef ignored -> new IdlPosition.MemberName(view);
 
-            case Syntax.Statement.Block ignored -> new IdlPosition.MemberName(
-                    documentIndex, statementIndex, smithyFile);
+            case Syntax.Statement.Block ignored -> new IdlPosition.MemberName(view);
 
-            case Syntax.Statement.ForResource ignored -> new IdlPosition.ForResource(smithyFile);
+            case Syntax.Statement.ForResource ignored -> new IdlPosition.ForResource(view);
 
-            default -> null;
+            default -> new IdlPosition.Unknown(view);
         };
-
-        return Optional.ofNullable(idlPosition);
     }
 }

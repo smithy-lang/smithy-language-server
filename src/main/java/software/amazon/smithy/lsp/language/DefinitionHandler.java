@@ -12,9 +12,11 @@ import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import software.amazon.smithy.lsp.document.DocumentId;
+import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
-import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
+import software.amazon.smithy.lsp.syntax.StatementView;
+import software.amazon.smithy.lsp.syntax.Syntax;
 import software.amazon.smithy.model.Model;
 
 /**
@@ -22,9 +24,9 @@ import software.amazon.smithy.model.Model;
  */
 public final class DefinitionHandler {
     final Project project;
-    final SmithyFile smithyFile;
+    final IdlFile smithyFile;
 
-    public DefinitionHandler(Project project, SmithyFile smithyFile) {
+    public DefinitionHandler(Project project, IdlFile smithyFile) {
         this.project = project;
         this.smithyFile = smithyFile;
     }
@@ -46,8 +48,11 @@ public final class DefinitionHandler {
         }
 
         Model model = modelResult.get();
-        return IdlPosition.at(smithyFile, position)
-                .flatMap(idlPosition -> ShapeSearch.findShapeDefinition(idlPosition, model, id))
+        Syntax.IdlParseResult parseResult = smithyFile.getParse();
+        int documentIndex = smithyFile.document().indexOfPosition(position);
+        return StatementView.createAt(parseResult, documentIndex)
+                .map(IdlPosition::of)
+                .flatMap(idlPosition -> ShapeSearch.findShapeDefinition(idlPosition, id, model))
                 .map(LspAdapter::toLocation)
                 .map(List::of)
                 .orElse(List.of());

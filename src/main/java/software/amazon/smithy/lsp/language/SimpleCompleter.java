@@ -9,30 +9,37 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
-import software.amazon.smithy.lsp.document.DocumentId;
-import software.amazon.smithy.lsp.project.Project;
+import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.util.StreamUtils;
-import software.amazon.smithy.model.Model;
 
-final class SimpleCompletions {
-    private final Project project;
-    private final Matcher matcher;
-    private final Mapper mapper;
+/**
+ * Maps simple {@link CompletionCandidates} to {@link CompletionItem}s.
+ *
+ * @param context The context for creating completions.
+ *
+ * @see ShapeCompleter for what maps {@link CompletionCandidates.Shapes}.
+ */
+record SimpleCompleter(CompleterContext context) {
+    List<CompletionItem> getCompletionItems(CompletionCandidates candidates) {
+        Matcher matcher;
+        if (context.exclude().isEmpty()) {
+            matcher = new DefaultMatcher(context.matchToken());
+        } else {
+            matcher = new ExcludingMatcher(context.matchToken(), context.exclude());
+        }
 
-    private SimpleCompletions(Project project, Matcher matcher, Mapper mapper) {
-        this.project = project;
-        this.matcher = matcher;
-        this.mapper = mapper;
+        Mapper mapper = new Mapper(context().insertRange(), context().literalKind());
+
+        return getCompletionItems(candidates, matcher, mapper);
     }
 
-    List<CompletionItem> getCompletionItems(CompletionCandidates candidates) {
+    private List<CompletionItem> getCompletionItems(CompletionCandidates candidates, Matcher matcher, Mapper mapper) {
         return switch (candidates) {
             case CompletionCandidates.Constant(var value)
                     when !value.isEmpty() && matcher.testConstant(value) -> List.of(mapper.constant(value));
@@ -57,9 +64,7 @@ final class SimpleCompletions {
                     .map(mapper::elided)
                     .toList();
 
-            case CompletionCandidates.Custom custom
-                    // TODO: Need to get rid of this stupid null check
-                    when project != null -> getCompletionItems(customCandidates(custom));
+            case CompletionCandidates.Custom custom -> getCompletionItems(customCandidates(custom), matcher, mapper);
 
             case CompletionCandidates.And(var one, var two) -> {
                 List<CompletionItem> oneItems = getCompletionItems(one);
@@ -69,6 +74,7 @@ final class SimpleCompletions {
                 completionItems.addAll(twoItems);
                 yield completionItems;
             }
+
             default -> List.of();
         };
     }
@@ -85,69 +91,26 @@ final class SimpleCompletions {
     }
 
     private Stream<String> streamNamespaces() {
-        return project.smithyFiles().values().stream()
-                .map(smithyFile -> smithyFile.namespace().toString())
+        return context().project().smithyFiles().values().stream()
+                .map(smithyFile -> switch (smithyFile) {
+                    case IdlFile idlFile -> idlFile.getParse().namespace().namespace();
+                    default -> "";
+                })
                 .filter(namespace -> !namespace.isEmpty());
     }
 
-    static Builder builder(DocumentId id, Range insertRange) {
-        return new Builder(id, insertRange);
-    }
-
-    static final class Builder {
-        private final DocumentId id;
-        private final Range insertRange;
-        private Project project = null;
-        private Set<String> exclude = null;
-        private CompletionItemKind literalKind = CompletionItemKind.Field;
-
-        private Builder(DocumentId id, Range insertRange) {
-            this.id = id;
-            this.insertRange = insertRange;
-        }
-
-        Builder project(Project project) {
-            this.project = project;
-            return this;
-        }
-
-        Builder exclude(Set<String> exclude) {
-            this.exclude = exclude;
-            return this;
-        }
-
-        Builder literalKind(CompletionItemKind literalKind) {
-            this.literalKind = literalKind;
-            return this;
-        }
-
-        SimpleCompletions buildSimpleCompletions() {
-            Matcher matcher = getMatcher(id, exclude);
-            Mapper mapper = new Mapper(insertRange, literalKind);
-            return new SimpleCompletions(project, matcher, mapper);
-        }
-
-        ShapeCompletions buildShapeCompletions(IdlPosition idlPosition, Model model) {
-            return ShapeCompletions.create(idlPosition, model, getMatchToken(id), insertRange);
-        }
-    }
-
-    private static Matcher getMatcher(DocumentId id, Set<String> exclude) {
-        String matchToken = getMatchToken(id);
-        if (exclude == null || exclude.isEmpty()) {
-            return new DefaultMatcher(matchToken);
-        } else {
-            return new ExcludingMatcher(matchToken, exclude);
-        }
-    }
-
-    private static String getMatchToken(DocumentId id) {
-        return id != null
-                ? id.copyIdValue().toLowerCase()
-                : "";
-    }
-
-    private sealed interface Matcher extends Predicate<String> {
+    /**
+     * Matches different kinds of completion candidates against the text of
+     * whatever triggered the completion, used to filter out candidates.
+     *
+     * @apiNote LSP has support for client-side matching/filtering, but only when
+     * the completion items don't have text edits. We use text edits to have more
+     * control over the range the completion text will occupy, so we need to do
+     * matching/filtering server-side.
+     *
+     * @see <a href="https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_completion">LSP Completion Docs</a>
+     */
+    private sealed interface Matcher {
         String matchToken();
 
         default boolean testConstant(String constant) {
@@ -170,7 +133,6 @@ final class SimpleCompletions {
             return test(memberName) || test("$" + memberName);
         }
 
-        @Override
         default boolean test(String s) {
             return s.toLowerCase().startsWith(matchToken());
         }
@@ -193,13 +155,20 @@ final class SimpleCompletions {
         }
     }
 
+    /**
+     * Maps different kinds of completion candidates to {@link CompletionItem}s.
+     *
+     * @param insertRange The range the completion text will occupy.
+     * @param literalKind The completion item kind that will be shown in the
+     *                    client for {@link CompletionCandidates.Literals}.
+     */
     private record Mapper(Range insertRange, CompletionItemKind literalKind) {
         CompletionItem constant(String value) {
             return textEditCompletion(value, CompletionItemKind.Constant);
         }
 
         CompletionItem literal(String value) {
-            return textEditCompletion(value, CompletionItemKind.Field);
+            return textEditCompletion(value, literalKind);
         }
 
         CompletionItem labeled(Map.Entry<String, String> entry) {

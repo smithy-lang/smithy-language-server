@@ -5,7 +5,9 @@
 
 package software.amazon.smithy.lsp.language;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import software.amazon.smithy.lsp.syntax.NodeCursor;
 import software.amazon.smithy.lsp.syntax.Syntax;
 import software.amazon.smithy.model.Model;
@@ -67,6 +69,39 @@ final class NodeSearch {
      */
     sealed interface Result {
         None NONE = new None();
+
+        /**
+         * @return The string values of other keys in {@link ObjectKey} and {@link ObjectShape},
+         *  or an empty set.
+         */
+        default Set<String> getOtherPresentKeys() {
+            Syntax.Node.Kvps terminalContainer;
+            NodeCursor.Key terminalKey;
+            switch (this) {
+                case NodeSearch.Result.ObjectShape obj -> {
+                    terminalContainer = obj.node();
+                    terminalKey = null;
+                }
+                case NodeSearch.Result.ObjectKey key -> {
+                    terminalContainer = key.key().parent();
+                    terminalKey = key.key();
+                }
+                default -> {
+                    return Set.of();
+                }
+            }
+
+            Set<String> otherPresentKeys = new HashSet<>();
+            for (var kvp : terminalContainer.kvps()) {
+                otherPresentKeys.add(kvp.key().stringValue());
+            }
+
+            if (terminalKey != null) {
+                otherPresentKeys.remove(terminalKey.name());
+            }
+
+            return otherPresentKeys;
+        }
 
         /**
          * No result - the path is invalid in the model.

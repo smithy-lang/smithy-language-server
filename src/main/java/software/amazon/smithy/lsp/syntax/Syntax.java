@@ -9,15 +9,18 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-import org.eclipse.lsp4j.Range;
 import software.amazon.smithy.lsp.document.Document;
+import software.amazon.smithy.lsp.document.DocumentImports;
+import software.amazon.smithy.lsp.document.DocumentNamespace;
+import software.amazon.smithy.lsp.document.DocumentParser;
+import software.amazon.smithy.lsp.document.DocumentVersion;
 
 /**
  * Provides classes that represent the syntactic structure of a Smithy file, and
  * a means to parse Smithy files into those classes.
  * <p></p>
  * <h3>IDL Syntax</h3>
- * The result of a parse, {@link Syntax.IdlParse}, is a list of {@link Statement},
+ * The result of a parse, {@link IdlParseResult}, is a list of {@link Statement},
  * rather than a syntax tree. For example, the following:
  * <code>
  *     \@someTrait
@@ -58,10 +61,6 @@ import software.amazon.smithy.lsp.document.Document;
  * - Any `final` field is definitely assigned, whereas any non `final` field
  *   may be null (other than {@link Statement#start} and {@link Statement#end},
  *   which are definitely assigned).
- * - Concrete text is not stored in {@link Statement}s. Instead,
- *   {@link Statement#start} and {@link Statement#end} can be used to copy a
- *   value from the underlying document as needed. This is done to reduce the
- *   memory footprint of parsing.
  * <p></p>
  * <h3>Node Syntax</h3>
  * This class also provides classes for the JSON-like Smithy Node, which can
@@ -74,28 +73,66 @@ public final class Syntax {
     private Syntax() {
     }
 
-    public record IdlParse(List<Statement> statements, List<Err> errors) {}
-
-    public record NodeParse(Node value, List<Err> errors) {}
+    /**
+     * Wrapper for {@link Statement.ForResource} and {@link Statement.Mixins},
+     * which often are used together.
+     *
+     * @param forResource The nullable for-resource statement.
+     * @param mixins The nullable mixins statement.
+     */
+    public record ForResourceAndMixins(Statement.ForResource forResource, Statement.Mixins mixins) {}
 
     /**
-     * @param document The document to parse
-     * @return The IDL parse result
+     * The result of parsing an IDL document, containing some extra computed
+     * info that is used often.
+     *
+     * @param statements The parsed statements.
+     * @param errors The errors that occurred during parsing.
+     * @param version The IDL version that was parsed.
+     * @param namespace The namespace that was parsed
+     * @param imports The imports that were parsed.
      */
-    public static IdlParse parseIdl(Document document) {
+    public record IdlParseResult(
+            List<Statement> statements,
+            List<Err> errors,
+            DocumentVersion version,
+            DocumentNamespace namespace,
+            DocumentImports imports
+    ) {}
+
+    /**
+     * @param document The document to parse.
+     * @return The IDL parse result.
+     */
+    public static IdlParseResult parseIdl(Document document) {
         Parser parser = new Parser(document);
         parser.parseIdl();
-        return new IdlParse(parser.statements, parser.errors);
+        List<Statement> statements = parser.statements;
+        DocumentParser documentParser = DocumentParser.forStatements(document, statements);
+        return new IdlParseResult(
+                statements,
+                parser.errors,
+                documentParser.documentVersion(),
+                documentParser.documentNamespace(),
+                documentParser.documentImports());
     }
 
     /**
-     * @param document The document to parse
-     * @return The Node parse result
+     * The result of parsing a Node document.
+     *
+     * @param value The parsed node.
+     * @param errors The errors that occurred during parsing.
      */
-    public static NodeParse parseNode(Document document) {
+    public record NodeParseResult(Node value, List<Err> errors) {}
+
+    /**
+     * @param document The document to parse.
+     * @return The Node parse result.
+     */
+    public static NodeParseResult parseNode(Document document) {
         Parser parser = new Parser(document);
         Node node = parser.parseNode();
-        return new NodeParse(node, parser.errors);
+        return new NodeParseResult(node, parser.errors);
     }
 
     /**
@@ -120,14 +157,6 @@ public final class Syntax {
          */
         public final boolean isIn(int pos) {
             return start <= pos && end > pos;
-        }
-
-        /**
-         * @param document The document to get the range in
-         * @return The range of this item in the given {@code document}
-         */
-        public final Range rangeIn(Document document) {
-            return document.rangeBetween(start, end);
         }
     }
 
@@ -264,12 +293,16 @@ public final class Syntax {
          * identifiers, so this class a single subclass {@link Ident}.
          */
         public static sealed class Str extends Node {
-            /**
-             * @param document Document to copy the string value from
-             * @return The literal string value, excluding enclosing ""
-             */
-            public String copyValueFrom(Document document) {
-                return document.copySpan(start + 1, end - 1); // Don't include the '"'s
+            final String value;
+
+            Str(int start, int end, String value) {
+                this.start = start;
+                this.end = end;
+                this.value = value;
+            }
+
+            public String stringValue() {
+                return value;
             }
         }
 
@@ -515,8 +548,6 @@ public final class Syntax {
          * from a statement to the {@link Block} it resides within when
          * searching for the statement corresponding to a given character offset
          * in a document.</p>
-         *
-         * @see SyntaxSearch#statementIndex(List, int)
          */
         abstract static sealed class MemberStatement extends Statement {
             final Block parent;
@@ -723,23 +754,14 @@ public final class Syntax {
      * (i.e. `.`, `#`, `$`, `_` digits, alphas).
      */
     public static final class Ident extends Node.Str {
-        static final Ident EMPTY = new Ident(-1, -1);
+        static final Ident EMPTY = new Ident(-1, -1, "");
 
-        Ident(int start, int end) {
-            this.start = start;
-            this.end = end;
+        Ident(int start, int end, String value) {
+            super(start, end, value);
         }
 
         public boolean isEmpty() {
             return (start - end) == 0;
-        }
-
-        @Override
-        public String copyValueFrom(Document document) {
-            if (start < 0 && end < 0) {
-                return "";
-            }
-            return document.copySpan(start, end); // There's no '"'s here
         }
     }
 

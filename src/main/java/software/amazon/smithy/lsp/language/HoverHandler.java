@@ -16,9 +16,11 @@ import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.Position;
 import software.amazon.smithy.lsp.document.DocumentId;
+import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
-import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.syntax.NodeCursor;
+import software.amazon.smithy.lsp.syntax.StatementView;
+import software.amazon.smithy.lsp.syntax.Syntax;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.shapes.MemberShape;
@@ -41,7 +43,7 @@ public final class HoverHandler {
     public static final Hover EMPTY = new Hover(new MarkupContent("markdown", ""));
 
     private final Project project;
-    private final SmithyFile smithyFile;
+    private final IdlFile smithyFile;
     private final Severity minimumSeverity;
 
     /**
@@ -49,7 +51,7 @@ public final class HoverHandler {
      * @param smithyFile Smithy file the hover is in
      * @param minimumSeverity Minimum severity of validation events to show
      */
-    public HoverHandler(Project project, SmithyFile smithyFile, Severity minimumSeverity) {
+    public HoverHandler(Project project, IdlFile smithyFile, Severity minimumSeverity) {
         this.project = project;
         this.smithyFile = smithyFile;
         this.minimumSeverity = minimumSeverity;
@@ -66,7 +68,11 @@ public final class HoverHandler {
             return EMPTY;
         }
 
-        IdlPosition idlPosition = IdlPosition.at(smithyFile, position).orElse(null);
+        Syntax.IdlParseResult parseResult = smithyFile.getParse();
+        int documentIndex = smithyFile.document().indexOfPosition(position);
+        IdlPosition idlPosition = StatementView.createAt(parseResult, documentIndex)
+                .map(IdlPosition::of)
+                .orElse(null);
 
         return switch (idlPosition) {
             case IdlPosition.ControlKey ignored -> Builtins.CONTROL.getMember(id.copyIdValueForElidedMember())
@@ -110,10 +116,10 @@ public final class HoverHandler {
         Optional<? extends Shape> matchingShape = switch (idlPosition) {
             // TODO: Handle resource ids and properties. This only works for mixins right now.
             case IdlPosition.ElidedMember elidedMember ->
-                    ShapeSearch.findElidedMemberParent(elidedMember, model, id)
+                    ShapeSearch.findElidedMemberParent(elidedMember, id, model)
                             .flatMap(shape -> shape.getMember(id.copyIdValueForElidedMember()));
 
-            default -> ShapeSearch.findShapeDefinition(idlPosition, model, id);
+            default -> ShapeSearch.findShapeDefinition(idlPosition, id, model);
         };
 
         if (matchingShape.isEmpty()) {

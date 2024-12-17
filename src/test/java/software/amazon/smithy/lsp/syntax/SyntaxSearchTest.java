@@ -21,7 +21,7 @@ public class SyntaxSearchTest {
                 }""");
         Document document = Document.of(text);
         Syntax.Node value = Syntax.parseNode(document).value();
-        NodeCursor cursor = NodeCursor.create(document, value, document.indexOfPosition(1, 4));
+        NodeCursor cursor = NodeCursor.create(value, document.indexOfPosition(1, 4));
 
         assertCursorMatches(cursor, new NodeCursor(List.of(
                 new NodeCursor.Obj(null),
@@ -38,7 +38,7 @@ public class SyntaxSearchTest {
                 }""");
         Document document = Document.of(text);
         Syntax.Node value = Syntax.parseNode(document).value();
-        NodeCursor cursor = NodeCursor.create(document, value, document.indexOfPosition(1, 4));
+        NodeCursor cursor = NodeCursor.create(value, document.indexOfPosition(1, 4));
 
         assertCursorMatches(cursor, new NodeCursor(List.of(
                 new NodeCursor.Obj(null),

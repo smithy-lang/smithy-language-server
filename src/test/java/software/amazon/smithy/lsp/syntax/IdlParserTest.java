@@ -290,7 +290,7 @@ public class IdlParserTest {
                     "bar": "baz"
                 )
                 """;
-        Syntax.IdlParse parse = Syntax.parseIdl(Document.of(text));
+        Syntax.IdlParseResult parse = Syntax.parseIdl(Document.of(text));
         assertThat(parse.statements(), hasSize(1));
         assertThat(parse.statements().get(0), instanceOf(Syntax.Statement.TraitApplication.class));
 
@@ -310,7 +310,7 @@ public class IdlParserTest {
         if (desc.equals("trait missing member value")) {
             System.out.println();
         }
-        Syntax.IdlParse parse = Syntax.parseIdl(Document.of(text));
+        Syntax.IdlParseResult parse = Syntax.parseIdl(Document.of(text));
         List<String> errorMessages = parse.errors().stream().map(Syntax.Err::message).toList();
         List<Syntax.Statement.Type> types = parse.statements().stream()
                 .map(Syntax.Statement::type)
@@ -459,7 +459,7 @@ public class IdlParserTest {
     }
 
     private static void assertTypesEqual(String text, Syntax.Statement.Type... types) {
-        Syntax.IdlParse parse = Syntax.parseIdl(Document.of(text));
+        Syntax.IdlParseResult parse = Syntax.parseIdl(Document.of(text));
         List<Syntax.Statement.Type> actualTypes = parse.statements().stream()
                 .map(Syntax.Statement::type)
                 .filter(type -> type != Syntax.Statement.Type.Block)

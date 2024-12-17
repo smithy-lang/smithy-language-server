@@ -24,7 +24,7 @@ public final class Document {
     private final StringBuilder buffer;
     private int[] lineIndices;
 
-    private Document(StringBuilder buffer, int[] lineIndices, int changeVersion) {
+    private Document(StringBuilder buffer, int[] lineIndices) {
         this.buffer = buffer;
         this.lineIndices = lineIndices;
     }
@@ -36,14 +36,14 @@ public final class Document {
     public static Document of(String string) {
         StringBuilder buffer = new StringBuilder(string);
         int[] lineIndicies = computeLineIndicies(buffer);
-        return new Document(buffer, lineIndicies, 0);
+        return new Document(buffer, lineIndicies);
     }
 
     /**
      * @return A copy of this document
      */
     public Document copy() {
-        return new Document(new StringBuilder(copyText()), lineIndices.clone(), 0);
+        return new Document(new StringBuilder(copyText()), lineIndices.clone());
     }
 
     /**
@@ -260,23 +260,6 @@ public final class Document {
     }
 
     /**
-     * @param c The character to find the last index of
-     * @param before The index to stop the search at
-     * @param line The line to search within
-     * @return The index of the last occurrence of {@code c} before {@code before}
-     *  on the line {@code line} or {@code -1} if one doesn't exist
-     */
-    int lastIndexOfOnLine(char c, int before, int line) {
-        int lineIdx = indexOfLine(line);
-        for (int i = before; i >= lineIdx; i--) {
-            if (buffer.charAt(i) == c) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /**
      * @return A reference to the text in this document
      */
     public CharSequence borrowText() {
@@ -352,19 +335,6 @@ public final class Document {
     }
 
     /**
-     * @param position The position within the id to borrow
-     * @return A reference to the id that the given {@code position} is
-     *  within, or {@code null} if the position is not within an id
-     */
-    public CharBuffer borrowId(Position position) {
-        DocumentId id = copyDocumentId(position);
-        if (id == null) {
-            return null;
-        }
-        return id.idSlice();
-    }
-
-    /**
      * @param line The line to borrow
      * @return A reference to the text in the given line, or {@code null} if
      *  the line doesn't exist
@@ -420,32 +390,6 @@ public final class Document {
         }
 
         return borrowed.toString();
-    }
-
-    /**
-     * @param position The position within the token to copy
-     * @return A copy of the token that the given {@code position} is within,
-     *  or {@code null} if the position is not within a token
-     */
-    public String copyToken(Position position) {
-        CharSequence token = borrowToken(position);
-        if (token == null) {
-            return null;
-        }
-        return token.toString();
-    }
-
-    /**
-     * @param position The position within the id to copy
-     * @return A copy of the id that the given {@code position} is
-     *  within, or {@code null} if the position is not within an id
-     */
-    public String copyId(Position position) {
-        CharBuffer id = borrowId(position);
-        if (id == null) {
-            return null;
-        }
-        return id.toString();
     }
 
     /**
@@ -547,19 +491,6 @@ public final class Document {
     }
 
     /**
-     * @param line The line to copy
-     * @return A copy of the text in the given line, or {@code null} if the line
-     *  doesn't exist
-     */
-    public String copyLine(int line) {
-        CharBuffer borrowed = borrowLine(line);
-        if (borrowed == null) {
-            return null;
-        }
-        return borrowed.toString();
-    }
-
-    /**
      * @param start The index of the start of the span to copy
      * @param end The index of the end of the span to copy
      * @return A copy of the text within the indicies {@code start} and
@@ -578,18 +509,6 @@ public final class Document {
      */
     public int length() {
         return buffer.length();
-    }
-
-    /**
-     * @param index The index to get the character at
-     * @return The character at the given index, or {@code \u0000} if one
-     *  doesn't exist
-     */
-    char charAt(int index) {
-        if (index < 0 || index >= length()) {
-            return '\u0000';
-        }
-        return buffer.charAt(index);
     }
 
     // Adapted from String::split

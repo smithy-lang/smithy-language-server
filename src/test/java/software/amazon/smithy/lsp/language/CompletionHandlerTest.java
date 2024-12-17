@@ -9,9 +9,12 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 
 import java.util.ArrayList;
@@ -26,9 +29,9 @@ import software.amazon.smithy.lsp.ServerState;
 import software.amazon.smithy.lsp.TestWorkspace;
 import software.amazon.smithy.lsp.TextWithPositions;
 import software.amazon.smithy.lsp.document.Document;
+import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectLoader;
-import software.amazon.smithy.lsp.project.SmithyFile;
 
 public class CompletionHandlerTest {
     @Test
@@ -1033,6 +1036,35 @@ public class CompletionHandlerTest {
         assertThat(comps, containsInAnyOrder("\"\"", "[]", "{}", "[]"));
     }
 
+    @Test
+    public void completesAbsoluteShapeIds() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                structure Foo {
+                    bar: smithy.%
+                }
+                """);
+        List<String> comps = getCompLabels(text);
+
+        assertThat(comps, hasItem("smithy.api#String"));
+    }
+
+    @Test
+    public void completesUseTarget() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                use smithy.api#Strin%
+                """);
+        List<CompletionItem> comps = getCompItems(text.text(), text.positions());
+
+        assertThat(comps, hasSize(1));
+        CompletionItem item = comps.get(0);
+        assertThat(item.getTextEdit().getLeft().getNewText(), equalTo("smithy.api#String"));
+        assertThat(item.getAdditionalTextEdits(), nullValue());
+    }
+
     private static List<String> getCompLabels(TextWithPositions textWithPositions) {
         return getCompLabels(textWithPositions.text(), textWithPositions.positions());
     }
@@ -1045,7 +1077,7 @@ public class CompletionHandlerTest {
         TestWorkspace workspace = TestWorkspace.singleModel(text);
         Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
         String uri = workspace.getUri("main.smithy");
-        SmithyFile smithyFile = project.getSmithyFile(uri);
+        IdlFile smithyFile = (IdlFile) project.getSmithyFile(uri);
 
         List<CompletionItem> completionItems = new ArrayList<>();
         CompletionHandler handler = new CompletionHandler(project, smithyFile);

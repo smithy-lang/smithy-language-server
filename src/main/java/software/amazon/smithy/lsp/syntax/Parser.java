@@ -68,8 +68,32 @@ final class Parser extends SimpleParser {
             Syntax.Statement.Err err = new Syntax.Statement.Err(e.message);
             err.start = position();
             err.end = position();
-            errors.add(err);
+            addError(err);
         }
+    }
+
+    void parseIdlBetween(int start, int end) {
+        try {
+            rewindTo(start);
+            ws();
+            while (!eof() && position() < end) {
+                statement();
+                ws();
+            }
+        } catch (Parser.Eof e) {
+            Syntax.Statement.Err err = new Syntax.Statement.Err(e.message);
+            err.start = position();
+            err.end = position();
+            addError(err);
+        }
+    }
+
+    private void addStatement(Syntax.Statement statement) {
+        statements.add(statement);
+    }
+
+    private void addError(Syntax.Err err) {
+        errors.add(err);
     }
 
     private void setStart(Syntax.Item item) {
@@ -166,7 +190,7 @@ final class Parser extends SimpleParser {
 
             Syntax.Node.Err kvpErr = kvp(kvps, ')');
             if (kvpErr != null) {
-                errors.add(kvpErr);
+                addError(kvpErr);
             }
 
             ws();
@@ -181,7 +205,8 @@ final class Parser extends SimpleParser {
         do {
             skip();
         } while (!isWs() && !isStructuralBreakpoint() && !eof());
-        return new Syntax.Ident(start, position());
+        int end = position();
+        return new Syntax.Ident(start, end, document.copySpan(start, end));
     }
 
     private Syntax.Node.Obj obj() {
@@ -198,7 +223,7 @@ final class Parser extends SimpleParser {
 
             Syntax.Err kvpErr = kvp(obj.kvps, '}');
             if (kvpErr != null) {
-                errors.add(kvpErr);
+                addError(kvpErr);
             }
 
             ws();
@@ -207,7 +232,7 @@ final class Parser extends SimpleParser {
         Syntax.Node.Err err = new Syntax.Node.Err("missing }");
         setStart(err);
         setEnd(err);
-        errors.add(err);
+        addError(err);
 
         setEnd(obj);
         return obj;
@@ -249,7 +274,7 @@ final class Parser extends SimpleParser {
             return nodeErr("unexpected eof");
         } else {
             if (err != null) {
-                errors.add(err);
+                addError(err);
             }
 
             err = nodeErr("expected :");
@@ -257,7 +282,7 @@ final class Parser extends SimpleParser {
 
         if (is(close)) {
             if (err != null) {
-                errors.add(err);
+                addError(err);
             }
 
             return nodeErr("expected value");
@@ -269,7 +294,7 @@ final class Parser extends SimpleParser {
                 setEnd(kvp);
             }
             if (err != null) {
-                errors.add(err);
+                addError(err);
             }
 
             return nodeErr("expected value");
@@ -278,7 +303,7 @@ final class Parser extends SimpleParser {
         Syntax.Node value = parseNode();
         if (value instanceof Syntax.Node.Err e) {
             if (err != null) {
-                errors.add(err);
+                addError(err);
             }
             err = e;
         } else if (err == null) {
@@ -306,7 +331,7 @@ final class Parser extends SimpleParser {
 
             Syntax.Node elem = parseNode();
             if (elem instanceof Syntax.Node.Err e) {
-                errors.add(e);
+                addError(e);
             } else {
                 arr.elements.add(elem);
             }
@@ -314,7 +339,7 @@ final class Parser extends SimpleParser {
         }
 
         Syntax.Node.Err err = nodeErr("missing ]");
-        errors.add(err);
+        addError(err);
 
         setEnd(arr);
         return arr;
@@ -340,17 +365,14 @@ final class Parser extends SimpleParser {
                 }
 
                 rewindTo(end + 3);
-                Syntax.Node.Str str = new Syntax.Node.Str();
-                str.start = start;
-                setEnd(str);
-                return str;
+                int strEnd = position();
+                return new Syntax.Node.Str(start, strEnd, document.copySpan(start + 3, strEnd - 3));
             }
 
+            // Empty string
             skip();
-            Syntax.Node.Str str = new Syntax.Node.Str();
-            str.start = start;
-            setEnd(str);
-            return str;
+            int strEnd = position();
+            return new Syntax.Node.Str(start, strEnd, "");
         }
 
         int last = '"';
@@ -359,10 +381,8 @@ final class Parser extends SimpleParser {
         while (!isNl() && !eof()) {
             if (is('"') && last != '\\') {
                 skip(); // '"'
-                Syntax.Node.Str str = new Syntax.Node.Str();
-                str.start = start;
-                setEnd(str);
-                return str;
+                int strEnd = position();
+                return new Syntax.Node.Str(start, strEnd, document.copySpan(start + 1, strEnd - 1));
             }
             last = peek();
             skip();
@@ -418,6 +438,12 @@ final class Parser extends SimpleParser {
         return err;
     }
 
+    private void skipUntilStatementStart() {
+        while (!is('@') && !is('$') && !isIdentStart() && !eof()) {
+            skip();
+        }
+    }
+
     private void statement() {
         if (is('@')) {
             traitApplication(null);
@@ -429,7 +455,8 @@ final class Parser extends SimpleParser {
             Syntax.Ident ident = ident();
             if (ident.isEmpty()) {
                 if (!isWs()) {
-                    skip();
+                    // TODO: Capture all this in an error
+                    skipUntilStatementStart();
                 }
                 return;
             }
@@ -440,7 +467,7 @@ final class Parser extends SimpleParser {
                 Syntax.Statement.Incomplete incomplete = new Syntax.Statement.Incomplete(ident);
                 incomplete.start = start;
                 incomplete.end = position();
-                statements.add(incomplete);
+                addStatement(incomplete);
 
                 if (!isWs()) {
                     skip();
@@ -448,7 +475,7 @@ final class Parser extends SimpleParser {
                 return;
             }
 
-            String identCopy = ident.copyValueFrom(document);
+            String identCopy = ident.stringValue();
 
             switch (identCopy) {
                 case "apply" -> {
@@ -474,7 +501,7 @@ final class Parser extends SimpleParser {
             Syntax.Statement.ShapeDef shapeDef = new Syntax.Statement.ShapeDef(ident, name);
             shapeDef.start = start;
             setEnd(shapeDef);
-            statements.add(shapeDef);
+            addStatement(shapeDef);
 
             sp();
             optionalForResourceAndMixins();
@@ -530,7 +557,7 @@ final class Parser extends SimpleParser {
     private Syntax.Statement.Block startBlock(Syntax.Statement.Block parent) {
         Syntax.Statement.Block block = new Syntax.Statement.Block(parent, statements.size());
         setStart(block);
-        statements.add(block);
+        addStatement(block);
         if (is('{')) {
             skip();
         } else {
@@ -564,7 +591,7 @@ final class Parser extends SimpleParser {
                     var memberDef = new Syntax.Statement.MemberDef(parent, memberName);
                     memberDef.start = opMemberStart;
                     setEnd(memberDef);
-                    statements.add(memberDef);
+                    addStatement(memberDef);
                     ws();
                     continue;
                 }
@@ -585,14 +612,14 @@ final class Parser extends SimpleParser {
                 opMemberDef.colonPos = colonPos;
                 opMemberDef.target = ident();
                 setEnd(opMemberDef);
-                statements.add(opMemberDef);
+                addStatement(opMemberDef);
             } else {
                 var nodeMemberDef = new Syntax.Statement.NodeMemberDef(parent, memberName);
                 nodeMemberDef.start = opMemberStart;
                 nodeMemberDef.colonPos = colonPos;
                 nodeMemberDef.value = parseNode();
                 setEnd(nodeMemberDef);
-                statements.add(nodeMemberDef);
+                addStatement(nodeMemberDef);
             }
 
             ws();
@@ -605,7 +632,7 @@ final class Parser extends SimpleParser {
         Syntax.Ident ident = ident();
         Syntax.Statement.Control control = new Syntax.Statement.Control(ident);
         control.start = start;
-        statements.add(control);
+        addStatement(control);
         sp();
 
         if (!is(':')) {
@@ -626,7 +653,7 @@ final class Parser extends SimpleParser {
         Syntax.Statement.Apply apply = new Syntax.Statement.Apply(name);
         apply.start = start;
         setEnd(apply);
-        statements.add(apply);
+        addStatement(apply);
 
         sp();
         if (is('@')) {
@@ -653,7 +680,7 @@ final class Parser extends SimpleParser {
     private void metadata(int start, Syntax.Ident name) {
         Syntax.Statement.Metadata metadata = new Syntax.Statement.Metadata(name);
         metadata.start = start;
-        statements.add(metadata);
+        addStatement(metadata);
 
         sp();
         if (!is('=')) {
@@ -673,33 +700,33 @@ final class Parser extends SimpleParser {
         Syntax.Statement.Use use = new Syntax.Statement.Use(name);
         use.start = start;
         setEnd(use);
-        statements.add(use);
+        addStatement(use);
     }
 
     private void namespace(int start, Syntax.Ident name) {
         Syntax.Statement.Namespace namespace = new Syntax.Statement.Namespace(name);
         namespace.start = start;
         setEnd(namespace);
-        statements.add(namespace);
+        addStatement(namespace);
     }
 
     private void optionalForResourceAndMixins() {
         int maybeStart = position();
         Syntax.Ident maybe = optIdent();
 
-        if (maybe.copyValueFrom(document).equals("for")) {
+        if (maybe.stringValue().equals("for")) {
             sp();
             Syntax.Ident resource = ident();
             Syntax.Statement.ForResource forResource = new Syntax.Statement.ForResource(resource);
             forResource.start = maybeStart;
-            statements.add(forResource);
+            addStatement(forResource);
             ws();
             setEnd(forResource);
             maybeStart = position();
             maybe = optIdent();
         }
 
-        if (maybe.copyValueFrom(document).equals("with")) {
+        if (maybe.stringValue().equals("with")) {
             sp();
             Syntax.Statement.Mixins mixins = new Syntax.Statement.Mixins();
             mixins.start = maybeStart;
@@ -710,7 +737,7 @@ final class Parser extends SimpleParser {
                 // If we're on an identifier, just assume the [ was meant to be there
                 if (!isIdentStart()) {
                     setEnd(mixins);
-                    statements.add(mixins);
+                    addStatement(mixins);
                     return;
                 }
             } else {
@@ -731,7 +758,7 @@ final class Parser extends SimpleParser {
             }
 
             setEnd(mixins);
-            statements.add(mixins);
+            addStatement(mixins);
         }
     }
 
@@ -745,7 +772,7 @@ final class Parser extends SimpleParser {
             Syntax.Ident name = ident();
             Syntax.Statement.MemberDef memberDef = new Syntax.Statement.MemberDef(parent, name);
             memberDef.start = start;
-            statements.add(memberDef);
+            addStatement(memberDef);
 
             sp();
             if (is(':')) {
@@ -755,7 +782,7 @@ final class Parser extends SimpleParser {
                 addErr(position(), position(), "expected :");
                 if (isWs() || is('}')) {
                     setEnd(memberDef);
-                    statements.add(memberDef);
+                    addStatement(memberDef);
                     return;
                 }
             }
@@ -786,7 +813,7 @@ final class Parser extends SimpleParser {
             Syntax.Ident name = ident();
             var enumMemberDef = new Syntax.Statement.EnumMemberDef(parent, name);
             enumMemberDef.start = start;
-            statements.add(enumMemberDef);
+            addStatement(enumMemberDef);
 
             ws();
             if (is('=')) {
@@ -809,14 +836,14 @@ final class Parser extends SimpleParser {
         var elidedMemberDef = new Syntax.Statement.ElidedMemberDef(parent, name);
         elidedMemberDef.start = start;
         setEnd(elidedMemberDef);
-        statements.add(elidedMemberDef);
+        addStatement(elidedMemberDef);
     }
 
     private void inlineMember(Syntax.Statement.Block parent, int start, Syntax.Ident name) {
         var inlineMemberDef = new Syntax.Statement.InlineMemberDef(parent, name);
         inlineMemberDef.start = start;
         setEnd(inlineMemberDef);
-        statements.add(inlineMemberDef);
+        addStatement(inlineMemberDef);
 
         ws();
         while (is('@')) {
@@ -851,7 +878,7 @@ final class Parser extends SimpleParser {
             addErr(position(), position(), "expected :");
             if (isWs() || is('}')) {
                 setEnd(nodeMemberDef);
-                statements.add(nodeMemberDef);
+                addStatement(nodeMemberDef);
                 return;
             }
         }
@@ -863,7 +890,7 @@ final class Parser extends SimpleParser {
             nodeMemberDef.value = parseNode();
         }
         setEnd(nodeMemberDef);
-        statements.add(nodeMemberDef);
+        addStatement(nodeMemberDef);
     }
 
     private void traitApplication(Syntax.Statement.Block parent) {
@@ -872,7 +899,7 @@ final class Parser extends SimpleParser {
         Syntax.Ident id = ident();
         var application = new Syntax.Statement.TraitApplication(parent, id);
         application.start = startPos;
-        statements.add(application);
+        addStatement(application);
 
         if (is('(')) {
             int start = position();
@@ -911,14 +938,14 @@ final class Parser extends SimpleParser {
             addErr(start, end, "expected identifier");
             return Syntax.Ident.EMPTY;
         }
-        return new Syntax.Ident(start, end);
+        return new Syntax.Ident(start, end, document.copySpan(start, end));
     }
 
     private void addErr(int start, int end, String message) {
         Syntax.Statement.Err err = new Syntax.Statement.Err(message);
         err.start = start;
         err.end = end;
-        errors.add(err);
+        addError(err);
     }
 
     private void recoverToMemberStart() {

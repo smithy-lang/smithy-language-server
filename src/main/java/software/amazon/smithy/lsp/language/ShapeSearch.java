@@ -11,8 +11,8 @@ import java.util.Optional;
 import software.amazon.smithy.lsp.document.DocumentId;
 import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.syntax.NodeCursor;
+import software.amazon.smithy.lsp.syntax.StatementView;
 import software.amazon.smithy.lsp.syntax.Syntax;
-import software.amazon.smithy.lsp.syntax.SyntaxSearch;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.Prelude;
 import software.amazon.smithy.model.shapes.ResourceShape;
@@ -33,27 +33,27 @@ final class ShapeSearch {
      * Attempts to find a shape using a token, {@code nameOrId}.
      *
      * <p>When {@code nameOrId} does not contain a '#', this searches for shapes
-     * either in {@code smithyFile}'s namespace, in {@code smithyFile}'s
+     * either in {@code idlParse}'s namespace, in {@code idlParse}'s
      * imports, or the prelude, in that order. When {@code nameOrId} does contain
      * a '#', it is assumed to be a full shape id and is searched for directly.
      *
-     * @param smithyFile The file {@code nameOrId} is within.
-     * @param model The model to search.
-     * @param nameOrId The name or shape id of the shape to find.
+     * @param parseResult The parse result of the file {@code nameOrId} is within.
+     * @param nameOrId    The name or shape id of the shape to find.
+     * @param model       The model to search.
      * @return The shape, if found.
      */
-    static Optional<Shape> findShape(SmithyFile smithyFile, Model model, String nameOrId) {
+    static Optional<Shape> findShape(Syntax.IdlParseResult parseResult, String nameOrId, Model model) {
         return switch (nameOrId) {
             case String s when s.isEmpty() -> Optional.empty();
             case String s when s.contains("#") -> tryFrom(s).flatMap(model::getShape);
             case String s -> {
-                Optional<Shape> fromCurrent = tryFromParts(smithyFile.namespace().toString(), s)
+                Optional<Shape> fromCurrent = tryFromParts(parseResult.namespace().namespace(), s)
                         .flatMap(model::getShape);
                 if (fromCurrent.isPresent()) {
                     yield fromCurrent;
                 }
 
-                for (String fileImport : smithyFile.imports()) {
+                for (String fileImport : parseResult.imports().imports()) {
                     Optional<Shape> imported = tryFrom(fileImport)
                             .filter(importId -> importId.getName().equals(s))
                             .flatMap(model::getShape);
@@ -88,16 +88,16 @@ final class ShapeSearch {
      * Attempts to find the shape referenced by {@code id} at {@code idlPosition} in {@code model}.
      *
      * @param idlPosition The position of the potential shape reference.
-     * @param model The model to search for shapes in.
-     * @param id The identifier at {@code idlPosition}.
+     * @param id          The identifier at {@code idlPosition}.
+     * @param model       The model to search for shapes in.
      * @return The shape, if found.
      */
-    static Optional<? extends Shape> findShapeDefinition(IdlPosition idlPosition, Model model, DocumentId id) {
+    static Optional<? extends Shape> findShapeDefinition(IdlPosition idlPosition, DocumentId id, Model model) {
         return switch (idlPosition) {
             case IdlPosition.TraitValue traitValue -> {
                 var result = searchTraitValue(traitValue, model);
                 if (result instanceof NodeSearch.Result.TerminalShape(var s, var m) && s.hasTrait(IdRefTrait.class)) {
-                    yield findShape(idlPosition.smithyFile(), m, id.copyIdValue());
+                    yield findShape(idlPosition.view().parseResult(), id.copyIdValue(), m);
                 } else if (result instanceof NodeSearch.Result.ObjectKey(var key, var container, var m)
                            && !container.isMapShape()) {
                     yield container.getMember(key.name());
@@ -109,80 +109,84 @@ final class ShapeSearch {
                 var result = searchNodeMemberTarget(nodeMemberTarget);
                 if (result instanceof NodeSearch.Result.TerminalShape(Shape shape, var ignored)
                     && shape.hasTrait(IdRefTrait.class)) {
-                    yield findShape(nodeMemberTarget.smithyFile(), model, id.copyIdValue());
+                    yield findShape(nodeMemberTarget.view().parseResult(), id.copyIdValue(), model);
                 }
                 yield Optional.empty();
             }
 
             // Note: This could be made more specific, at least for mixins
             case IdlPosition.ElidedMember elidedMember ->
-                    findElidedMemberParent(elidedMember, model, id);
+                    findElidedMemberParent(elidedMember, id, model);
 
             case IdlPosition pos when pos.isEasyShapeReference() ->
-                    findShape(pos.smithyFile(), model, id.copyIdValue());
+                    findShape(pos.view().parseResult(), id.copyIdValue(), model);
 
             default -> Optional.empty();
         };
     }
 
-    record ForResourceAndMixins(ResourceShape resource, List<Shape> mixins) {}
-
-    static ForResourceAndMixins findForResourceAndMixins(
-            SyntaxSearch.ForResourceAndMixins forResourceAndMixins,
-            SmithyFile smithyFile,
+    /**
+     * @param forResource The nullable for-resource statement.
+     * @param view A statement view containing the for-resource statement.
+     * @param model The model to search in.
+     * @return A resource shape matching the given for-resource statement, if found.
+     */
+    static Optional<ResourceShape> findResource(
+            Syntax.Statement.ForResource forResource,
+            StatementView view,
             Model model
     ) {
-        ResourceShape resourceShape = null;
-        if (forResourceAndMixins.forResource() != null) {
-            String resourceNameOrId = forResourceAndMixins.forResource()
-                    .resource()
-                    .copyValueFrom(smithyFile.document());
-
-            resourceShape = findShape(smithyFile, model, resourceNameOrId)
-                    .flatMap(Shape::asResourceShape)
-                    .orElse(null);
+        if (forResource != null) {
+            String resourceNameOrId = forResource.resource().stringValue();
+            return findShape(view.parseResult(), resourceNameOrId, model)
+                    .flatMap(Shape::asResourceShape);
         }
-        List<Shape> mixins = List.of();
-        if (forResourceAndMixins.mixins() != null) {
-            mixins = new ArrayList<>(forResourceAndMixins.mixins().mixins().size());
-            for (Syntax.Ident ident : forResourceAndMixins.mixins().mixins()) {
-                String mixinNameOrId = ident.copyValueFrom(smithyFile.document());
-                findShape(smithyFile, model, mixinNameOrId).ifPresent(mixins::add);
+        return Optional.empty();
+    }
+
+    /**
+     * @param mixins The nullable mixins statement.
+     * @param view The statement view containing the mixins statement.
+     * @param model The model to search in.
+     * @return A list of the mixin shapes matching those in the mixin statement.
+     */
+    static List<Shape> findMixins(Syntax.Statement.Mixins mixins, StatementView view, Model model) {
+        if (mixins != null) {
+            List<Shape> mixinShapes = new ArrayList<>(mixins.mixins().size());
+            for (Syntax.Ident ident : mixins.mixins()) {
+                String mixinNameOrId = ident.stringValue();
+                findShape(view.parseResult(), mixinNameOrId, model).ifPresent(mixinShapes::add);
             }
+            return mixinShapes;
         }
-
-        return new ForResourceAndMixins(resourceShape, mixins);
+        return List.of();
     }
 
     /**
      * @param elidedMember The elided member position
-     * @param model The model to search in
-     * @param id The identifier of the elided member
+     * @param id           The identifier of the elided member
+     * @param model        The model to search in
      * @return The shape the elided member comes from, if found.
      */
     static Optional<? extends Shape> findElidedMemberParent(
             IdlPosition.ElidedMember elidedMember,
-            Model model,
-            DocumentId id
+            DocumentId id,
+            Model model
     ) {
-        var forResourceAndMixins = findForResourceAndMixins(
-                SyntaxSearch.closestForResourceAndMixinsBeforeMember(
-                        elidedMember.smithyFile().statements(),
-                        elidedMember.statementIndex()),
-                elidedMember.smithyFile(),
-                model);
+        var view = elidedMember.view();
+        var forResourceAndMixins = view.nearestForResourceAndMixinsBefore();
 
         String searchToken = id.copyIdValueForElidedMember();
 
         // TODO: Handle ambiguity
-        Optional<ResourceShape> foundResource = Optional.ofNullable(forResourceAndMixins.resource())
+        Optional<ResourceShape> foundResource = findResource(forResourceAndMixins.forResource(), view, model)
                 .filter(shape -> shape.getIdentifiers().containsKey(searchToken)
                                  || shape.getProperties().containsKey(searchToken));
         if (foundResource.isPresent()) {
             return foundResource;
         }
 
-        return forResourceAndMixins.mixins()
+        return findMixins(forResourceAndMixins.mixins(), view, model)
                 .stream()
                 .filter(shape -> shape.getAllMembers().containsKey(searchToken))
                 .findFirst();
@@ -194,16 +198,14 @@ final class ShapeSearch {
      * @return The shape that {@code traitValue} is being applied to, if found.
      */
     static Optional<Shape> findTraitTarget(IdlPosition.TraitValue traitValue, Model model) {
-        Syntax.Statement.ShapeDef shapeDef = SyntaxSearch.closestShapeDefAfterTrait(
-                traitValue.smithyFile().statements(),
-                traitValue.statementIndex());
+        Syntax.Statement.ShapeDef shapeDef = traitValue.view().nearestShapeDefAfter();
 
         if (shapeDef == null) {
             return Optional.empty();
         }
 
-        String shapeName = shapeDef.shapeName().copyValueFrom(traitValue.smithyFile().document());
-        return findShape(traitValue.smithyFile(), model, shapeName);
+        String shapeName = shapeDef.shapeName().stringValue();
+        return findShape(traitValue.view().parseResult(), shapeName, model);
     }
 
     /**
@@ -224,17 +226,16 @@ final class ShapeSearch {
      *  {@link Builtins} model.
      */
     static NodeSearch.Result searchMetadataValue(IdlPosition.MetadataValue metadataValue) {
-        String metadataKey = metadataValue.metadata().key().copyValueFrom(metadataValue.smithyFile().document());
+        String metadataKey = metadataValue.metadata().key().stringValue();
         Shape metadataValueShapeDef = Builtins.getMetadataValue(metadataKey);
         if (metadataValueShapeDef == null) {
             return NodeSearch.Result.NONE;
         }
 
         NodeCursor cursor = NodeCursor.create(
-                metadataValue.smithyFile().document(),
                 metadataValue.metadata().value(),
-                metadataValue.documentIndex());
-        var dynamicTargets = DynamicMemberTarget.forMetadata(metadataKey, metadataValue.smithyFile());
+                metadataValue.view().documentIndex());
+        var dynamicTargets = DynamicMemberTarget.forMetadata(metadataKey);
         return NodeSearch.search(cursor, Builtins.MODEL, metadataValueShapeDef, dynamicTargets);
     }
 
@@ -244,18 +245,14 @@ final class ShapeSearch {
      *  within the {@link Builtins} model.
      */
     static NodeSearch.Result searchNodeMemberTarget(IdlPosition.NodeMemberTarget nodeMemberTarget) {
-        Syntax.Statement.ShapeDef shapeDef = SyntaxSearch.closestShapeDefBeforeMember(
-                nodeMemberTarget.smithyFile().statements(),
-                nodeMemberTarget.statementIndex());
+        Syntax.Statement.ShapeDef shapeDef = nodeMemberTarget.view().nearestShapeDefBefore();
 
         if (shapeDef == null) {
             return NodeSearch.Result.NONE;
         }
 
-        String shapeType = shapeDef.shapeType().copyValueFrom(nodeMemberTarget.smithyFile().document());
-        String memberName = nodeMemberTarget.nodeMemberDef()
-                .name()
-                .copyValueFrom(nodeMemberTarget.smithyFile().document());
+        String shapeType = shapeDef.shapeType().stringValue();
+        String memberName = nodeMemberTarget.nodeMember().name().stringValue();
         Shape memberShapeDef  = Builtins.getMemberTargetForShapeType(shapeType, memberName);
 
         if (memberShapeDef == null) {
@@ -268,14 +265,13 @@ final class ShapeSearch {
         //
         // TODO: Note that searchTraitValue has to do a similar thing, but parsing
         //  trait values always yields at least an empty Kvps, so it is kind of the same.
-        if (nodeMemberTarget.nodeMemberDef().value() == null) {
+        if (nodeMemberTarget.nodeMember().value() == null) {
             return new NodeSearch.Result.TerminalShape(memberShapeDef, Builtins.MODEL);
         }
 
         NodeCursor cursor = NodeCursor.create(
-                nodeMemberTarget.smithyFile().document(),
-                nodeMemberTarget.nodeMemberDef().value(),
-                nodeMemberTarget.documentIndex());
+                nodeMemberTarget.nodeMember().value(),
+                nodeMemberTarget.view().documentIndex());
         return NodeSearch.search(cursor, Builtins.MODEL, memberShapeDef);
     }
 
@@ -285,17 +281,16 @@ final class ShapeSearch {
      * @return The result of searching from {@code traitValue} within {@code model}.
      */
     static NodeSearch.Result searchTraitValue(IdlPosition.TraitValue traitValue, Model model) {
-        String traitName = traitValue.traitApplication().id().copyValueFrom(traitValue.smithyFile().document());
-        Optional<Shape> maybeTraitShape = findShape(traitValue.smithyFile(), model, traitName);
+        String traitName = traitValue.application().id().stringValue();
+        Optional<Shape> maybeTraitShape = findShape(traitValue.view().parseResult(), traitName, model);
         if (maybeTraitShape.isEmpty()) {
             return NodeSearch.Result.NONE;
         }
 
         Shape traitShape = maybeTraitShape.get();
         NodeCursor cursor = NodeCursor.create(
-                traitValue.smithyFile().document(),
-                traitValue.traitApplication().value(),
-                traitValue.documentIndex());
+                traitValue.application().value(),
+                traitValue.view().documentIndex());
         if (cursor.isTerminal() && isObjectShape(traitShape)) {
             // In this case, we've just started to type '@myTrait(foo)', which to the parser looks like 'foo' is just
             // an identifier. But this would mean you don't get member completions when typing the first trait value

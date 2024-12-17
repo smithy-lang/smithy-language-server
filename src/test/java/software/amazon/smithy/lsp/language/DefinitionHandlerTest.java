@@ -25,11 +25,12 @@ import software.amazon.smithy.lsp.RequestBuilders;
 import software.amazon.smithy.lsp.ServerState;
 import software.amazon.smithy.lsp.TestWorkspace;
 import software.amazon.smithy.lsp.TextWithPositions;
+import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectLoader;
 import software.amazon.smithy.lsp.project.SmithyFile;
+import software.amazon.smithy.lsp.syntax.StatementView;
 import software.amazon.smithy.lsp.syntax.Syntax;
-import software.amazon.smithy.lsp.syntax.SyntaxSearch;
 
 public class DefinitionHandlerTest {
     @Test
@@ -312,6 +313,21 @@ public class DefinitionHandlerTest {
         assertIsShapeDef(result, result.locations.getFirst(), "string Bar");
     }
 
+    @Test
+    public void absoluteShapeId() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                structure Foo {
+                    bar: %smithy.api#String
+                }
+                """);
+        GetLocationsResult result = getLocations(text);
+        assertThat(result.locations, hasSize(1));
+        assertThat(result.locations.getFirst().getUri(), endsWith("prelude.smithy"));
+        assertIsShapeDef(result, result.locations.getFirst(), "string String");
+    }
+
     private static void assertIsShapeDef(
             GetLocationsResult result,
             Location location,
@@ -323,17 +339,18 @@ public class DefinitionHandlerTest {
         int documentIndex = smithyFile.document().indexOfPosition(location.getRange().getStart());
         assertThat(documentIndex, greaterThanOrEqualTo(0));
 
-        int statementIndex = SyntaxSearch.statementIndex(smithyFile.statements(), documentIndex);
-        assertThat(statementIndex, greaterThanOrEqualTo(0));
+        StatementView view = StatementView.createAt(((IdlFile) smithyFile).getParse(), documentIndex).orElse(null);
+        assertThat(view, notNullValue());
+        assertThat(view.statementIndex(), greaterThanOrEqualTo(0));
 
-        var statement = smithyFile.statements().get(statementIndex);
+        var statement = view.getStatement();
         if (statement instanceof Syntax.Statement.ShapeDef shapeDef) {
-            String shapeType = shapeDef.shapeType().copyValueFrom(smithyFile.document());
-            String shapeName = shapeDef.shapeName().copyValueFrom(smithyFile.document());
+            String shapeType = shapeDef.shapeType().stringValue();
+            String shapeName = shapeDef.shapeName().stringValue();
             assertThat(shapeType + " " + shapeName, equalTo(expected));
         } else if (statement instanceof Syntax.Statement.MemberDef memberDef) {
-            String memberName = memberDef.name().copyValueFrom(smithyFile.document());
-            String memberTarget = memberDef.target().copyValueFrom(smithyFile.document());
+            String memberName = memberDef.name().stringValue();
+            String memberTarget = memberDef.target().stringValue();
             assertThat(memberName + ": " + memberTarget, equalTo(expected));
         } else {
             fail("Expected shape or member def, but was " + statement.getClass().getName());
@@ -353,7 +370,7 @@ public class DefinitionHandlerTest {
         SmithyFile smithyFile = project.getSmithyFile(uri);
 
         List<Location> locations = new ArrayList<>();
-        DefinitionHandler handler = new DefinitionHandler(project, smithyFile);
+        DefinitionHandler handler = new DefinitionHandler(project, (IdlFile) smithyFile);
         for (Position position : positions) {
             DefinitionParams params = RequestBuilders.positionRequest()
                     .uri(uri)
