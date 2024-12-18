@@ -72,6 +72,7 @@ import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.Registration;
 import org.eclipse.lsp4j.RegistrationParams;
 import org.eclipse.lsp4j.ServerCapabilities;
+import org.eclipse.lsp4j.SetTraceParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.TextDocumentChangeRegistrationOptions;
@@ -84,6 +85,7 @@ import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.Unregistration;
 import org.eclipse.lsp4j.UnregistrationParams;
 import org.eclipse.lsp4j.WorkDoneProgressBegin;
+import org.eclipse.lsp4j.WorkDoneProgressCancelParams;
 import org.eclipse.lsp4j.WorkDoneProgressEnd;
 import org.eclipse.lsp4j.WorkspaceFolder;
 import org.eclipse.lsp4j.WorkspaceFoldersOptions;
@@ -349,6 +351,21 @@ public class SmithyLanguageServer implements
     @Override
     public void exit() {
         System.exit(0);
+    }
+
+    @Override
+    public void cancelProgress(WorkDoneProgressCancelParams params) {
+        // TODO: Right now this stub just avoids a possible runtime error from the default
+        //  impl in lsp4j. If we start using work done tokens, we will want to support canceling
+        //  them here.
+        LOGGER.warning("window/workDoneProgress/cancel not implemented");
+    }
+
+    @Override
+    public void setTrace(SetTraceParams params) {
+        // TODO: Eventually when we set up better logging, maybe there's something to do here.
+        //  For now, this stub just avoids a runtime error from the default impl in lsp4j.
+        LOGGER.warning("$/setTrace not implemented");
     }
 
     @Override
