@@ -78,7 +78,7 @@ final class ShapeSearch {
 
     private static Optional<ShapeId> tryFromParts(String namespace, String name) {
         try {
-            return Optional.of(ShapeId.fromParts(namespace, name));
+            return Optional.of(ShapeId.fromRelative(namespace, name));
         } catch (ShapeIdSyntaxException ignored) {
             return Optional.empty();
         }
@@ -118,7 +118,16 @@ final class ShapeSearch {
             case IdlPosition.ElidedMember elidedMember ->
                     findElidedMemberParent(elidedMember, id, model);
 
-            case IdlPosition pos when pos.isEasyShapeReference() ->
+            case IdlPosition.MemberName memberName -> {
+                var parentDef = memberName.view().nearestShapeDefBefore();
+                if (parentDef == null) {
+                    yield Optional.empty();
+                }
+                var relativeId = parentDef.shapeName().stringValue() + "$" + memberName.name();
+                yield findShape(memberName.view().parseResult(), relativeId, model);
+            }
+
+            case IdlPosition pos when pos.isRootShapeReference() ->
                     findShape(pos.view().parseResult(), id.copyIdValue(), model);
 
             default -> Optional.empty();

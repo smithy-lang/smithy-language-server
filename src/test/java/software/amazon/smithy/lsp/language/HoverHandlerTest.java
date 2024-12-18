@@ -122,6 +122,32 @@ public class HoverHandlerTest {
         assertThat(hovers, contains(containsString("string String")));
     }
 
+    @Test
+    public void selfShapeDefinition() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                structure %Foo {}
+                """);
+        List<String> hovers = getHovers(text);
+
+        assertThat(hovers, contains(containsString("structure Foo")));
+    }
+
+    @Test
+    public void selfMemberDefinition() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                structure Foo {
+                    %bar: String
+                }
+                """);
+        List<String> hovers = getHovers(text);
+
+        assertThat(hovers, contains(containsString("bar: String")));
+    }
+
     private static List<String> getHovers(TextWithPositions text) {
         return getHovers(text.text(), text.positions());
     }

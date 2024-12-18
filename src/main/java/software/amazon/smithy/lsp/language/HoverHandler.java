@@ -247,5 +247,4 @@ public final class HoverHandler {
                         System.lineSeparator() + System.lineSeparator()), System.lineSeparator());
         return serializedShape;
     }
-
 }

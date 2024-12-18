@@ -12,7 +12,11 @@ import software.amazon.smithy.lsp.syntax.Syntax;
  * Represents different kinds of positions within an IDL file.
  */
 sealed interface IdlPosition {
-    default boolean isEasyShapeReference() {
+    /**
+     * @return Whether the token at this position is definitely a reference
+     *  to a root/top-level shape.
+     */
+    default boolean isRootShapeReference() {
         return switch (this) {
             case TraitId ignored -> true;
             case MemberTarget ignored -> true;
@@ -25,6 +29,9 @@ sealed interface IdlPosition {
         };
     }
 
+    /**
+     * @return The view this position is within.
+     */
     StatementView view();
 
     record TraitId(StatementView view) implements IdlPosition {}
@@ -53,7 +60,7 @@ sealed interface IdlPosition {
 
     record StatementKeyword(StatementView view) implements IdlPosition {}
 
-    record MemberName(StatementView view) implements IdlPosition {}
+    record MemberName(StatementView view, String name) implements IdlPosition {}
 
     record ElidedMember(StatementView view) implements IdlPosition {}
 
@@ -92,7 +99,7 @@ sealed interface IdlPosition {
                     when m.inTarget(documentIndex) -> new IdlPosition.MemberTarget(view);
 
             case Syntax.Statement.MemberDef m
-                    when m.name().isIn(documentIndex) -> new IdlPosition.MemberName(view);
+                    when m.name().isIn(documentIndex) -> new IdlPosition.MemberName(view, m.name().stringValue());
 
             case Syntax.Statement.NodeMemberDef m
                     when m.inValue(documentIndex) -> new IdlPosition.NodeMemberTarget(view, m);
@@ -109,9 +116,9 @@ sealed interface IdlPosition {
 
             case Syntax.Statement.ShapeDef ignored -> new IdlPosition.ShapeDef(view);
 
-            case Syntax.Statement.NodeMemberDef ignored -> new IdlPosition.MemberName(view);
+            case Syntax.Statement.NodeMemberDef m -> new IdlPosition.MemberName(view, m.name().stringValue());
 
-            case Syntax.Statement.Block ignored -> new IdlPosition.MemberName(view);
+            case Syntax.Statement.Block ignored -> new IdlPosition.MemberName(view, "");
 
             case Syntax.Statement.ForResource ignored -> new IdlPosition.ForResource(view);
 
