@@ -60,7 +60,8 @@ public class SmithyVersionRefactoringTest {
 
         server.didOpen(new RequestBuilders.DidOpen().uri(uri).text(model).build());
 
-        List<Diagnostic> diagnostics = server.getFileDiagnostics(uri);
+        List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(
+                server.getState().findProjectAndFile(uri), server.getMinimumSeverity());
         List<String> codes = diagnostics.stream()
                 .filter(d -> d.getCode().isLeft())
                 .map(d -> d.getCode().getLeft())
@@ -110,7 +111,8 @@ public class SmithyVersionRefactoringTest {
 
         server.didOpen(new RequestBuilders.DidOpen().uri(uri).text(model).build());
 
-        List<Diagnostic> diagnostics = server.getFileDiagnostics(uri);
+        List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(
+                server.getState().findProjectAndFile(uri), server.getMinimumSeverity());
         List<String> codes = diagnostics.stream()
                 .filter(d -> d.getCode().isLeft())
                 .map(d -> d.getCode().getLeft())
@@ -161,7 +163,8 @@ public class SmithyVersionRefactoringTest {
 
         server.didOpen(new RequestBuilders.DidOpen().uri(uri).text(model).build());
 
-        List<Diagnostic> diagnostics = server.getFileDiagnostics(uri);
+        List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(
+                server.getState().findProjectAndFile(uri), server.getMinimumSeverity());
         List<String> codes = diagnostics.stream()
                 .filter(d -> d.getCode().isLeft())
                 .map(d -> d.getCode().getLeft())
@@ -180,7 +183,8 @@ public class SmithyVersionRefactoringTest {
 
         server.didOpen(new RequestBuilders.DidOpen().uri(uri).text(model).build());
 
-        List<Diagnostic> diagnostics = server.getFileDiagnostics(uri);
+        List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(
+                server.getState().findProjectAndFile(uri), server.getMinimumSeverity());
         List<String> codes = diagnostics.stream()
                 .filter(d -> d.getCode().isLeft())
                 .map(d -> d.getCode().getLeft())

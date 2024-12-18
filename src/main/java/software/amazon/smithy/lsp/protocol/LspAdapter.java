@@ -15,6 +15,9 @@ import java.util.logging.Logger;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
+import software.amazon.smithy.lsp.document.Document;
+import software.amazon.smithy.lsp.syntax.Syntax;
+import software.amazon.smithy.model.FromSourceLocation;
 import software.amazon.smithy.model.SourceLocation;
 
 /**
@@ -112,6 +115,35 @@ public final class LspAdapter {
     }
 
     /**
+     * @param ident Identifier to get the range of
+     * @param document Document the identifier is in
+     * @return The range of the identifier in the given document
+     */
+    public static Range identRange(Syntax.Ident ident, Document document) {
+        int line = document.lineOfIndex(ident.start());
+        if (line < 0) {
+            return null;
+        }
+
+        int lineStart = document.indexOfLine(line);
+        if (lineStart < 0) {
+            return null;
+        }
+
+        int startCharacter = ident.start() - lineStart;
+        int endCharacter = ident.end() - lineStart;
+        return LspAdapter.lineSpan(line, startCharacter, endCharacter);
+    }
+
+    /**
+     * @param range The range to check
+     * @return Whether the range's start is equal to it's end
+     */
+    public static boolean isEmpty(Range range) {
+        return range.getStart().equals(range.getEnd());
+    }
+
+    /**
      * Get a {@link Position} from a {@link SourceLocation}, making the line/columns
      * 0-indexed.
      *
@@ -126,10 +158,11 @@ public final class LspAdapter {
      * Get a {@link Location} from a {@link SourceLocation}, with the filename
      * transformed to a URI, and the line/column made 0-indexed.
      *
-     * @param sourceLocation The source location to get a Location from
+     * @param fromSourceLocation The source location to get a Location from
      * @return The equivalent Location
      */
-    public static Location toLocation(SourceLocation sourceLocation) {
+    public static Location toLocation(FromSourceLocation fromSourceLocation) {
+        SourceLocation sourceLocation = fromSourceLocation.getSourceLocation();
         return new Location(toUri(sourceLocation.getFilename()), point(
                 new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1)));
     }

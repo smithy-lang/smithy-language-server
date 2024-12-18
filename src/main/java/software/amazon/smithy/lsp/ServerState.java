@@ -96,7 +96,7 @@ public record ServerState(
             String path = LspAdapter.toPath(uri);
             ProjectFile projectFile = detachedProject.getProjectFile(path);
             if (projectFile != null) {
-                return new ProjectAndFile(detachedProject, projectFile);
+                return new ProjectAndFile(uri, detachedProject, projectFile, true);
             }
         }
 
@@ -133,17 +133,16 @@ public record ServerState(
             ProjectFile projectFile = project.getProjectFile(path);
             if (projectFile != null) {
                 detachedProjects.remove(uri);
-                return new ProjectAndFile(project, projectFile);
+                return new ProjectAndFile(uri, project, projectFile, false);
             }
         }
 
         return null;
     }
 
-    Project createDetachedProject(String uri, String text) {
+    void createDetachedProject(String uri, String text) {
         Project project = ProjectLoader.loadDetached(uri, text);
         detachedProjects.put(uri, project);
-        return project;
     }
 
     List<Exception> tryInitProject(Path root) {
