@@ -18,14 +18,12 @@ package software.amazon.smithy.lsp;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -58,8 +56,6 @@ import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.InitializedParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
-import org.eclipse.lsp4j.MessageParams;
-import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.ProgressParams;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
@@ -209,20 +205,15 @@ public class SmithyLanguageServer implements
         return completedFuture(new InitializeResult(CAPABILITIES));
     }
 
-    private void tryInitProject(Path root) {
-        List<Exception> loadErrors = state.tryInitProject(root);
-        if (!loadErrors.isEmpty()) {
-            String baseMessage = "Failed to load Smithy project at " + root;
-            StringBuilder errorMessage = new StringBuilder(baseMessage).append(":");
-            for (Exception error : loadErrors) {
+    private void reportProjectLoadErrors(List<Exception> errors) {
+        if (!errors.isEmpty()) {
+            StringBuilder errorMessage = new StringBuilder("Failed to load Smithy projects").append(":");
+            for (Exception error : errors) {
                 errorMessage.append(System.lineSeparator());
                 errorMessage.append('\t');
                 errorMessage.append(error.getMessage());
             }
             client.error(errorMessage.toString());
-
-            String showMessage = baseMessage + ". Check server logs to find out what went wrong.";
-            client.showMessage(new MessageParams(MessageType.Error, showMessage));
         }
     }
 
@@ -395,32 +386,10 @@ public class SmithyLanguageServer implements
     @Override
     public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
         LOGGER.finest("DidChangeWatchedFiles");
+
         // Smithy files were added or deleted to watched sources/imports (specified by smithy-build.json),
         // the smithy-build.json itself was changed, added, or deleted.
-
-        WorkspaceChanges changes = WorkspaceChanges.computeWorkspaceChanges(params.getChanges(), state);
-
-        changes.byProject().forEach((projectName, projectChange) -> {
-            Project project = state.findProjectByRoot(projectName);
-
-            if (!projectChange.changedBuildFileUris().isEmpty()) {
-                client.info("Build files changed, reloading project");
-                // TODO: Handle more granular updates to build files.
-                // Note: This will take care of removing projects when build files are deleted
-                tryInitProject(project.root());
-            } else {
-                Set<String> createdUris = projectChange.createdSmithyFileUris();
-                Set<String> deletedUris = projectChange.deletedSmithyFileUris();
-                client.info("Project files changed, adding files "
-                            + createdUris + " and removing files " + deletedUris);
-
-                // We get this notification for watched files, which only includes project files,
-                // so we don't need to resolve detachedProjects projects.
-                project.updateFiles(createdUris, deletedUris);
-            }
-        });
-
-        changes.newProjectRoots().forEach(this::tryInitProject);
+        reportProjectLoadErrors(state.applyFileEvents(params.getChanges()));
 
         // TODO: Update watchers based on specific changes
         // Note: We don't update build file watchers here - only on workspace changes
@@ -537,7 +506,7 @@ public class SmithyLanguageServer implements
 
         Project project = projectAndFile.project();
         if (projectAndFile.file() instanceof BuildFile) {
-            tryInitProject(project.root());
+            reportProjectLoadErrors(state.tryInitProject(project.root()));
             unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
             sendFileDiagnosticsForManagedDocuments();
         } else {

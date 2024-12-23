@@ -12,7 +12,6 @@ package software.amazon.smithy.lsp.project;
  * @param uri The uri of the file
  * @param project The project, non-nullable
  * @param file The file within {@code project}, non-nullable
- * @param isDetached Whether the project and file represent a detached project
  */
-public record ProjectAndFile(String uri, Project project, ProjectFile file, boolean isDetached) {
+public record ProjectAndFile(String uri, Project project, ProjectFile file) {
 }

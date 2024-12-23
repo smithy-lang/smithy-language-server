@@ -17,10 +17,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
+import org.eclipse.lsp4j.FileEvent;
 import org.eclipse.lsp4j.WorkspaceFolder;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectAndFile;
+import software.amazon.smithy.lsp.project.ProjectChange;
 import software.amazon.smithy.lsp.project.ProjectFile;
 import software.amazon.smithy.lsp.project.ProjectLoader;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
@@ -32,8 +34,7 @@ import software.amazon.smithy.lsp.util.Result;
 public final class ServerState {
     private static final Logger LOGGER = Logger.getLogger(ServerState.class.getName());
 
-    private final Map<String, Project> detachedProjects;
-    private final Map<String, Project> attachedProjects;
+    private final Map<String, Project> projects;
     private final Set<Path> workspacePaths;
     private final Set<String> managedUris;
     private final DocumentLifecycleManager lifecycleManager;
@@ -42,17 +43,14 @@ public final class ServerState {
      * Create a new, empty server state.
      */
     public ServerState() {
-        this.detachedProjects = new HashMap<>();
-        this.attachedProjects = new HashMap<>();
+        this.projects = new HashMap<>();
         this.workspacePaths = new HashSet<>();
         this.managedUris = new HashSet<>();
         this.lifecycleManager = new DocumentLifecycleManager();
     }
 
     public Collection<Project> getAllProjects() {
-        List<Project> allProjects = new ArrayList<>(attachedProjects.values());
-        allProjects.addAll(detachedProjects.values());
-        return allProjects;
+        return projects.values();
     }
 
     public Collection<ProjectAndFile> getAllManaged() {
@@ -72,11 +70,7 @@ public final class ServerState {
     }
 
     public Project findProjectByRoot(String root) {
-        Project attached = attachedProjects.get(root);
-        if (attached == null) {
-            return detachedProjects.get(root);
-        }
-        return attached;
+        return projects.get(root);
     }
 
     /**
@@ -108,17 +102,12 @@ public final class ServerState {
     }
 
     ProjectAndFile findProjectAndFile(String uri) {
-        ProjectAndFile attached = findAttachedAndRemoveDetached(uri);
-        if (attached != null) {
-            return attached;
-        }
+        String path = LspAdapter.toPath(uri);
 
-        Project detachedProject = detachedProjects.get(uri);
-        if (detachedProject != null) {
-            String path = LspAdapter.toPath(uri);
-            ProjectFile projectFile = detachedProject.getProjectFile(path);
+        for (Project project : projects.values()) {
+            ProjectFile projectFile = project.getProjectFile(path);
             if (projectFile != null) {
-                return new ProjectAndFile(uri, detachedProject, projectFile, true);
+                return new ProjectAndFile(uri, project, projectFile);
             }
         }
 
@@ -155,37 +144,8 @@ public final class ServerState {
         if (projectAndFile != null && projectAndFile.project().type() == Project.Type.DETACHED) {
             // Only cancel tasks for detached projects, since we're dropping the project
             lifecycleManager.cancelTask(uri);
-            detachedProjects.remove(uri);
+            projects.remove(uri);
         }
-    }
-
-    /**
-     * Searches for the given {@code uri} in attached projects, and if found,
-     * makes sure any old detached projects for that file are removed.
-     *
-     * @param uri The uri of the project and file to find
-     * @return The attached project and file, or null if not found
-     */
-    private ProjectAndFile findAttachedAndRemoveDetached(String uri) {
-        String path = LspAdapter.toPath(uri);
-        // We might be in a state where a file was added to a tracked project,
-        // but was opened before the project loaded. This would result in it
-        // being placed in a detachedProjects project. Removing it here is basically
-        // like removing it lazily, although it does feel a little hacky.
-        for (Project project : attachedProjects.values()) {
-            ProjectFile projectFile = project.getProjectFile(path);
-            if (projectFile != null) {
-                detachedProjects.remove(uri);
-                return new ProjectAndFile(uri, project, projectFile, false);
-            }
-        }
-
-        return null;
-    }
-
-    void createDetachedProject(String uri, String text) {
-        Project project = ProjectLoader.loadDetached(uri, text);
-        detachedProjects.put(uri, project);
     }
 
     List<Exception> tryInitProject(Path root) {
@@ -201,8 +161,8 @@ public final class ServerState {
             if (updatedProject.config().buildFiles().isEmpty()) {
                 removeProjectAndResolveDetached(projectName);
             } else {
-                resolveDetachedProjects(attachedProjects.get(projectName), updatedProject);
-                attachedProjects.put(projectName, updatedProject);
+                resolveDetachedProjects(projects.get(projectName), updatedProject);
+                projects.put(projectName, updatedProject);
             }
 
             LOGGER.finest("Initialized project at " + root);
@@ -215,7 +175,7 @@ public final class ServerState {
         //  if we find a smithy-build.json, etc.
         // If we overwrite an existing project with an empty one, we lose track of the state of tracked
         // files. Instead, we will just keep the original project before the reload failure.
-        attachedProjects.computeIfAbsent(projectName, ignored -> Project.empty(root));
+        projects.computeIfAbsent(projectName, ignored -> Project.empty(root));
 
         return loadResult.unwrapErr();
     }
@@ -240,8 +200,8 @@ public final class ServerState {
         // Have to do the removal separately, so we don't modify project.attachedProjects()
         // while iterating through it
         List<String> projectsToRemove = new ArrayList<>();
-        for (var entry : attachedProjects.entrySet()) {
-            if (entry.getValue().root().startsWith(workspaceRoot)) {
+        for (var entry : projects.entrySet()) {
+            if (entry.getValue().type() == Project.Type.NORMAL && entry.getValue().root().startsWith(workspaceRoot)) {
                 projectsToRemove.add(entry.getKey());
             }
         }
@@ -251,8 +211,43 @@ public final class ServerState {
         }
     }
 
+    List<Exception> applyFileEvents(List<FileEvent> events) {
+        List<Exception> errors = new ArrayList<>();
+
+        var changes = WorkspaceChanges.computeWorkspaceChanges(events, this);
+
+        for (var entry : changes.byProject().entrySet()) {
+            String projectRoot = entry.getKey();
+            ProjectChange projectChange = entry.getValue();
+
+            Project project = findProjectByRoot(projectRoot);
+
+            if (!projectChange.changedBuildFileUris().isEmpty()) {
+                // Note: this will take care of removing projects when build files are
+                // deleted
+                errors.addAll(tryInitProject(project.root()));
+            } else {
+                Set<String> createdUris = projectChange.createdSmithyFileUris();
+                Set<String> deletedUris = projectChange.deletedSmithyFileUris();
+
+                project.updateFiles(createdUris, deletedUris);
+
+                // If any file was previously opened and created a detached project, remove them
+                for (String createdUri : createdUris) {
+                    projects.remove(createdUri);
+                }
+            }
+        }
+
+        for (var newProjectRoot : changes.newProjectRoots()) {
+            errors.addAll(tryInitProject(newProjectRoot));
+        }
+
+        return errors;
+    }
+
     private void removeProjectAndResolveDetached(String projectName) {
-        Project removedProject = attachedProjects.remove(projectName);
+        Project removedProject = projects.remove(projectName);
         if (removedProject != null) {
             resolveDetachedProjects(removedProject, Project.empty(removedProject.root()));
         }
@@ -269,7 +264,7 @@ public final class ServerState {
             addedPaths.removeAll(currentProjectSmithyPaths);
             for (String addedPath : addedPaths) {
                 String addedUri = LspAdapter.toUri(addedPath);
-                detachedProjects.remove(addedUri);
+                projects.remove(addedUri); // Remove any detached projects
             }
 
             Set<String> removedPaths = new HashSet<>(currentProjectSmithyPaths);
@@ -279,10 +274,14 @@ public final class ServerState {
                 // Only move to a detachedProjects project if the file is managed
                 if (managedUris.contains(removedUri)) {
                     Document removedDocument = oldProject.getDocument(removedUri);
-                    // The copy here is technically unnecessary, if we make ModelAssembler support borrowed strings
                     createDetachedProject(removedUri, removedDocument.copyText());
                 }
             }
         }
+    }
+
+    private void createDetachedProject(String uri, String text) {
+        Project project = ProjectLoader.loadDetached(uri, text);
+        projects.put(uri, project);
     }
 }
