@@ -31,8 +31,6 @@ import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.ModelAssembler;
 import software.amazon.smithy.model.loader.ModelDiscovery;
-import software.amazon.smithy.model.node.ArrayNode;
-import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.shapes.ToShapeId;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.utils.IoUtils;
@@ -41,6 +39,8 @@ import software.amazon.smithy.utils.IoUtils;
  * Loads {@link Project}s.
  *
  * TODO: There's a lot of duplicated logic and redundant code here to refactor.
+ *
+ * TODO: Inefficient creation of smithy files
  */
 public final class ProjectLoader {
     private static final Logger LOGGER = Logger.getLogger(ProjectLoader.class.getName());
@@ -99,11 +99,9 @@ public final class ProjectLoader {
                 List.of(),
                 smithyFiles,
                 assemblerFactory,
-                definedShapesByFile,
                 Project.Type.DETACHED,
                 modelResult,
-                computePerFileMetadata(modelResult),
-                new SmithyFileDependenciesIndex());
+                Project.RebuildIndex.create(modelResult));
     }
 
     /**
@@ -186,11 +184,9 @@ public final class ProjectLoader {
                 dependencies,
                 smithyFiles,
                 assemblerFactory,
-                definedShapesByFile,
                 Project.Type.NORMAL,
                 modelResult,
-                computePerFileMetadata(modelResult),
-                SmithyFileDependenciesIndex.compute(modelResult)));
+                Project.RebuildIndex.create(modelResult)));
     }
 
     private static Result<ValidatedResult<Model>, Exception> loadModel(
@@ -249,37 +245,6 @@ public final class ProjectLoader {
         }
 
         return smithyFiles;
-    }
-
-    // This is gross, but necessary to deal with the way that array metadata gets merged.
-    // When we try to reload a single file, we need to make sure we remove the metadata for
-    // that file. But if there's array metadata, a single key contains merged elements from
-    // other files. This splits up the metadata by source file, creating an artificial array
-    // node for elements that are merged.
-    //
-    // This definitely has the potential to cause a performance hit if there's a huge amount
-    // of metadata, since we are recomputing this on every change.
-    static Map<String, Map<String, Node>> computePerFileMetadata(ValidatedResult<Model> modelResult) {
-        Map<String, Node> metadata = modelResult.getResult().map(Model::getMetadata).orElse(new HashMap<>(0));
-        Map<String, Map<String, Node>> perFileMetadata = new HashMap<>();
-        for (Map.Entry<String, Node> entry : metadata.entrySet()) {
-            if (entry.getValue().isArrayNode()) {
-                Map<String, ArrayNode.Builder> arrayByFile = new HashMap<>();
-                for (Node node : entry.getValue().expectArrayNode()) {
-                    String filename = node.getSourceLocation().getFilename();
-                    arrayByFile.computeIfAbsent(filename, (f) -> ArrayNode.builder()).withValue(node);
-                }
-                for (Map.Entry<String, ArrayNode.Builder> arrayByFileEntry : arrayByFile.entrySet()) {
-                    perFileMetadata.computeIfAbsent(arrayByFileEntry.getKey(), (f) -> new HashMap<>())
-                            .put(entry.getKey(), arrayByFileEntry.getValue().build());
-                }
-            } else {
-                String filename = entry.getValue().getSourceLocation().getFilename();
-                perFileMetadata.computeIfAbsent(filename, (f) -> new HashMap<>())
-                        .put(entry.getKey(), entry.getValue());
-            }
-        }
-        return perFileMetadata;
     }
 
     private static Supplier<ModelAssembler> createModelAssemblerFactory(List<Path> dependencies)
