@@ -94,12 +94,13 @@ public final class ProjectLoader {
             }
         });
 
-        return new Project(path.getParent(),
+        return new Project(path,
                 ProjectConfig.builder().sources(List.of(asPath)).build(),
                 List.of(),
                 smithyFiles,
                 assemblerFactory,
                 definedShapesByFile,
+                Project.Type.DETACHED,
                 modelResult,
                 computePerFileMetadata(modelResult),
                 new SmithyFileDependenciesIndex());
@@ -186,6 +187,7 @@ public final class ProjectLoader {
                 smithyFiles,
                 assemblerFactory,
                 definedShapesByFile,
+                Project.Type.NORMAL,
                 modelResult,
                 computePerFileMetadata(modelResult),
                 SmithyFileDependenciesIndex.compute(modelResult)));

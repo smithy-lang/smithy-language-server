@@ -10,6 +10,7 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -27,34 +28,55 @@ import software.amazon.smithy.lsp.util.Result;
 
 /**
  * Keeps track of the state of the server.
- *
- * @param detachedProjects Map of smithy file **uri** to detached project
- *                         for that file
- * @param attachedProjects Map of directory **path** to attached project roots
- * @param workspacePaths Paths to roots of each workspace open in the client
- * @param managedUris Uris of each file managed by the server/client, i.e.
- *                    files which may be updated by didChange
- * @param lifecycleManager Container for ongoing tasks
  */
-public record ServerState(
-        Map<String, Project> detachedProjects,
-        Map<String, Project> attachedProjects,
-        Set<Path> workspacePaths,
-        Set<String> managedUris,
-        DocumentLifecycleManager lifecycleManager
-) {
+public final class ServerState {
     private static final Logger LOGGER = Logger.getLogger(ServerState.class.getName());
+
+    private final Map<String, Project> detachedProjects;
+    private final Map<String, Project> attachedProjects;
+    private final Set<Path> workspacePaths;
+    private final Set<String> managedUris;
+    private final DocumentLifecycleManager lifecycleManager;
 
     /**
      * Create a new, empty server state.
      */
     public ServerState() {
-        this(
-                new HashMap<>(),
-                new HashMap<>(),
-                new HashSet<>(),
-                new HashSet<>(),
-                new DocumentLifecycleManager());
+        this.detachedProjects = new HashMap<>();
+        this.attachedProjects = new HashMap<>();
+        this.workspacePaths = new HashSet<>();
+        this.managedUris = new HashSet<>();
+        this.lifecycleManager = new DocumentLifecycleManager();
+    }
+
+    public Collection<Project> getAllProjects() {
+        List<Project> allProjects = new ArrayList<>(attachedProjects.values());
+        allProjects.addAll(detachedProjects.values());
+        return allProjects;
+    }
+
+    public Collection<ProjectAndFile> getAllManaged() {
+        List<ProjectAndFile> allManaged = new ArrayList<>(managedUris.size());
+        for (String uri : managedUris) {
+            allManaged.add(findManaged(uri));
+        }
+        return allManaged;
+    }
+
+    public Set<Path> workspacePaths() {
+        return workspacePaths;
+    }
+
+    public DocumentLifecycleManager lifecycleManager() {
+        return lifecycleManager;
+    }
+
+    public Project findProjectByRoot(String root) {
+        Project attached = attachedProjects.get(root);
+        if (attached == null) {
+            return detachedProjects.get(root);
+        }
+        return attached;
     }
 
     /**
@@ -105,15 +127,36 @@ public record ServerState(
         return null;
     }
 
-    boolean isDetached(String uri) {
-        if (detachedProjects.containsKey(uri)) {
-            ProjectAndFile attached = findAttachedAndRemoveDetached(uri);
-            // The file is only truly detached if the above didn't find an attached project
-            // for the given file
-            return attached == null;
+    ProjectAndFile findManaged(String uri) {
+        if (managedUris.contains(uri)) {
+            return findProjectAndFile(uri);
+        }
+        return null;
+    }
+
+    ProjectAndFile open(String uri, String text) {
+        managedUris.add(uri);
+
+        ProjectAndFile projectAndFile = findProjectAndFile(uri);
+        if (projectAndFile != null) {
+            projectAndFile.file().document().applyEdit(null, text);
+        } else {
+            createDetachedProject(uri, text);
+            projectAndFile = findProjectAndFile(uri); // Note: This will always be present
         }
 
-        return false;
+        return projectAndFile;
+    }
+
+    void close(String uri) {
+        managedUris.remove(uri);
+
+        ProjectAndFile projectAndFile = findProjectAndFile(uri);
+        if (projectAndFile != null && projectAndFile.project().type() == Project.Type.DETACHED) {
+            // Only cancel tasks for detached projects, since we're dropping the project
+            lifecycleManager.cancelTask(uri);
+            detachedProjects.remove(uri);
+        }
     }
 
     /**
@@ -226,9 +269,7 @@ public record ServerState(
             addedPaths.removeAll(currentProjectSmithyPaths);
             for (String addedPath : addedPaths) {
                 String addedUri = LspAdapter.toUri(addedPath);
-                if (isDetached(addedUri)) {
-                    detachedProjects.remove(addedUri);
-                }
+                detachedProjects.remove(addedUri);
             }
 
             Set<String> removedPaths = new HashSet<>(currentProjectSmithyPaths);

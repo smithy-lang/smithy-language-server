@@ -40,6 +40,7 @@ public final class Project {
     private final Map<String, SmithyFile> smithyFiles;
     private final Supplier<ModelAssembler> assemblerFactory;
     private final Map<String, Set<ToShapeId>> definedShapesByFile;
+    private final Type type;
     private ValidatedResult<Model> modelResult;
     // TODO: Move this into SmithyFileDependenciesIndex
     private Map<String, Map<String, Node>> perFileMetadata;
@@ -51,6 +52,7 @@ public final class Project {
             Map<String, SmithyFile> smithyFiles,
             Supplier<ModelAssembler> assemblerFactory,
             Map<String, Set<ToShapeId>> definedShapesByFile,
+            Type type,
             ValidatedResult<Model> modelResult,
             Map<String, Map<String, Node>> perFileMetadata,
             SmithyFileDependenciesIndex smithyFileDependenciesIndex) {
@@ -60,9 +62,16 @@ public final class Project {
         this.smithyFiles = smithyFiles;
         this.assemblerFactory = assemblerFactory;
         this.definedShapesByFile = definedShapesByFile;
+        this.type = type;
         this.modelResult = modelResult;
         this.perFileMetadata = perFileMetadata;
         this.smithyFileDependenciesIndex = smithyFileDependenciesIndex;
+    }
+
+    public enum Type {
+        NORMAL,
+        DETACHED,
+        EMPTY;
     }
 
     /**
@@ -78,6 +87,7 @@ public final class Project {
                 new HashMap<>(),
                 Model::assembler,
                 new HashMap<>(),
+                Type.EMPTY,
                 ValidatedResult.empty(),
                 new HashMap<>(),
                 new SmithyFileDependenciesIndex());
@@ -138,6 +148,10 @@ public final class Project {
      */
     public Map<String, Set<ToShapeId>> definedShapesByFile() {
         return this.definedShapesByFile;
+    }
+
+    public Type type() {
+        return type;
     }
 
     /**

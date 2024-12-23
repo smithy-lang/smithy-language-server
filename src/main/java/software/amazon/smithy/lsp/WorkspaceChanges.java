@@ -32,9 +32,12 @@ final class WorkspaceChanges {
     static WorkspaceChanges computeWorkspaceChanges(List<FileEvent> events, ServerState state) {
         WorkspaceChanges changes = new WorkspaceChanges();
 
-        List<ProjectFileMatcher> projectFileMatchers = new ArrayList<>(state.attachedProjects().size());
-        state.attachedProjects().forEach((projectName, project) ->
-                projectFileMatchers.add(createProjectFileMatcher(projectName, project)));
+        List<ProjectFileMatcher> projectFileMatchers = new ArrayList<>();
+        state.getAllProjects().forEach(project -> {
+            if (project.type() == Project.Type.NORMAL) {
+                projectFileMatchers.add(createProjectFileMatcher(project.root().toString(), project));
+            }
+        });
 
         List<PathMatcher> workspaceBuildFileMatchers = new ArrayList<>(state.workspacePaths().size());
         state.workspacePaths().forEach(workspacePath ->
