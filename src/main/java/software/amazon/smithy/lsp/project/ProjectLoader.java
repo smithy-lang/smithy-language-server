@@ -19,10 +19,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import software.amazon.smithy.lsp.ServerState;
 import software.amazon.smithy.lsp.document.Document;
@@ -31,16 +29,14 @@ import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.ModelAssembler;
 import software.amazon.smithy.model.loader.ModelDiscovery;
-import software.amazon.smithy.model.shapes.ToShapeId;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.utils.IoUtils;
+import software.amazon.smithy.utils.TriConsumer;
 
 /**
  * Loads {@link Project}s.
  *
  * TODO: There's a lot of duplicated logic and redundant code here to refactor.
- *
- * TODO: Inefficient creation of smithy files
  */
 public final class ProjectLoader {
     private static final Logger LOGGER = Logger.getLogger(ProjectLoader.class.getName());
@@ -61,47 +57,40 @@ public final class ProjectLoader {
      */
     public static Project loadDetached(String uri, String text) {
         LOGGER.info("Loading detachedProjects project at " + uri);
+
         String asPath = LspAdapter.toPath(uri);
-        Supplier<ModelAssembler> assemblerFactory;
+        Path path = Paths.get(asPath);
+        List<Path> allSmithyFilePaths = List.of(path);
+
+        Document document = Document.of(text);
+        ManagedFiles managedFiles = (fileUri) -> {
+            if (uri.equals(fileUri)) {
+                return document;
+            }
+            return null;
+        };
+
+        List<Path> dependencies = List.of();
+
+        LoadModelResult result;
         try {
-            assemblerFactory = createModelAssemblerFactory(List.of());
-        } catch (MalformedURLException e) {
+            result = doLoad(managedFiles, dependencies, allSmithyFilePaths);
+        } catch (Exception e) {
+            // TODO: Clean up this comment
             // Note: This can't happen because we have no dependencies to turn into URLs
             throw new RuntimeException(e);
         }
 
-        ValidatedResult<Model> modelResult = assemblerFactory.get()
-                .addUnparsedModel(asPath, text)
-                .assemble();
-
-        Path path = Paths.get(asPath);
-        List<Path> sources = Collections.singletonList(path);
-
-        var definedShapesByFile = computeDefinedShapesByFile(sources, modelResult);
-        var smithyFiles = createSmithyFiles(definedShapesByFile, (filePath) -> {
-            // NOTE: isSmithyJarFile and isJarFile typically take in a URI (filePath is a path), but
-            // the model stores jar paths as URIs
-            if (LspAdapter.isSmithyJarFile(filePath) || LspAdapter.isJarFile(filePath)) {
-                return Document.of(IoUtils.readUtf8Url(LspAdapter.jarUrl(filePath)));
-            } else if (filePath.equals(asPath)) {
-                return Document.of(text);
-            } else {
-                // TODO: Make generic 'please file a bug report' exception
-                throw new IllegalStateException(
-                        "Attempted to load an unknown source file ("
-                        + filePath + ") in detachedProjects project at "
-                        + asPath + ". This is a bug in the language server.");
-            }
-        });
-
-        return new Project(path,
-                ProjectConfig.builder().sources(List.of(asPath)).build(),
-                List.of(),
-                smithyFiles,
-                assemblerFactory,
+        return new Project(
+                path,
+                ProjectConfig.empty(),
+                dependencies,
+                result.smithyFiles(),
+                result.assemblerFactory(),
                 Project.Type.DETACHED,
-                modelResult,
-                Project.RebuildIndex.create(modelResult));
+                result.modelResult(),
+                result.rebuildIndex()
+        );
     }
 
     /**
@@ -134,117 +123,136 @@ public final class ProjectLoader {
 
         List<Path> dependencies = resolveResult.unwrap();
 
-        // The model assembler factory is used to get assemblers that already have the correct
-        // dependencies resolved for future loads
-        Supplier<ModelAssembler> assemblerFactory;
-        try {
-            assemblerFactory = createModelAssemblerFactory(dependencies);
-        } catch (MalformedURLException e) {
-            return Result.err(List.of(e));
-        }
-
-        ModelAssembler assembler = assemblerFactory.get();
-
         // Note: The model assembler can handle loading all smithy files in a directory, so there's some potential
         //  here for inconsistent behavior.
         List<Path> allSmithyFilePaths = collectAllSmithyPaths(root, config.sources(), config.imports());
 
-        Result<ValidatedResult<Model>, Exception> loadModelResult = loadModel(state, allSmithyFilePaths, assembler);
+        LoadModelResult result;
+        try {
+            result = doLoad(state::getManagedDocument, dependencies, allSmithyFilePaths);
+        } catch (Exception e) {
+            return Result.err(Collections.singletonList(e));
+        }
+
+        return Result.ok(new Project(
+                root,
+                config,
+                dependencies,
+                result.smithyFiles(),
+                result.assemblerFactory(),
+                Project.Type.NORMAL,
+                result.modelResult(),
+                result.rebuildIndex()
+        ));
+    }
+
+    private record LoadModelResult(
+            Supplier<ModelAssembler> assemblerFactory,
+            ValidatedResult<Model> modelResult,
+            Map<String, SmithyFile> smithyFiles,
+            Project.RebuildIndex rebuildIndex
+    ) {
+    }
+
+    private interface ManagedFiles {
+        Document getManagedDocument(String uri);
+    }
+
+    private static LoadModelResult doLoad(
+            ManagedFiles managedFiles,
+            List<Path> dependencies,
+            List<Path> allSmithyFilePaths
+    ) throws Exception {
+        // The model assembler factory is used to get assemblers that already have the correct
+        // dependencies resolved for future loads
+        Supplier<ModelAssembler> assemblerFactory = createModelAssemblerFactory(dependencies);
+
+        Map<String, SmithyFile> smithyFiles = new HashMap<>(allSmithyFilePaths.size());
+
         // TODO: Assembler can fail if a file is not found. We can be more intelligent about
         //  handling this case to allow partially loading the project, but we will need to
         //  collect and report the errors somehow. For now, using collectAllSmithyPaths skips
         //  any files that don't exist, so we're essentially side-stepping the issue by
         //  coincidence.
-        if (loadModelResult.isErr()) {
-            return Result.err(Collections.singletonList(loadModelResult.unwrapErr()));
-        }
+        ModelAssembler assembler = assemblerFactory.get();
+        ValidatedResult<Model> modelResult = loadModel(managedFiles, allSmithyFilePaths, assembler, smithyFiles);
 
-        ValidatedResult<Model> modelResult = loadModelResult.unwrap();
-        var definedShapesByFile = computeDefinedShapesByFile(allSmithyFilePaths, modelResult);
-        var smithyFiles = createSmithyFiles(definedShapesByFile, (filePath) -> {
-            // NOTE: isSmithyJarFile and isJarFile typically take in a URI (filePath is a path), but
-            // the model stores jar paths as URIs
-            if (LspAdapter.isSmithyJarFile(filePath) || LspAdapter.isJarFile(filePath)) {
-                // Technically this can throw
-                return Document.of(IoUtils.readUtf8Url(LspAdapter.jarUrl(filePath)));
-            }
-            // TODO: We recompute uri from path and vice-versa very frequently,
-            //  maybe we can cache it.
-            String uri = LspAdapter.toUri(filePath);
-            Document managed = state.getManagedDocument(uri);
-            if (managed != null) {
-                return managed;
-            }
-            // There may be a more efficient way of reading this
-            return Document.of(IoUtils.readUtf8File(filePath));
-        });
+        Project.RebuildIndex rebuildIndex = Project.RebuildIndex.create(modelResult);
+        addExtraSmithyFiles(managedFiles, rebuildIndex.filesToDefinedShapes().keySet(), smithyFiles);
 
-        return Result.ok(new Project(root,
-                config,
-                dependencies,
-                smithyFiles,
+        return new LoadModelResult(
                 assemblerFactory,
-                Project.Type.NORMAL,
                 modelResult,
-                Project.RebuildIndex.create(modelResult)));
+                smithyFiles,
+                rebuildIndex
+        );
     }
 
-    private static Result<ValidatedResult<Model>, Exception> loadModel(
-            ServerState state,
-            List<Path> models,
-            ModelAssembler assembler
-    ) {
-        try {
-            for (Path path : models) {
-                Document managed = state.getManagedDocument(path);
-                if (managed != null) {
-                    assembler.addUnparsedModel(path.toString(), managed.copyText());
-                } else {
-                    assembler.addImport(path);
-                }
-            }
-
-            return Result.ok(assembler.assemble());
-        } catch (Exception e) {
-            return Result.err(e);
-        }
-    }
-
-    static Result<Project, List<Exception>> load(Path root) {
-        return load(root, new ServerState());
-    }
-
-    private static Map<String, Set<ToShapeId>> computeDefinedShapesByFile(
+    private static ValidatedResult<Model> loadModel(
+            ManagedFiles managedFiles,
             List<Path> allSmithyFilePaths,
-            ValidatedResult<Model> modelResult
+            ModelAssembler assembler,
+            Map<String, SmithyFile> smithyFiles
     ) {
-        Map<String, Set<ToShapeId>> definedShapesByFile = modelResult.getResult().map(Model::shapes)
-                .orElseGet(Stream::empty)
-                .collect(Collectors.groupingByConcurrent(
-                        shape -> shape.getSourceLocation().getFilename(), Collectors.toSet()));
+        TriConsumer<String, CharSequence, Document> consumer = (filePath, text, document) -> {
+            assembler.addUnparsedModel(filePath, text.toString());
+            smithyFiles.put(filePath, SmithyFile.create(filePath, document));
+        };
 
-        // There may be smithy files part of the project that aren't part of the model, e.g. empty files
-        for (Path smithyFilePath : allSmithyFilePaths) {
-            String pathString = smithyFilePath.toString();
-            definedShapesByFile.putIfAbsent(pathString, Set.of());
+        for (Path path : allSmithyFilePaths) {
+            String pathString = path.toString();
+            findOrReadDocument(managedFiles, pathString, consumer);
         }
 
-        return definedShapesByFile;
+        return assembler.assemble();
     }
 
-    private static Map<String, SmithyFile> createSmithyFiles(
-            Map<String, Set<ToShapeId>> definedShapesByFile,
-            Function<String, Document> documentProvider
+    private static void addExtraSmithyFiles(
+            ManagedFiles managedFiles,
+            Set<String> loadedSmithyFilePaths,
+            Map<String, SmithyFile> smithyFiles
     ) {
-        Map<String, SmithyFile> smithyFiles = new HashMap<>(definedShapesByFile.size());
+        TriConsumer<String, CharSequence, Document> consumer = (filePath, text, document) -> {
+            SmithyFile smithyFile = SmithyFile.create(filePath, document);
+            smithyFiles.put(filePath, smithyFile);
+        };
 
-        for (String path : definedShapesByFile.keySet()) {
-            Document document = documentProvider.apply(path);
-            SmithyFile smithyFile = SmithyFile.create(path, document);
-            smithyFiles.put(path, smithyFile);
+        for (String loadedPath : loadedSmithyFilePaths) {
+            if (!smithyFiles.containsKey(loadedPath)) {
+                findOrReadDocument(managedFiles, loadedPath, consumer);
+            }
+        }
+    }
+
+    private static void findOrReadDocument(
+            ManagedFiles managedFiles,
+            String filePath,
+            TriConsumer<String, CharSequence, Document> consumer
+    ) {
+        // NOTE: isSmithyJarFile and isJarFile typically take in a URI (filePath is a path), but
+        // the model stores jar paths as URIs
+        if (LspAdapter.isSmithyJarFile(filePath) || LspAdapter.isJarFile(filePath)) {
+            // Technically this can throw
+            String text = IoUtils.readUtf8Url(LspAdapter.jarUrl(filePath));
+            Document document = Document.of(text);
+            consumer.accept(filePath, text, document);
+            return;
         }
 
-        return smithyFiles;
+        // TODO: We recompute uri from path and vice-versa very frequently,
+        //  maybe we can cache it.
+        String uri = LspAdapter.toUri(filePath);
+        Document managed = managedFiles.getManagedDocument(uri);
+        if (managed != null) {
+            CharSequence text = managed.borrowText();
+            consumer.accept(filePath, text, managed);
+            return;
+        }
+
+        // There may be a more efficient way of reading this
+        String text = IoUtils.readUtf8File(filePath);
+        Document document = Document.of(text);
+        consumer.accept(filePath, text, document);
     }
 
     private static Supplier<ModelAssembler> createModelAssemblerFactory(List<Path> dependencies)
@@ -273,6 +281,7 @@ public final class ProjectLoader {
         return new URLClassLoader(urls);
     }
 
+    // TODO: Can there be duplicate paths in this list? If there are, we may end up reading from disk multiple times
     // sources and imports can contain directories or files, relative or absolute
     private static List<Path> collectAllSmithyPaths(Path root, List<String> sources, List<String> imports) {
         List<Path> paths = new ArrayList<>();
