@@ -31,7 +31,7 @@ import software.amazon.smithy.lsp.util.Result;
 /**
  * Keeps track of the state of the server.
  */
-public final class ServerState {
+public final class ServerState implements ManagedFiles {
     private static final Logger LOGGER = Logger.getLogger(ServerState.class.getName());
 
     private final Map<String, Project> projects;
@@ -73,10 +73,7 @@ public final class ServerState {
         return projects.get(root);
     }
 
-    /**
-     * @param uri Uri of the document to get
-     * @return The document if found and it is managed, otherwise {@code null}
-     */
+    @Override
     public Document getManagedDocument(String uri) {
         if (managedUris.contains(uri)) {
             ProjectAndFile projectAndFile = findProjectAndFile(uri);
@@ -86,19 +83,6 @@ public final class ServerState {
         }
 
         return null;
-    }
-
-    /**
-     * @param path The path of the document to get
-     * @return The document if found and it is managed, otherwise {@code null}
-     */
-    public Document getManagedDocument(Path path) {
-        if (managedUris.isEmpty()) {
-            return null;
-        }
-
-        String uri = LspAdapter.toUri(path.toString());
-        return getManagedDocument(uri);
     }
 
     ProjectAndFile findProjectAndFile(String uri) {

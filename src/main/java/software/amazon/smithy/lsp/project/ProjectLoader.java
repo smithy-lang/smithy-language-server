@@ -22,7 +22,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
-import software.amazon.smithy.lsp.ServerState;
+import software.amazon.smithy.lsp.ManagedFiles;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.util.Result;
@@ -47,7 +47,7 @@ public final class ProjectLoader {
     /**
      * Loads a detachedProjects (single-file) {@link Project} with the given file.
      *
-     * <p>Unlike {@link #load(Path, ServerState)}, this method isn't
+     * <p>Unlike {@link #load(Path, ManagedFiles)}, this method isn't
      * fallible since it doesn't do any IO that we would want to recover an
      * error from.
      *
@@ -106,11 +106,11 @@ public final class ProjectLoader {
      * reason about how the project was structured.
      *
      * @param root Path of the project root
-     * @param state Server's current state
+     * @param managedFiles Files managed by the server
      * @return Result of loading the project
      */
-    public static Result<Project, List<Exception>> load(Path root, ServerState state) {
-        Result<ProjectConfig, List<Exception>> configResult = ProjectConfigLoader.loadFromRoot(root, state);
+    public static Result<Project, List<Exception>> load(Path root, ManagedFiles managedFiles) {
+        Result<ProjectConfig, List<Exception>> configResult = ProjectConfigLoader.loadFromRoot(root, managedFiles);
         if (configResult.isErr()) {
             return Result.err(configResult.unwrapErr());
         }
@@ -129,7 +129,7 @@ public final class ProjectLoader {
 
         LoadModelResult result;
         try {
-            result = doLoad(state::getManagedDocument, dependencies, allSmithyFilePaths);
+            result = doLoad(managedFiles, dependencies, allSmithyFilePaths);
         } catch (Exception e) {
             return Result.err(Collections.singletonList(e));
         }
@@ -154,10 +154,6 @@ public final class ProjectLoader {
     ) {
     }
 
-    private interface ManagedFiles {
-        Document getManagedDocument(String uri);
-    }
-
     private static LoadModelResult doLoad(
             ManagedFiles managedFiles,
             List<Path> dependencies,
@@ -178,7 +174,7 @@ public final class ProjectLoader {
         ValidatedResult<Model> modelResult = loadModel(managedFiles, allSmithyFilePaths, assembler, smithyFiles);
 
         Project.RebuildIndex rebuildIndex = Project.RebuildIndex.create(modelResult);
-        addExtraSmithyFiles(managedFiles, rebuildIndex.filesToDefinedShapes().keySet(), smithyFiles);
+        addDependencySmithyFiles(managedFiles, rebuildIndex.filesToDefinedShapes().keySet(), smithyFiles);
 
         return new LoadModelResult(
                 assemblerFactory,
@@ -207,7 +203,8 @@ public final class ProjectLoader {
         return assembler.assemble();
     }
 
-    private static void addExtraSmithyFiles(
+    // Smithy files in jars were loaded by the model assembler via model discovery, so we need to collect those.
+    private static void addDependencySmithyFiles(
             ManagedFiles managedFiles,
             Set<String> loadedSmithyFilePaths,
             Map<String, SmithyFile> smithyFiles

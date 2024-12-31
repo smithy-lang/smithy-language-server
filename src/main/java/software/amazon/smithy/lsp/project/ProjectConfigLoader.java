@@ -15,8 +15,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
-import software.amazon.smithy.lsp.ServerState;
+import software.amazon.smithy.lsp.ManagedFiles;
 import software.amazon.smithy.lsp.document.Document;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.node.NodeMapper;
@@ -87,11 +88,7 @@ public final class ProjectConfigLoader {
     private ProjectConfigLoader() {
     }
 
-    static Result<ProjectConfig, List<Exception>> loadFromRoot(Path workspaceRoot) {
-        return loadFromRoot(workspaceRoot, new ServerState());
-    }
-
-    static Result<ProjectConfig, List<Exception>> loadFromRoot(Path workspaceRoot, ServerState state) {
+    static Result<ProjectConfig, List<Exception>> loadFromRoot(Path workspaceRoot, ManagedFiles managedFiles) {
         SmithyBuildConfig.Builder builder = SmithyBuildConfig.builder();
         List<Exception> exceptions = new ArrayList<>();
         Map<String, BuildFile> buildFiles = new HashMap<>();
@@ -100,7 +97,7 @@ public final class ProjectConfigLoader {
         if (Files.isRegularFile(smithyBuildPath)) {
             LOGGER.info("Loading smithy-build.json from " + smithyBuildPath);
             Result<SmithyBuildConfig, Exception> result = Result.ofFallible(() -> {
-                BuildFile buildFile = addBuildFile(buildFiles, smithyBuildPath, state);
+                BuildFile buildFile = addBuildFile(buildFiles, smithyBuildPath, managedFiles);
                 return SmithyBuildConfig.fromNode(
                         Node.parseJsonWithComments(buildFile.document().copyText(), buildFile.path()));
             });
@@ -116,7 +113,7 @@ public final class ProjectConfigLoader {
             Path extPath = workspaceRoot.resolve(ext);
             if (Files.isRegularFile(extPath)) {
                 Result<SmithyBuildExtensions, Exception> result = Result.ofFallible(() -> {
-                    BuildFile buildFile = addBuildFile(buildFiles, extPath, state);
+                    BuildFile buildFile = addBuildFile(buildFiles, extPath, managedFiles);
                     return loadSmithyBuildExtensions(buildFile);
                 });
                 result.get().ifPresent(extensionsBuilder::merge);
@@ -129,7 +126,7 @@ public final class ProjectConfigLoader {
         if (Files.isRegularFile(smithyProjectPath)) {
             LOGGER.info("Loading .smithy-project.json from " + smithyProjectPath);
             Result<ProjectConfig.Builder, Exception> result = Result.ofFallible(() -> {
-                BuildFile buildFile = addBuildFile(buildFiles, smithyProjectPath, state);
+                BuildFile buildFile = addBuildFile(buildFiles, smithyProjectPath, managedFiles);
                 return ProjectConfig.Builder.load(buildFile);
             });
             if (result.isOk()) {
@@ -154,14 +151,16 @@ public final class ProjectConfigLoader {
         return Result.ok(finalConfigBuilder.build());
     }
 
-    private static BuildFile addBuildFile(Map<String, BuildFile> buildFiles, Path path, ServerState state) {
-        Document managed = state.getManagedDocument(path);
+    private static BuildFile addBuildFile(Map<String, BuildFile> buildFiles, Path path, ManagedFiles managedFiles) {
+        String pathString = path.toString();
+        String uri = LspAdapter.toUri(pathString);
+        Document managed = managedFiles.getManagedDocument(uri);
         BuildFile buildFile;
         if (managed != null) {
-            buildFile = new BuildFile(path.toString(), managed);
+            buildFile = new BuildFile(pathString, managed);
         } else {
             Document document = Document.of(IoUtils.readUtf8File(path));
-            buildFile = new BuildFile(path.toString(), document);
+            buildFile = new BuildFile(pathString, document);
         }
         buildFiles.put(buildFile.path(), buildFile);
         return buildFile;

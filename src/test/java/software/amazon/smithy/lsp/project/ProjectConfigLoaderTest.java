@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.MavenConfig;
 import software.amazon.smithy.build.model.MavenRepository;
+import software.amazon.smithy.lsp.ServerState;
 import software.amazon.smithy.lsp.util.Result;
 
 public class ProjectConfigLoaderTest {
@@ -25,7 +26,7 @@ public class ProjectConfigLoaderTest {
     public void loadsConfigWithEnvVariable() {
         System.setProperty("FOO", "bar");
         Path root = toPath(getClass().getResource("env-config"));
-        Result<ProjectConfig, List<Exception>> result = ProjectConfigLoader.loadFromRoot(root);
+        Result<ProjectConfig, List<Exception>> result = load(root);
 
         assertThat(result.isOk(), is(true));
         ProjectConfig config = result.unwrap();
@@ -41,7 +42,7 @@ public class ProjectConfigLoaderTest {
     @Test
     public void loadsLegacyConfig() {
         Path root = toPath(getClass().getResource("legacy-config"));
-        Result<ProjectConfig, List<Exception>> result = ProjectConfigLoader.loadFromRoot(root);
+        Result<ProjectConfig, List<Exception>> result = load(root);
 
         assertThat(result.isOk(), is(true));
         ProjectConfig config = result.unwrap();
@@ -56,7 +57,7 @@ public class ProjectConfigLoaderTest {
     @Test
     public void prefersNonLegacyConfig() {
         Path root = toPath(getClass().getResource("legacy-config-with-conflicts"));
-        Result<ProjectConfig, List<Exception>> result = ProjectConfigLoader.loadFromRoot(root);
+        Result<ProjectConfig, List<Exception>> result = load(root);
 
         assertThat(result.isOk(), is(true));
         ProjectConfig config = result.unwrap();
@@ -71,10 +72,14 @@ public class ProjectConfigLoaderTest {
     @Test
     public void mergesBuildExts() {
         Path root = toPath(getClass().getResource("build-exts"));
-        Result<ProjectConfig, List<Exception>> result = ProjectConfigLoader.loadFromRoot(root);
+        Result<ProjectConfig, List<Exception>> result = load(root);
 
         assertThat(result.isOk(), is(true));
         ProjectConfig config = result.unwrap();
         assertThat(config.imports(), containsInAnyOrder(containsString("main.smithy"), containsString("other.smithy")));
+    }
+
+    private static Result<ProjectConfig, List<Exception>> load(Path root) {
+        return ProjectConfigLoader.loadFromRoot(root, new ServerState());
     }
 }
