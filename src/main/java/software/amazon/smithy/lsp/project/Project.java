@@ -67,9 +67,23 @@ public final class Project {
         this.rebuildIndex = rebuildIndex;
     }
 
+    /**
+     * The type of project, which depends on how it was loaded.
+     */
     public enum Type {
+        /**
+         * A project loaded using some build configuration files, i.e. smithy-build.json.
+         */
         NORMAL,
+
+        /**
+         * A project loaded from a single source file, without any build configuration files.
+         */
         DETACHED,
+
+        /**
+         * A project loaded with no source or build configuration files.
+         */
         EMPTY;
     }
 
@@ -510,18 +524,22 @@ public final class Project {
                         for (Node element : traitNode.expectArrayNode()) {
                             String elementSourceFilename = element.getSourceLocation().getFilename();
                             if (!elementSourceFilename.equals(shapeSourceFilename)) {
-                                newIndex.filesToDependentFiles.computeIfAbsent(elementSourceFilename, (f) -> new HashSet<>())
+                                newIndex.filesToDependentFiles
+                                        .computeIfAbsent(elementSourceFilename, (f) -> new HashSet<>())
                                         .add(shapeSourceFilename);
-                                newIndex.shapeIdsToDependenciesFiles.computeIfAbsent(shape.getId(), (i) -> new HashSet<>())
+                                newIndex.shapeIdsToDependenciesFiles
+                                        .computeIfAbsent(shape.getId(), (i) -> new HashSet<>())
                                         .add(elementSourceFilename);
                             }
                         }
                     } else {
                         String traitSourceFilename = traitApplication.getSourceLocation().getFilename();
                         if (!traitSourceFilename.equals(shapeSourceFilename)) {
-                            newIndex.shapesToAppliedTraitsInOtherFiles.computeIfAbsent(shape.getId(), (i) -> new ArrayList<>())
+                            newIndex.shapesToAppliedTraitsInOtherFiles
+                                    .computeIfAbsent(shape.getId(), (i) -> new ArrayList<>())
                                     .add(traitApplication);
-                            newIndex.filesToTraitsTheyApply.computeIfAbsent(traitSourceFilename, (f) -> new HashMap<>())
+                            newIndex.filesToTraitsTheyApply
+                                    .computeIfAbsent(traitSourceFilename, (f) -> new HashMap<>())
                                     .computeIfAbsent(shape.getId(), (i) -> new ArrayList<>())
                                     .add(traitApplication);
                         }

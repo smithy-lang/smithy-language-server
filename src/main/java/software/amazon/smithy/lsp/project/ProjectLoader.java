@@ -75,9 +75,9 @@ public final class ProjectLoader {
         LoadModelResult result;
         try {
             result = doLoad(managedFiles, dependencies, allSmithyFilePaths);
-        } catch (Exception e) {
-            // TODO: Clean up this comment
-            // Note: This can't happen because we have no dependencies to turn into URLs
+        } catch (IOException e) {
+            // Note: This can't happen because we aren't doing any fallible IO,
+            // as only the prelude will be read from disk
             throw new RuntimeException(e);
         }
 
@@ -158,7 +158,7 @@ public final class ProjectLoader {
             ManagedFiles managedFiles,
             List<Path> dependencies,
             List<Path> allSmithyFilePaths
-    ) throws Exception {
+    ) throws IOException {
         // The model assembler factory is used to get assemblers that already have the correct
         // dependencies resolved for future loads
         Supplier<ModelAssembler> assemblerFactory = createModelAssemblerFactory(dependencies);
@@ -278,7 +278,6 @@ public final class ProjectLoader {
         return new URLClassLoader(urls);
     }
 
-    // TODO: Can there be duplicate paths in this list? If there are, we may end up reading from disk multiple times
     // sources and imports can contain directories or files, relative or absolute
     private static List<Path> collectAllSmithyPaths(Path root, List<String> sources, List<String> imports) {
         List<Path> paths = new ArrayList<>();

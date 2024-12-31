@@ -49,10 +49,16 @@ public final class ServerState implements ManagedFiles {
         this.lifecycleManager = new DocumentLifecycleManager();
     }
 
+    /**
+     * @return All projects tracked by the server.
+     */
     public Collection<Project> getAllProjects() {
         return projects.values();
     }
 
+    /**
+     * @return All files managed by the server, including their projects.
+     */
     public Collection<ProjectAndFile> getAllManaged() {
         List<ProjectAndFile> allManaged = new ArrayList<>(managedUris.size());
         for (String uri : managedUris) {
@@ -61,16 +67,11 @@ public final class ServerState implements ManagedFiles {
         return allManaged;
     }
 
+    /**
+     * @return All workspace paths tracked by the server.
+     */
     public Set<Path> workspacePaths() {
         return workspacePaths;
-    }
-
-    public DocumentLifecycleManager lifecycleManager() {
-        return lifecycleManager;
-    }
-
-    public Project findProjectByRoot(String root) {
-        return projects.get(root);
     }
 
     @Override
@@ -83,6 +84,14 @@ public final class ServerState implements ManagedFiles {
         }
 
         return null;
+    }
+
+    DocumentLifecycleManager lifecycleManager() {
+        return lifecycleManager;
+    }
+
+    Project findProjectByRoot(String root) {
+        return projects.get(root);
     }
 
     ProjectAndFile findProjectAndFile(String uri) {
