@@ -37,7 +37,7 @@ public final class ServerState implements ManagedFiles {
     private final Map<String, Project> projects;
     private final Set<Path> workspacePaths;
     private final Set<String> managedUris;
-    private final DocumentLifecycleManager lifecycleManager;
+    private final FileTasks lifecycleTasks;
 
     /**
      * Create a new, empty server state.
@@ -46,7 +46,7 @@ public final class ServerState implements ManagedFiles {
         this.projects = new HashMap<>();
         this.workspacePaths = new HashSet<>();
         this.managedUris = new HashSet<>();
-        this.lifecycleManager = new DocumentLifecycleManager();
+        this.lifecycleTasks = new FileTasks();
     }
 
     /**
@@ -86,8 +86,8 @@ public final class ServerState implements ManagedFiles {
         return null;
     }
 
-    DocumentLifecycleManager lifecycleManager() {
-        return lifecycleManager;
+    FileTasks lifecycleTasks() {
+        return lifecycleTasks;
     }
 
     Project findProjectByRoot(String root) {
@@ -136,14 +136,14 @@ public final class ServerState implements ManagedFiles {
         ProjectAndFile projectAndFile = findProjectAndFile(uri);
         if (projectAndFile != null && projectAndFile.project().type() == Project.Type.DETACHED) {
             // Only cancel tasks for detached projects, since we're dropping the project
-            lifecycleManager.cancelTask(uri);
+            lifecycleTasks.cancelTask(uri);
             projects.remove(uri);
         }
     }
 
     List<Exception> tryInitProject(Path root) {
         LOGGER.finest("Initializing project at " + root);
-        lifecycleManager.cancelAllTasks();
+        lifecycleTasks.cancelAllTasks();
 
         Result<Project, List<Exception>> loadResult = ProjectLoader.load(root, this);
         String projectName = root.toString();

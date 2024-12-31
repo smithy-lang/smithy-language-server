@@ -430,7 +430,7 @@ public class SmithyLanguageServer implements
 
         String uri = params.getTextDocument().getUri();
 
-        state.lifecycleManager().cancelTask(uri);
+        state.lifecycleTasks().cancelTask(uri);
 
         ProjectAndFile projectAndFile = state.findManaged(uri);
         if (projectAndFile == null) {
@@ -462,7 +462,7 @@ public class SmithyLanguageServer implements
             CompletableFuture<Void> future = CompletableFuture
                     .runAsync(() -> project.updateModelWithoutValidating(uri))
                     .thenComposeAsync(unused -> sendFileDiagnostics(projectAndFile));
-            state.lifecycleManager().putTask(uri, future);
+            state.lifecycleTasks().putTask(uri, future);
         }
     }
 
@@ -472,11 +472,11 @@ public class SmithyLanguageServer implements
 
         String uri = params.getTextDocument().getUri();
 
-        state.lifecycleManager().cancelTask(uri);
+        state.lifecycleTasks().cancelTask(uri);
 
         ProjectAndFile projectAndFile = state.open(uri, params.getTextDocument().getText());
 
-        state.lifecycleManager().putTask(uri, sendFileDiagnostics(projectAndFile));
+        state.lifecycleTasks().putTask(uri, sendFileDiagnostics(projectAndFile));
     }
 
     @Override
@@ -492,7 +492,7 @@ public class SmithyLanguageServer implements
         LOGGER.finest("DidSave");
 
         String uri = params.getTextDocument().getUri();
-        state.lifecycleManager().cancelTask(uri);
+        state.lifecycleTasks().cancelTask(uri);
 
         ProjectAndFile projectAndFile = state.findManaged(uri);
         if (projectAndFile == null) {
@@ -513,7 +513,7 @@ public class SmithyLanguageServer implements
             CompletableFuture<Void> future = CompletableFuture
                     .runAsync(() -> project.updateAndValidateModel(uri))
                     .thenCompose(unused -> sendFileDiagnostics(projectAndFile));
-            state.lifecycleManager().putTask(uri, future);
+            state.lifecycleTasks().putTask(uri, future);
         }
     }
 
@@ -644,7 +644,7 @@ public class SmithyLanguageServer implements
 
     private void sendFileDiagnosticsForManagedDocuments() {
         for (ProjectAndFile managed : state.getAllManaged()) {
-            state.lifecycleManager().putOrComposeTask(managed.uri(), sendFileDiagnostics(managed));
+            state.lifecycleTasks().putOrComposeTask(managed.uri(), sendFileDiagnostics(managed));
         }
     }
 

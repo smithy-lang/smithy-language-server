@@ -11,10 +11,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 /**
- * Tracks asynchronous lifecycle tasks, allowing for cancellation of an ongoing
+ * Container for tracking asynchronous tasks by file, allowing for cancellation of an ongoing
  * task if a new task needs to be started.
  */
-final class DocumentLifecycleManager {
+final class FileTasks {
     private final Map<String, CompletableFuture<Void>> tasks = new HashMap<>();
 
     CompletableFuture<Void> getTask(String uri) {
