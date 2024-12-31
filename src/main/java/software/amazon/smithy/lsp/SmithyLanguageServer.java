@@ -375,7 +375,7 @@ public class SmithyLanguageServer implements
         for (Project project : state.getAllProjects()) {
             openProjects.add(new OpenProject(
                     LspAdapter.toUri(project.root().toString()),
-                    project.smithyFiles().keySet().stream()
+                    project.getAllSmithyFilePaths().stream()
                             .map(LspAdapter::toUri)
                             .toList(),
                     project.type() == Project.Type.DETACHED));

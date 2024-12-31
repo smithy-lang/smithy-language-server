@@ -95,10 +95,8 @@ public final class ServerState implements ManagedFiles {
     }
 
     ProjectAndFile findProjectAndFile(String uri) {
-        String path = LspAdapter.toPath(uri);
-
         for (Project project : projects.values()) {
-            ProjectFile projectFile = project.getProjectFile(path);
+            ProjectFile projectFile = project.getProjectFile(uri);
             if (projectFile != null) {
                 return new ProjectAndFile(uri, project, projectFile);
             }
@@ -150,8 +148,7 @@ public final class ServerState implements ManagedFiles {
         if (loadResult.isOk()) {
             Project updatedProject = loadResult.unwrap();
 
-            // If the project didn't load any config files, it is now empty and should be removed
-            if (updatedProject.config().buildFiles().isEmpty()) {
+            if (updatedProject.type() == Project.Type.EMPTY) {
                 removeProjectAndResolveDetached(projectName);
             } else {
                 resolveDetachedProjects(projects.get(projectName), updatedProject);
@@ -250,8 +247,8 @@ public final class ServerState implements ManagedFiles {
         // This is a project reload, so we need to resolve any added/removed files
         // that need to be moved to or from detachedProjects projects.
         if (oldProject != null) {
-            Set<String> currentProjectSmithyPaths = oldProject.smithyFiles().keySet();
-            Set<String> updatedProjectSmithyPaths = updatedProject.smithyFiles().keySet();
+            Set<String> currentProjectSmithyPaths = oldProject.getAllSmithyFilePaths();
+            Set<String> updatedProjectSmithyPaths = updatedProject.getAllSmithyFilePaths();
 
             Set<String> addedPaths = new HashSet<>(updatedProjectSmithyPaths);
             addedPaths.removeAll(currentProjectSmithyPaths);
@@ -264,9 +261,9 @@ public final class ServerState implements ManagedFiles {
             removedPaths.removeAll(updatedProjectSmithyPaths);
             for (String removedPath : removedPaths) {
                 String removedUri = LspAdapter.toUri(removedPath);
-                // Only move to a detachedProjects project if the file is managed
+                // Only move to a detached project if the file is managed
                 if (managedUris.contains(removedUri)) {
-                    Document removedDocument = oldProject.getDocument(removedUri);
+                    Document removedDocument = oldProject.getProjectFile(removedUri).document();
                     createDetachedProject(removedUri, removedDocument.copyText());
                 }
             }

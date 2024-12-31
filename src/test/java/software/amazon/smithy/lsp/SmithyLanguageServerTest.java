@@ -966,7 +966,7 @@ public class SmithyLanguageServerTest {
         assertThat(projectAndFile, notNullValue());
         assertThat(projectAndFile.project().modelResult().isBroken(), is(true));
         assertThat(projectAndFile.project().modelResult().getResult().isPresent(), is(true));
-        assertThat(projectAndFile.project().smithyFiles().keySet(), hasItem(endsWith(filename)));
+        assertThat(projectAndFile.project().getAllSmithyFilePaths(), hasItem(endsWith(filename)));
 
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
@@ -984,7 +984,7 @@ public class SmithyLanguageServerTest {
         assertThat(projectAndFile1, notNullValue());
         assertThat(projectAndFile1.project().modelResult().isBroken(), is(false));
         assertThat(projectAndFile1.project().modelResult().getResult().isPresent(), is(true));
-        assertThat(projectAndFile1.project().smithyFiles().keySet(), hasItem(endsWith(filename)));
+        assertThat(projectAndFile1.project().getAllSmithyFilePaths(), hasItem(endsWith(filename)));
         assertThat(projectAndFile1.project().modelResult().unwrap(), hasShapeWithId("com.foo#Foo"));
     }
 
@@ -1199,8 +1199,8 @@ public class SmithyLanguageServerTest {
         assertThat(projectFoo, notNullValue());
         assertThat(projectBar, notNullValue());
 
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("foo.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("bar.smithy")));
+        assertThat(projectFoo.getAllSmithyFilePaths(), hasItem(endsWith("foo.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("bar.smithy")));
 
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
         assertThat(projectBar.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.bar#Bar")));
@@ -1332,9 +1332,9 @@ public class SmithyLanguageServerTest {
         Project projectFoo = server.getState().findProjectByRoot(workspaceFoo.getName());
         Project projectBar = server.getState().findProjectByRoot(workspaceBar.getName());
 
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("other.smithy")));
+        assertThat(projectFoo.getAllSmithyFilePaths(), hasItem(endsWith("main.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("main.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("other.smithy")));
 
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Bar")));
@@ -1419,9 +1419,9 @@ public class SmithyLanguageServerTest {
         Project projectFoo = server.getState().findProjectByRoot(workspaceFoo.getName());
         Project projectBar = server.getState().findProjectByRoot(workspaceBar.getName());
 
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("other.smithy")));
+        assertThat(projectFoo.getAllSmithyFilePaths(), hasItem(endsWith("main.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("main.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("other.smithy")));
 
         assertThat(projectFoo.modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
         assertThat(projectBar.modelResult(), hasValue(hasShapeWithId("com.bar#Bar")));
@@ -1475,8 +1475,8 @@ public class SmithyLanguageServerTest {
         Project projectFoo = server.getState().findProjectByRoot(workspaceFoo.getName());
         Project projectBar = server.getState().findProjectByRoot(workspaceBar.getName());
 
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("foo.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("bar.smithy")));
+        assertThat(projectFoo.getAllSmithyFilePaths(), hasItem(endsWith("foo.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("bar.smithy")));
 
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
         assertThat(projectBar.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.bar#Bar")));
@@ -1528,8 +1528,8 @@ public class SmithyLanguageServerTest {
         Project projectFoo = server.getState().findProjectByRoot(workspaceFoo.getName());
         Project projectBar = server.getState().findProjectByRoot(barUri);
 
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("foo.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("bar.smithy")));
+        assertThat(projectFoo.getAllSmithyFilePaths(), hasItem(endsWith("foo.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("bar.smithy")));
 
         assertThat(projectFoo.modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
         assertThat(projectBar.modelResult(), hasValue(hasShapeWithId("com.bar#Bar")));

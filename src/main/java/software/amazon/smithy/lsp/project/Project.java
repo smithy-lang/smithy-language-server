@@ -7,6 +7,7 @@ package software.amazon.smithy.lsp.project;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -147,18 +148,17 @@ public final class Project {
     }
 
     /**
-     * @return A map of paths to the {@link SmithyFile} at that path, containing
-     *  all smithy files loaded in the project.
+     * @return The paths of all Smithy files loaded in the project.
      */
-    public Map<String, SmithyFile> smithyFiles() {
-        return this.smithyFiles;
+    public Set<String> getAllSmithyFilePaths() {
+        return this.smithyFiles.keySet();
     }
 
     /**
-     * @return A map of paths to the set of shape ids defined in the file at that path.
+     * @return All the Smithy files loaded in the project.
      */
-    public Map<String, Set<ToShapeId>> definedShapesByFile() {
-        return this.rebuildIndex.filesToDefinedShapes();
+    public Collection<SmithyFile> getAllSmithyFiles() {
+        return this.smithyFiles.values();
     }
 
     public Type type() {
@@ -173,41 +173,18 @@ public final class Project {
     }
 
     /**
-     * @param uri The URI of the {@link Document} to get
-     * @return The {@link Document} corresponding to the given {@code uri} if
-     *  it exists in this project, otherwise {@code null}
-     */
-    public Document getDocument(String uri) {
-        String path = LspAdapter.toPath(uri);
-        ProjectFile projectFile = getProjectFile(path);
-        if (projectFile == null) {
-            return null;
-        }
-        return projectFile.document();
-    }
-
-    /**
-     * @param path The path of the {@link ProjectFile} to get
+     * @param uri The uri of the {@link ProjectFile} to get
      * @return The {@link ProjectFile} corresponding to {@code path} if
      *  it exists in this project, otherwise {@code null}.
      */
-    public ProjectFile getProjectFile(String path) {
+    public ProjectFile getProjectFile(String uri) {
+        String path = LspAdapter.toPath(uri);
         SmithyFile smithyFile = smithyFiles.get(path);
         if (smithyFile != null) {
             return smithyFile;
         }
 
         return config.buildFiles().get(path);
-    }
-
-    /**
-     * @param uri The URI of the {@link SmithyFile} to get
-     * @return The {@link SmithyFile} corresponding to the given {@code uri} if
-     *  it exists in this project, otherwise {@code null}
-     */
-    public SmithyFile getSmithyFile(String uri) {
-        String path = LspAdapter.toPath(uri);
-        return smithyFiles.get(path);
     }
 
     /**

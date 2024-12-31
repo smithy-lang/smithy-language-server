@@ -32,6 +32,7 @@ import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectLoader;
+import software.amazon.smithy.lsp.project.SmithyFile;
 
 public class CompletionHandlerTest {
     @Test
@@ -1087,7 +1088,7 @@ public class CompletionHandlerTest {
         TestWorkspace workspace = TestWorkspace.singleModel(text);
         Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
         String uri = workspace.getUri("main.smithy");
-        IdlFile smithyFile = (IdlFile) project.getSmithyFile(uri);
+        IdlFile smithyFile = (IdlFile) (SmithyFile) project.getProjectFile(uri);
 
         List<CompletionItem> completionItems = new ArrayList<>();
         CompletionHandler handler = new CompletionHandler(project, smithyFile);

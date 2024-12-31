@@ -116,6 +116,10 @@ public final class ProjectLoader {
         }
         ProjectConfig config = configResult.unwrap();
 
+        if (config.buildFiles().isEmpty()) {
+            return Result.ok(Project.empty(root));
+        }
+
         Result<List<Path>, Exception> resolveResult = ProjectDependencyResolver.resolveDependencies(root, config);
         if (resolveResult.isErr()) {
             return Result.err(Collections.singletonList(resolveResult.unwrapErr()));

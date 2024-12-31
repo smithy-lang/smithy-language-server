@@ -91,7 +91,7 @@ record SimpleCompleter(CompleterContext context) {
     }
 
     private Stream<String> streamNamespaces() {
-        return context().project().smithyFiles().values().stream()
+        return context().project().getAllSmithyFiles().stream()
                 .map(smithyFile -> switch (smithyFile) {
                     case IdlFile idlFile -> idlFile.getParse().namespace().namespace();
                     default -> "";
