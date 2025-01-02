@@ -478,10 +478,18 @@ public final class Document {
             type = DocumentId.Type.ID;
         }
 
-        int actualStartIdx = startIdx + 1; // because we go past the actual start in the loop
-        CharBuffer wrapped = CharBuffer.wrap(buffer, actualStartIdx, endIdx); // endIdx here is non-inclusive
-        Position start = positionAtIndex(actualStartIdx);
-        Position end = positionAtIndex(endIdx - 1); // because we go pas the actual end in the loop
+        // We go past the start and end in each loop, so startIdx is before the start character, and endIdx
+        // is after the end character.
+        int startCharIdx = startIdx + 1;
+        int endCharIdx = endIdx - 1;
+
+        // For creating the buffer and the range, the start is inclusive, and the end is exclusive.
+        CharBuffer wrapped = CharBuffer.wrap(buffer, startCharIdx, endCharIdx + 1);
+        Position start = positionAtIndex(startCharIdx);
+        // However, we can't get the position for an index that may be out of bounds, so we need to make
+        // the end position exclusive manually.
+        Position end = positionAtIndex(endCharIdx);
+        end.setCharacter(end.getCharacter() + 1);
         Range range = new Range(start, end);
         return new DocumentId(type, wrapped, range);
     }

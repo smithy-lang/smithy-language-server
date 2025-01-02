@@ -500,6 +500,16 @@ public class CompletionHandlerTest {
     }
 
     @Test
+    public void replacementTextHasCorrectRange() {
+        TextWithPositions text = TextWithPositions.from("strin%");
+
+        var comps = getCompItems(text.text(), text.positions());
+        var edits = comps.stream().map(item -> item.getTextEdit().getLeft()).toList();
+
+        assertThat(edits, LspMatchers.togetherMakeEditedDocument(Document.of(text.text()), "string"));
+    }
+
+    @Test
     public void completesNamespace() {
         TextWithPositions text = TextWithPositions.from("""
                 namespace com.foo%""");
