@@ -238,6 +238,7 @@ public final class CompletionHandler {
             DocumentId id
     ) {
         CompletionItem completionItem = new CompletionItem(label);
+        completionItem.setDetail(shapeId.toString());
         completionItem.setKind(CompletionItemKind.Class);
         TextEdit textEdit = new TextEdit(id.range(), label);
         completionItem.setTextEdit(Either.forLeft(textEdit));

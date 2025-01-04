@@ -1,6 +1,7 @@
 package software.amazon.smithy.lsp;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -19,6 +20,7 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static software.amazon.smithy.lsp.LspMatchers.diagnosticWithMessage;
+import static software.amazon.smithy.lsp.LspMatchers.hasDetail;
 import static software.amazon.smithy.lsp.LspMatchers.hasLabel;
 import static software.amazon.smithy.lsp.LspMatchers.hasText;
 import static software.amazon.smithy.lsp.LspMatchers.makesEditedDocument;
@@ -137,8 +139,8 @@ public class SmithyLanguageServerTest {
         List<CompletionItem> traitCompletions = server.completion(traitParams).get().getLeft();
         List<CompletionItem> wsCompletions = server.completion(wsParams).get().getLeft();
 
-        assertThat(memberTargetCompletions, containsInAnyOrder(hasLabel("String")));
-        assertThat(traitCompletions, containsInAnyOrder(hasLabel("default")));
+        assertThat(memberTargetCompletions, containsInAnyOrder(allOf(hasLabel("String"), hasDetail("smithy.api#String"))));
+        assertThat(traitCompletions, containsInAnyOrder(allOf(hasLabel("default"), hasDetail("smithy.api#default"))));
         assertThat(wsCompletions, empty());
     }
 
@@ -189,7 +191,7 @@ public class SmithyLanguageServerTest {
                 .buildCompletion();
         List<CompletionItem> completions = server.completion(completionParams).get().getLeft();
 
-        assertThat(completions, containsInAnyOrder(hasLabel("Bar")));
+        assertThat(completions, containsInAnyOrder(allOf(hasLabel("Bar"), hasDetail("com.bar#Bar"))));
 
         Document document = server.getFirstProject().getDocument(uri);
         // TODO: The server puts the 'use' on the wrong line
@@ -491,7 +493,7 @@ public class SmithyLanguageServerTest {
                 .buildCompletion();
         List<CompletionItem> completions = server.completion(completionParams).get().getLeft();
 
-        assertThat(completions, hasItem(hasLabel("GetFooInput")));
+        assertThat(completions, hasItem(allOf(hasLabel("GetFooInput"), hasDetail("com.foo#GetFooInput"))));
     }
 
     @Test
@@ -715,7 +717,7 @@ public class SmithyLanguageServerTest {
 
         List<CompletionItem> completions = server.completion(completionParams).get().getLeft();
 
-         assertThat(completions, containsInAnyOrder(hasLabel("Foo")));
+         assertThat(completions, containsInAnyOrder(allOf(hasLabel("Foo"), hasDetail("com.foo#Foo"))));
     }
 
     @Test
@@ -775,7 +777,7 @@ public class SmithyLanguageServerTest {
 
         List<CompletionItem> completions = server.completion(completionParams).get().getLeft();
 
-        assertThat(completions, containsInAnyOrder(hasLabel("Foo")));
+        assertThat(completions, containsInAnyOrder(allOf(hasLabel("Foo"), hasDetail("com.foo#Foo"))));
     }
 
     @Test
@@ -807,7 +809,7 @@ public class SmithyLanguageServerTest {
         String model = safeString("""
                 $version: "2"
                 namespace com.foo
-                
+
                 structure Foo {
                     abc
                 }
@@ -836,7 +838,7 @@ public class SmithyLanguageServerTest {
         String model = safeString("""
                 $version: "2"
                 namespace com.foo
-                
+
                 use mything#SomeUnknownThing
                 """);
         TestWorkspace workspace = TestWorkspace.singleModel(model);
@@ -1768,9 +1770,9 @@ public class SmithyLanguageServerTest {
         List<CompletionItem> traitCompletions = server.completion(trait.buildCompletion()).get().getLeft();
         List<CompletionItem> memberTargetCompletions = server.completion(memberTarget.buildCompletion()).get().getLeft();
 
-        assertThat(useTargetCompletions, containsInAnyOrder(hasLabel("com.bar#Bar2"))); // won't match 'Bar' because its already imported
-        assertThat(traitCompletions, containsInAnyOrder(hasLabel("com.bar#baz")));
-        assertThat(memberTargetCompletions, containsInAnyOrder(hasLabel("com.bar#Bar"), hasLabel("com.bar#Bar2")));
+        assertThat(useTargetCompletions, containsInAnyOrder(allOf(hasLabel("com.bar#Bar2"), hasDetail("com.bar#Bar2")))); // won't match 'Bar' because its already imported
+        assertThat(traitCompletions, containsInAnyOrder(allOf(hasLabel("com.bar#baz"), hasDetail("com.bar#baz"))));
+        assertThat(memberTargetCompletions, containsInAnyOrder(hasLabel("com.bar#Bar"), hasDetail("com.bar#Bar2")));
 
         List<? extends Location> useTargetLocations = server.definition(useTarget.buildDefinition()).get().getLeft();
         List<? extends Location> traitLocations = server.definition(trait.buildDefinition()).get().getLeft();
@@ -1832,7 +1834,7 @@ public class SmithyLanguageServerTest {
                 .get()
                 .getLeft();
 
-        assertThat(completions, containsInAnyOrder(hasLabel("com.bar#Bar")));
+        assertThat(completions, containsInAnyOrder(allOf(hasLabel("com.bar#Bar"), hasDetail("com.bar#Bar"))));
         assertThat(completions.get(0).getAdditionalTextEdits(), nullValue());
     }
 
@@ -1990,7 +1992,7 @@ public class SmithyLanguageServerTest {
         server.didChange(RequestBuilders.didChange()
                 .uri(fooUri)
                 .text("""
-                        
+
                         structure Bar {}""")
                 .range(LspAdapter.point(3, 0))
                 .build());

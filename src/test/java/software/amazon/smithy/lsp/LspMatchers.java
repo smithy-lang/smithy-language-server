@@ -35,6 +35,21 @@ public final class LspMatchers {
         };
     }
 
+    public static Matcher<CompletionItem> hasDetail(String detail) {
+        return new CustomTypeSafeMatcher<>("a completion item with the detail + `" + detail + "`") {
+            @Override
+            protected boolean matchesSafely(CompletionItem item) {
+                return item.getDetail().equals(detail);
+            }
+
+            @Override
+            public void describeMismatchSafely(CompletionItem item, Description description) {
+                description.appendText("Expected completion item with detail '"
+                                       + detail + "' but was '" + item.getDetail() + "'");
+            }
+        };
+    }
+
     public static Matcher<TextEdit> makesEditedDocument(Document document, String expected) {
         return new CustomTypeSafeMatcher<>("makes an edited document " + expected) {
             @Override
