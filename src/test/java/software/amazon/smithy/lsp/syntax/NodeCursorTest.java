@@ -12,7 +12,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.lsp.document.Document;
 
-public class SyntaxSearchTest {
+public class NodeCursorTest {
     @Test
     public void findsNodeCursor() {
         String text = safeString("""
