@@ -114,6 +114,7 @@ import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectAndFile;
 import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
+import software.amazon.smithy.lsp.util.ServerOptions;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.loader.IdlTokenizer;
 import software.amazon.smithy.model.selector.Selector;
@@ -148,9 +149,8 @@ public class SmithyLanguageServer implements
 
     private SmithyLanguageClient client;
     private final ServerState state = new ServerState();
-    private Severity minimumSeverity = Severity.WARNING;
-    private boolean onlyReloadOnSave = false;
     private ClientCapabilities clientCapabilities;
+    private ServerOptions serverOptions;
 
     SmithyLanguageServer() {
     }
@@ -186,25 +186,11 @@ public class SmithyLanguageServer implements
                 .flatMap(ProcessHandle::of)
                 .ifPresent(processHandle -> processHandle.onExit().thenRun(this::exit));
 
-        // TODO: Replace with a Gson Type Adapter if more config options are added beyond `logToFile`.
         Object initializationOptions = params.getInitializationOptions();
-        if (initializationOptions instanceof JsonObject jsonObject) {
-            if (jsonObject.has("diagnostics.minimumSeverity")) {
-                String configuredMinimumSeverity = jsonObject.get("diagnostics.minimumSeverity").getAsString();
-                Optional<Severity> severity = Severity.fromString(configuredMinimumSeverity);
-                if (severity.isPresent()) {
-                    this.minimumSeverity = severity.get();
-                } else {
-                    client.error(String.format("""
-                            Invalid value for 'diagnostics.minimumSeverity': %s.
-                            Must be one of %s.""", configuredMinimumSeverity, Arrays.toString(Severity.values())));
-                }
-            }
-            if (jsonObject.has("onlyReloadOnSave")) {
-                this.onlyReloadOnSave = jsonObject.get("onlyReloadOnSave").getAsBoolean();
-                client.info("Configured only reload on save: " + this.onlyReloadOnSave);
-            }
-        }
+        // Alternate options code
+        this.serverOptions = ServerOptions.fromInitializeParams(initializationOptions, client);
+
+        // TODO: Replace with a Gson Type Adapter if more config options are added beyond `logToFile`.
 
         if (params.getWorkspaceFolders() != null && !params.getWorkspaceFolders().isEmpty()) {
             Either<String, Integer> workDoneProgressToken = params.getWorkDoneToken();
@@ -521,7 +507,7 @@ public class SmithyLanguageServer implements
             return;
         }
 
-        if (!onlyReloadOnSave) {
+        if (!this.serverOptions.getOnlyReloadOnSave()) {
             Project project = projectAndFile.project();
 
             // TODO: A consequence of this is that any existing validation events are cleared, which
@@ -732,7 +718,7 @@ public class SmithyLanguageServer implements
         Project project = projectAndFile.project();
 
         // TODO: Abstract away passing minimum severity
-        Hover hover = new HoverHandler(project, smithyFile).handle(params, minimumSeverity);
+        Hover hover = new HoverHandler(project, smithyFile).handle(params, this.serverOptions.getMinimumSeverity());
         return completedFuture(hover);
     }
 
@@ -805,7 +791,7 @@ public class SmithyLanguageServer implements
         String path = LspAdapter.toPath(uri);
 
         List<Diagnostic> diagnostics = project.modelResult().getValidationEvents().stream()
-                .filter(validationEvent -> validationEvent.getSeverity().compareTo(minimumSeverity) >= 0)
+                .filter(validationEvent -> validationEvent.getSeverity().compareTo(this.serverOptions.getMinimumSeverity()) >= 0)
                 .filter(validationEvent -> validationEvent.getSourceLocation().getFilename().equals(path))
                 .map(validationEvent -> toDiagnostic(validationEvent, smithyFile))
                 .collect(Collectors.toCollection(ArrayList::new));
