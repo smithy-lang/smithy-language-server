@@ -17,11 +17,9 @@ package software.amazon.smithy.lsp;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
 
-import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -791,7 +789,8 @@ public class SmithyLanguageServer implements
         String path = LspAdapter.toPath(uri);
 
         List<Diagnostic> diagnostics = project.modelResult().getValidationEvents().stream()
-                .filter(validationEvent -> validationEvent.getSeverity().compareTo(this.serverOptions.getMinimumSeverity()) >= 0)
+                .filter(validationEvent -> validationEvent.getSeverity().compareTo(
+                        this.serverOptions.getMinimumSeverity()) >= 0)
                 .filter(validationEvent -> validationEvent.getSourceLocation().getFilename().equals(path))
                 .map(validationEvent -> toDiagnostic(validationEvent, smithyFile))
                 .collect(Collectors.toCollection(ArrayList::new));
