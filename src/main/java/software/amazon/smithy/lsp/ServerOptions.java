@@ -13,13 +13,12 @@
  * permissions and limitations under the License.
  */
 
-package software.amazon.smithy.lsp.util;
+package software.amazon.smithy.lsp;
 
 //import javax.print.attribute.standard.Severity;
 import com.google.gson.JsonObject;
 import java.util.Arrays;
 import java.util.Optional;
-import software.amazon.smithy.lsp.SmithyLanguageClient;
 import software.amazon.smithy.model.validation.Severity;
 
 public final class ServerOptions {

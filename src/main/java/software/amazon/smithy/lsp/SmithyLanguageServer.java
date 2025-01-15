@@ -112,7 +112,6 @@ import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectAndFile;
 import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
-import software.amazon.smithy.lsp.util.ServerOptions;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.loader.IdlTokenizer;
 import software.amazon.smithy.model.selector.Selector;
