@@ -41,27 +41,8 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
-import org.eclipse.lsp4j.CompletionItem;
-import org.eclipse.lsp4j.CompletionParams;
-import org.eclipse.lsp4j.DefinitionParams;
-import org.eclipse.lsp4j.Diagnostic;
-import org.eclipse.lsp4j.DidChangeTextDocumentParams;
-import org.eclipse.lsp4j.DidOpenTextDocumentParams;
-import org.eclipse.lsp4j.DidSaveTextDocumentParams;
-import org.eclipse.lsp4j.DocumentFormattingParams;
-import org.eclipse.lsp4j.DocumentSymbol;
-import org.eclipse.lsp4j.DocumentSymbolParams;
-import org.eclipse.lsp4j.FileChangeType;
-import org.eclipse.lsp4j.FormattingOptions;
-import org.eclipse.lsp4j.Hover;
-import org.eclipse.lsp4j.HoverParams;
-import org.eclipse.lsp4j.Location;
-import org.eclipse.lsp4j.Position;
-import org.eclipse.lsp4j.PublishDiagnosticsParams;
-import org.eclipse.lsp4j.Range;
-import org.eclipse.lsp4j.SymbolInformation;
-import org.eclipse.lsp4j.TextDocumentIdentifier;
-import org.eclipse.lsp4j.TextEdit;
+
+import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.junit.jupiter.api.Test;
@@ -2576,11 +2557,17 @@ public class SmithyLanguageServerTest {
     @Test
     public void testFromInitializeParamsWithValidOptions() {
         StubClient client = new StubClient();
+        // Create initialization options
         JsonObject opts = new JsonObject();
         opts.add("diagnostics.minimumSeverity", new JsonPrimitive("ERROR"));
         opts.add("onlyReloadOnSave", new JsonPrimitive(true));
 
-        ServerOptions options = ServerOptions.fromInitializeParams(opts, new SmithyLanguageClient(client));
+        // Create InitializeParams with the options
+        InitializeParams params = new InitializeParams();
+        params.setInitializationOptions(opts);
+
+        // Call the method being tested
+        ServerOptions options = ServerOptions.fromInitializeParams(params, new SmithyLanguageClient(client));
 
         assertThat(options.getMinimumSeverity(), equalTo(Severity.ERROR));
         assertThat(options.getOnlyReloadOnSave(), equalTo(true));
@@ -2593,7 +2580,11 @@ public class SmithyLanguageServerTest {
         opts.add("onlyReloadOnSave", new JsonPrimitive(true));
         // Not setting minimumSeverity
 
-        ServerOptions options = ServerOptions.fromInitializeParams(opts, new SmithyLanguageClient(client));
+        // Create InitializeParams with the options
+        InitializeParams params = new InitializeParams();
+        params.setInitializationOptions(opts);
+
+        ServerOptions options = ServerOptions.fromInitializeParams(params, new SmithyLanguageClient(client));
 
         assertThat(options.getMinimumSeverity(), equalTo(Severity.WARNING)); // Default value
         assertThat(options.getOnlyReloadOnSave(), equalTo(true)); // Explicitly set value

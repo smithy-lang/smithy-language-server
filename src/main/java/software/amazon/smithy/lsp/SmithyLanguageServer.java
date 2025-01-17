@@ -183,10 +183,7 @@ public class SmithyLanguageServer implements
                 .flatMap(ProcessHandle::of)
                 .ifPresent(processHandle -> processHandle.onExit().thenRun(this::exit));
 
-        Object initializationOptions = params.getInitializationOptions();
-        // Alternate options code
-        this.serverOptions = ServerOptions.fromInitializeParams(initializationOptions, client);
-
+        this.serverOptions = ServerOptions.fromInitializeParams(params, client);
         // TODO: Replace with a Gson Type Adapter if more config options are added beyond `logToFile`.
 
         if (params.getWorkspaceFolders() != null && !params.getWorkspaceFolders().isEmpty()) {

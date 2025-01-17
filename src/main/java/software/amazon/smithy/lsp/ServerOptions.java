@@ -1,29 +1,19 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License").
- * You may not use this file except in compliance with the License.
- * A copy of the License is located at
- *
- *  http://aws.amazon.com/apache2.0
- *
- * or in the "license" file accompanying this file. This file is distributed
- * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
- * express or implied. See the License for the specific language governing
- * permissions and limitations under the License.
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package software.amazon.smithy.lsp;
 
-//import javax.print.attribute.standard.Severity;
 import com.google.gson.JsonObject;
 import java.util.Arrays;
 import java.util.Optional;
+import org.eclipse.lsp4j.InitializeParams;
 import software.amazon.smithy.model.validation.Severity;
 
 public final class ServerOptions {
-    private Severity minimumSeverity = Severity.WARNING;
-    private boolean onlyReloadOnSave = false;
+    private final Severity minimumSeverity;
+    private final boolean onlyReloadOnSave;
 
     private ServerOptions(Builder builder) {
         this.minimumSeverity = builder.minimumSeverity;
@@ -34,7 +24,7 @@ public final class ServerOptions {
         return this.minimumSeverity;
     }
 
-    public Boolean getOnlyReloadOnSave() {
+    public boolean getOnlyReloadOnSave() {
         return this.onlyReloadOnSave;
     }
 
@@ -42,17 +32,18 @@ public final class ServerOptions {
         return new Builder();
     }
 
-/**
- * Creates a ServerOptions instance from the initialization options provided by the client.
- * Parses and validates configuration settings from the initialization parameters.
- *
- * @param initializationOptions The raw initialization options object from the client,
- *                             expected to be a JsonObject containing server configurations
- * @param client The language client used for logging configuration status and errors
- * @return A new {@code ServerOptions} instance with parsed configuration values
- **/
-    public static ServerOptions fromInitializeParams(Object initializationOptions, SmithyLanguageClient client) {
+    /**
+     * Creates a ServerOptions instance from the initialization options provided by the client.
+     * Parses and validates configuration settings from the initialization parameters.
+     *
+     * @param params The params passed directly from the client,
+     *                             expected to be an InitializeParams object containing server configurations
+     * @param client The language client used for logging configuration status and errors
+     * @return A new {@code ServerOptions} instance with parsed configuration values
+     **/
+    public static ServerOptions fromInitializeParams(InitializeParams params, SmithyLanguageClient client) {
         // from InitializeParams
+        Object initializationOptions = params.getInitializationOptions();
         Builder builder = builder();
         if (initializationOptions instanceof JsonObject jsonObject) {
             if (jsonObject.has("diagnostics.minimumSeverity")) {
@@ -74,7 +65,7 @@ public final class ServerOptions {
         return builder.build();
     }
 
-    public static class Builder {
+    protected static final class Builder {
         private Severity minimumSeverity = Severity.WARNING;
         private boolean onlyReloadOnSave = false;
 
