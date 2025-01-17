@@ -9,8 +9,10 @@ package software.amazon.smithy.lsp.project;
  * Simple wrapper for a project and a file in that project, which many
  * server functions act upon.
  *
+ * @param uri The uri of the file
  * @param project The project, non-nullable
  * @param file The file within {@code project}, non-nullable
+ * @param isDetached Whether the project and file represent a detached project
  */
-public record ProjectAndFile(Project project, ProjectFile file) {
+public record ProjectAndFile(String uri, Project project, ProjectFile file, boolean isDetached) {
 }

@@ -5,17 +5,28 @@
 
 package software.amazon.smithy.lsp.diagnostics;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticCodeDescription;
 import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
-import software.amazon.smithy.lsp.document.DocumentVersion;
+import software.amazon.smithy.lsp.document.DocumentParser;
+import software.amazon.smithy.lsp.project.IdlFile;
+import software.amazon.smithy.lsp.project.Project;
+import software.amazon.smithy.lsp.project.ProjectAndFile;
 import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
+import software.amazon.smithy.lsp.syntax.StatementView;
+import software.amazon.smithy.lsp.syntax.Syntax;
+import software.amazon.smithy.model.validation.Severity;
+import software.amazon.smithy.model.validation.ValidationEvent;
 
 /**
- * Utility class for creating different kinds of file diagnostics, that aren't
- * necessarily connected to model validation events.
+ * Creates diagnostics for Smithy files.
  */
 public final class SmithyDiagnostics {
     public static final String UPDATE_VERSION = "migrating-idl-1-to-2";
@@ -29,38 +40,65 @@ public final class SmithyDiagnostics {
     }
 
     /**
-     * Creates a diagnostic for when a $version control statement hasn't been defined,
-     * or when it has been defined for IDL 1.0.
-     *
-     * @param smithyFile The Smithy file to get a version diagnostic for
-     * @return The version diagnostic associated with the Smithy file, or null
-     *  if one doesn't exist
+     * @param projectAndFile Project and file to get diagnostics for
+     * @param minimumSeverity Minimum severity of validation events to diagnose
+     * @return A list of diagnostics for the given project and file
      */
-    public static Diagnostic versionDiagnostic(SmithyFile smithyFile) {
-        if (smithyFile.documentVersion().isPresent()) {
-            DocumentVersion documentVersion = smithyFile.documentVersion().get();
-            if (!documentVersion.version().startsWith("2")) {
-                Diagnostic diagnostic = createDiagnostic(
-                        documentVersion.range(), "You can upgrade to idl version 2.", UPDATE_VERSION);
-                diagnostic.setCodeDescription(UPDATE_VERSION_DESCRIPTION);
-                return diagnostic;
-            }
-        } else if (smithyFile.document() != null) {
+    public static List<Diagnostic> getFileDiagnostics(ProjectAndFile projectAndFile, Severity minimumSeverity) {
+        if (LspAdapter.isJarFile(projectAndFile.uri()) || LspAdapter.isSmithyJarFile(projectAndFile.uri())) {
+            // Don't send diagnostics to jar files since they can't be edited
+            // and diagnostics could be misleading.
+            return List.of();
+        }
+
+        if (!(projectAndFile.file() instanceof SmithyFile smithyFile)) {
+            return List.of();
+        }
+
+        Project project = projectAndFile.project();
+        String path = projectAndFile.file().path();
+
+        EventToDiagnostic eventToDiagnostic = eventToDiagnostic(smithyFile);
+
+        List<Diagnostic> diagnostics = project.modelResult().getValidationEvents().stream()
+                .filter(event -> event.getSeverity().compareTo(minimumSeverity) >= 0
+                                 && event.getSourceLocation().getFilename().equals(path))
+                .map(eventToDiagnostic::toDiagnostic)
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        Diagnostic versionDiagnostic = versionDiagnostic(smithyFile);
+        if (versionDiagnostic != null) {
+            diagnostics.add(versionDiagnostic);
+        }
+
+        if (projectAndFile.isDetached()) {
+            diagnostics.add(detachedDiagnostic(smithyFile));
+        }
+
+        return diagnostics;
+    }
+
+    private static Diagnostic versionDiagnostic(SmithyFile smithyFile) {
+        if (!(smithyFile instanceof IdlFile idlFile)) {
+            return null;
+        }
+
+         Syntax.IdlParseResult syntaxInfo = idlFile.getParse();
+        if (syntaxInfo.version().version().startsWith("2")) {
+            return null;
+        } else if (!LspAdapter.isEmpty(syntaxInfo.version().range())) {
+            var diagnostic = createDiagnostic(
+                    syntaxInfo.version().range(), "You can upgrade to idl version 2.", UPDATE_VERSION);
+            diagnostic.setCodeDescription(UPDATE_VERSION_DESCRIPTION);
+            return diagnostic;
+        } else {
             int end = smithyFile.document().lineEnd(0);
             Range range = LspAdapter.lineSpan(0, 0, end);
             return createDiagnostic(range, "You should define a version for your Smithy file", DEFINE_VERSION);
         }
-        return null;
     }
 
-    /**
-     * Creates a diagnostic for when a Smithy file is not connected to a
-     * Smithy project via smithy-build.json or other build file.
-     *
-     * @param smithyFile The Smithy file to get a detached diagnostic for
-     * @return The detached diagnostic associated with the Smithy file
-     */
-    public static Diagnostic detachedDiagnostic(SmithyFile smithyFile) {
+    private static Diagnostic detachedDiagnostic(SmithyFile smithyFile) {
         Range range;
         if (smithyFile.document() == null) {
             range = LspAdapter.origin();
@@ -74,5 +112,72 @@ public final class SmithyDiagnostics {
 
     private static Diagnostic createDiagnostic(Range range, String title, String code) {
         return new Diagnostic(range, title, DiagnosticSeverity.Warning, "smithy-language-server", code);
+    }
+
+    private static EventToDiagnostic eventToDiagnostic(SmithyFile smithyFile) {
+        if (!(smithyFile instanceof IdlFile idlFile)) {
+            return new Simple();
+        }
+
+        var idlParse = idlFile.getParse();
+        var view = StatementView.createAtStart(idlParse).orElse(null);
+        if (view == null) {
+            return new Simple();
+        } else {
+            var documentParser = DocumentParser.forStatements(smithyFile.document(), view.parseResult().statements());
+            return new Idl(view, documentParser);
+        }
+    }
+
+    private sealed interface EventToDiagnostic {
+        default Range getDiagnosticRange(ValidationEvent event) {
+            var start = LspAdapter.toPosition(event.getSourceLocation());
+            var end = LspAdapter.toPosition(event.getSourceLocation());
+            end.setCharacter(end.getCharacter() + 1); // Range is exclusive
+
+            return new Range(start, end);
+        }
+
+        default Diagnostic toDiagnostic(ValidationEvent event) {
+            var diagnosticSeverity = switch (event.getSeverity()) {
+                case ERROR, DANGER -> DiagnosticSeverity.Error;
+                case WARNING -> DiagnosticSeverity.Warning;
+                case NOTE -> DiagnosticSeverity.Information;
+                default -> DiagnosticSeverity.Hint;
+            };
+            var diagnosticRange = getDiagnosticRange(event);
+            var message = event.getId() + ": " + event.getMessage();
+            return new Diagnostic(diagnosticRange, message, diagnosticSeverity, "Smithy");
+        }
+    }
+
+    private record Simple() implements EventToDiagnostic {}
+
+    private record Idl(StatementView view, DocumentParser parser) implements EventToDiagnostic {
+        @Override
+        public Range getDiagnosticRange(ValidationEvent event) {
+            Position eventStart = LspAdapter.toPosition(event.getSourceLocation());
+            final Range defaultRange = EventToDiagnostic.super.getDiagnosticRange(event);
+
+            if (event.getShapeId().isPresent()) {
+                int eventStartIndex = parser.getDocument().indexOfPosition(eventStart);
+                Syntax.Statement statement = view.getStatementAt(eventStartIndex).orElse(null);
+
+                if (statement instanceof Syntax.Statement.MemberDef def
+                    && event.containsId("Target")
+                    && def.target() != null) {
+                    Range targetRange = LspAdapter.identRange(def.target(), parser.getDocument());
+                    return Objects.requireNonNullElse(targetRange, defaultRange);
+                } else if (statement instanceof Syntax.Statement.TraitApplication app) {
+                    Range traitIdRange = LspAdapter.identRange(app.id(), parser.getDocument());
+                    if (traitIdRange != null) {
+                        traitIdRange.getStart().setCharacter(traitIdRange.getStart().getCharacter() - 1); // include @
+                    }
+                    return Objects.requireNonNullElse(traitIdRange, defaultRange);
+                }
+            }
+
+            return Objects.requireNonNullElse(parser.findContiguousRange(event.getSourceLocation()), defaultRange);
+        }
     }
 }
