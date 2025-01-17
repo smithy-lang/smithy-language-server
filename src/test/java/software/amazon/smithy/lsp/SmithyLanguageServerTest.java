@@ -50,6 +50,7 @@ import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.FileChangeType;
 import org.eclipse.lsp4j.FormattingOptions;
 import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
@@ -72,6 +73,7 @@ import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.traits.LengthTrait;
+import software.amazon.smithy.model.validation.Severity;
 
 public class SmithyLanguageServerTest {
     @Test
@@ -1911,6 +1913,53 @@ public class SmithyLanguageServerTest {
                         Set.of(workspace.getUri("foo.smithy")),
                         Set.of(buildJsonUri))),
                 Map.of()));
+    }
+
+    @Test
+    public void testCustomServerOptions() {
+        ServerOptions options = ServerOptions.builder()
+                .setMinimumSeverity(Severity.NOTE)
+                .setOnlyReloadOnSave(true)
+                .build();
+
+        assertThat(options.getMinimumSeverity(), equalTo(Severity.NOTE));
+        assertThat(options.getOnlyReloadOnSave(), equalTo(true));
+    }
+
+    @Test
+    public void testFromInitializeParamsWithValidOptions() {
+        StubClient client = new StubClient();
+        // Create initialization options
+        JsonObject opts = new JsonObject();
+        opts.add("diagnostics.minimumSeverity", new JsonPrimitive("ERROR"));
+        opts.add("onlyReloadOnSave", new JsonPrimitive(true));
+
+        // Create InitializeParams with the options
+        InitializeParams params = new InitializeParams();
+        params.setInitializationOptions(opts);
+
+        // Call the method being tested
+        ServerOptions options = ServerOptions.fromInitializeParams(params, new SmithyLanguageClient(client));
+
+        assertThat(options.getMinimumSeverity(), equalTo(Severity.ERROR));
+        assertThat(options.getOnlyReloadOnSave(), equalTo(true));
+    }
+
+    @Test
+    public void testFromInitializeParamsWithPartialOptions() {
+        StubClient client = new StubClient();
+        JsonObject opts = new JsonObject();
+        opts.add("onlyReloadOnSave", new JsonPrimitive(true));
+        // Not setting minimumSeverity
+
+        // Create InitializeParams with the options
+        InitializeParams params = new InitializeParams();
+        params.setInitializationOptions(opts);
+
+        ServerOptions options = ServerOptions.fromInitializeParams(params, new SmithyLanguageClient(client));
+
+        assertThat(options.getMinimumSeverity(), equalTo(Severity.WARNING)); // Default value
+        assertThat(options.getOnlyReloadOnSave(), equalTo(true)); // Explicitly set value
     }
 
     private void assertServerState(SmithyLanguageServer server, ServerState expected) {

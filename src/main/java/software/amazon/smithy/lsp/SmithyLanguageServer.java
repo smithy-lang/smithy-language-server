@@ -17,11 +17,9 @@ package software.amazon.smithy.lsp;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
 
-import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -145,9 +143,8 @@ public class SmithyLanguageServer implements
 
     private SmithyLanguageClient client;
     private final ServerState state = new ServerState();
-    private Severity minimumSeverity = Severity.WARNING;
-    private boolean onlyReloadOnSave = false;
     private ClientCapabilities clientCapabilities;
+    private ServerOptions serverOptions;
 
     SmithyLanguageServer() {
     }
@@ -161,7 +158,7 @@ public class SmithyLanguageServer implements
     }
 
     Severity getMinimumSeverity() {
-        return minimumSeverity;
+        return this.serverOptions.getMinimumSeverity();
     }
 
     @Override
@@ -187,25 +184,8 @@ public class SmithyLanguageServer implements
                 .flatMap(ProcessHandle::of)
                 .ifPresent(processHandle -> processHandle.onExit().thenRun(this::exit));
 
+        this.serverOptions = ServerOptions.fromInitializeParams(params, client);
         // TODO: Replace with a Gson Type Adapter if more config options are added beyond `logToFile`.
-        Object initializationOptions = params.getInitializationOptions();
-        if (initializationOptions instanceof JsonObject jsonObject) {
-            if (jsonObject.has("diagnostics.minimumSeverity")) {
-                String configuredMinimumSeverity = jsonObject.get("diagnostics.minimumSeverity").getAsString();
-                Optional<Severity> severity = Severity.fromString(configuredMinimumSeverity);
-                if (severity.isPresent()) {
-                    this.minimumSeverity = severity.get();
-                } else {
-                    client.error(String.format("""
-                            Invalid value for 'diagnostics.minimumSeverity': %s.
-                            Must be one of %s.""", configuredMinimumSeverity, Arrays.toString(Severity.values())));
-                }
-            }
-            if (jsonObject.has("onlyReloadOnSave")) {
-                this.onlyReloadOnSave = jsonObject.get("onlyReloadOnSave").getAsBoolean();
-                client.info("Configured only reload on save: " + this.onlyReloadOnSave);
-            }
-        }
 
         if (params.getWorkspaceFolders() != null && !params.getWorkspaceFolders().isEmpty()) {
             Either<String, Integer> workDoneProgressToken = params.getWorkDoneToken();
@@ -523,7 +503,7 @@ public class SmithyLanguageServer implements
         }
 
         smithyFile.reparse();
-        if (!onlyReloadOnSave) {
+        if (!this.serverOptions.getOnlyReloadOnSave()) {
             Project project = projectAndFile.project();
 
             // TODO: A consequence of this is that any existing validation events are cleared, which
@@ -692,7 +672,7 @@ public class SmithyLanguageServer implements
         Project project = projectAndFile.project();
 
         // TODO: Abstract away passing minimum severity
-        var handler = new HoverHandler(project, smithyFile, minimumSeverity);
+        var handler = new HoverHandler(project, smithyFile, this.serverOptions.getMinimumSeverity());
         return CompletableFuture.supplyAsync(() -> handler.handle(params));
     }
 
@@ -739,7 +719,8 @@ public class SmithyLanguageServer implements
 
     private CompletableFuture<Void> sendFileDiagnostics(ProjectAndFile projectAndFile) {
         return CompletableFuture.runAsync(() -> {
-            List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(projectAndFile, minimumSeverity);
+            List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(
+                    projectAndFile, this.serverOptions.getMinimumSeverity());
             var publishDiagnosticsParams = new PublishDiagnosticsParams(projectAndFile.uri(), diagnostics);
             client.publishDiagnostics(publishDiagnosticsParams);
         });
