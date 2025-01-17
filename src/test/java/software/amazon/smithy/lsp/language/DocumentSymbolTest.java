@@ -12,11 +12,10 @@ import static software.amazon.smithy.lsp.document.DocumentTest.safeString;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import software.amazon.smithy.lsp.ServerState;
 import software.amazon.smithy.lsp.TestWorkspace;
 import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
-import software.amazon.smithy.lsp.project.ProjectLoader;
+import software.amazon.smithy.lsp.project.ProjectTest;
 import software.amazon.smithy.lsp.project.SmithyFile;
 
 public class DocumentSymbolTest {
@@ -49,7 +48,7 @@ public class DocumentSymbolTest {
 
     private static List<String> getDocumentSymbolNames(String text) {
         TestWorkspace workspace = TestWorkspace.singleModel(text);
-        Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
+        Project project = ProjectTest.load(workspace.getRoot());
         String uri = workspace.getUri("main.smithy");
         IdlFile idlFile = (IdlFile) (SmithyFile) project.getProjectFile(uri);
 

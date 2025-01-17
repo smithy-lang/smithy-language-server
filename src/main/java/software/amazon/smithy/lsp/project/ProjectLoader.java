@@ -5,42 +5,28 @@
 
 package software.amazon.smithy.lsp.project;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
-import java.util.logging.Logger;
-import java.util.stream.Stream;
 import software.amazon.smithy.lsp.ManagedFiles;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
-import software.amazon.smithy.lsp.util.Result;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.ModelAssembler;
-import software.amazon.smithy.model.loader.ModelDiscovery;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.utils.IoUtils;
 import software.amazon.smithy.utils.TriConsumer;
 
 /**
  * Loads {@link Project}s.
- *
- * TODO: There's a lot of duplicated logic and redundant code here to refactor.
  */
 public final class ProjectLoader {
-    private static final Logger LOGGER = Logger.getLogger(ProjectLoader.class.getName());
-
     private ProjectLoader() {
     }
 
@@ -56,12 +42,6 @@ public final class ProjectLoader {
      * @return The loaded project
      */
     public static Project loadDetached(String uri, String text) {
-        LOGGER.info("Loading detachedProjects project at " + uri);
-
-        String asPath = LspAdapter.toPath(uri);
-        Path path = Paths.get(asPath);
-        List<Path> allSmithyFilePaths = List.of(path);
-
         Document document = Document.of(text);
         ManagedFiles managedFiles = (fileUri) -> {
             if (uri.equals(fileUri)) {
@@ -70,21 +50,13 @@ public final class ProjectLoader {
             return null;
         };
 
-        List<Path> dependencies = List.of();
-
-        LoadModelResult result;
-        try {
-            result = doLoad(managedFiles, dependencies, allSmithyFilePaths);
-        } catch (IOException e) {
-            // Note: This can't happen because we aren't doing any fallible IO,
-            // as only the prelude will be read from disk
-            throw new RuntimeException(e);
-        }
+        Path path = Paths.get(LspAdapter.toPath(uri));
+        ProjectConfig config = ProjectConfig.detachedConfig(path);
+        LoadModelResult result = doLoad(managedFiles, config);
 
         return new Project(
                 path,
-                ProjectConfig.empty(),
-                dependencies,
+                config,
                 result.smithyFiles(),
                 result.assemblerFactory(),
                 Project.Type.DETACHED,
@@ -109,45 +81,24 @@ public final class ProjectLoader {
      * @param managedFiles Files managed by the server
      * @return Result of loading the project
      */
-    public static Result<Project, List<Exception>> load(Path root, ManagedFiles managedFiles) {
-        Result<ProjectConfig, List<Exception>> configResult = ProjectConfigLoader.loadFromRoot(root, managedFiles);
-        if (configResult.isErr()) {
-            return Result.err(configResult.unwrapErr());
-        }
-        ProjectConfig config = configResult.unwrap();
-
-        if (config.buildFiles().isEmpty()) {
-            return Result.ok(Project.empty(root));
+    public static Project load(Path root, ManagedFiles managedFiles) throws Exception {
+        var buildFiles = BuildFiles.load(root, managedFiles);
+        if (buildFiles.isEmpty()) {
+            return Project.empty(root);
         }
 
-        Result<List<Path>, Exception> resolveResult = ProjectDependencyResolver.resolveDependencies(root, config);
-        if (resolveResult.isErr()) {
-            return Result.err(Collections.singletonList(resolveResult.unwrapErr()));
-        }
+        ProjectConfig config = new ProjectConfigLoader(root, buildFiles).load();
+        LoadModelResult result = doLoad(managedFiles, config);
 
-        List<Path> dependencies = resolveResult.unwrap();
-
-        // Note: The model assembler can handle loading all smithy files in a directory, so there's some potential
-        //  here for inconsistent behavior.
-        List<Path> allSmithyFilePaths = collectAllSmithyPaths(root, config.sources(), config.imports());
-
-        LoadModelResult result;
-        try {
-            result = doLoad(managedFiles, dependencies, allSmithyFilePaths);
-        } catch (Exception e) {
-            return Result.err(Collections.singletonList(e));
-        }
-
-        return Result.ok(new Project(
+        return new Project(
                 root,
                 config,
-                dependencies,
                 result.smithyFiles(),
                 result.assemblerFactory(),
                 Project.Type.NORMAL,
                 result.modelResult(),
                 result.rebuildIndex()
-        ));
+        );
     }
 
     private record LoadModelResult(
@@ -158,24 +109,15 @@ public final class ProjectLoader {
     ) {
     }
 
-    private static LoadModelResult doLoad(
-            ManagedFiles managedFiles,
-            List<Path> dependencies,
-            List<Path> allSmithyFilePaths
-    ) throws IOException {
+    private static LoadModelResult doLoad(ManagedFiles managedFiles, ProjectConfig config) {
         // The model assembler factory is used to get assemblers that already have the correct
         // dependencies resolved for future loads
-        Supplier<ModelAssembler> assemblerFactory = createModelAssemblerFactory(dependencies);
+        Supplier<ModelAssembler> assemblerFactory = createModelAssemblerFactory(config.resolvedDependencies());
 
-        Map<String, SmithyFile> smithyFiles = new HashMap<>(allSmithyFilePaths.size());
+        Map<String, SmithyFile> smithyFiles = new HashMap<>(config.modelPaths().size());
 
-        // TODO: Assembler can fail if a file is not found. We can be more intelligent about
-        //  handling this case to allow partially loading the project, but we will need to
-        //  collect and report the errors somehow. For now, using collectAllSmithyPaths skips
-        //  any files that don't exist, so we're essentially side-stepping the issue by
-        //  coincidence.
         ModelAssembler assembler = assemblerFactory.get();
-        ValidatedResult<Model> modelResult = loadModel(managedFiles, allSmithyFilePaths, assembler, smithyFiles);
+        ValidatedResult<Model> modelResult = loadModel(managedFiles, config.modelPaths(), assembler, smithyFiles);
 
         Project.RebuildIndex rebuildIndex = Project.RebuildIndex.create(modelResult);
         addDependencySmithyFiles(managedFiles, rebuildIndex.filesToDefinedShapes().keySet(), smithyFiles);
@@ -256,8 +198,7 @@ public final class ProjectLoader {
         consumer.accept(filePath, text, document);
     }
 
-    private static Supplier<ModelAssembler> createModelAssemblerFactory(List<Path> dependencies)
-            throws MalformedURLException {
+    private static Supplier<ModelAssembler> createModelAssemblerFactory(List<URL> dependencies) {
         // We don't want the model to be broken when there are unknown traits,
         // because that will essentially disable language server features, so
         // we need to allow unknown traits for each factory.
@@ -266,89 +207,10 @@ public final class ProjectLoader {
             return () -> Model.assembler().putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true);
         }
 
-        URLClassLoader classLoader = createDependenciesClassLoader(dependencies);
+        URL[] urls = dependencies.toArray(new URL[0]);
+        URLClassLoader classLoader = new URLClassLoader(urls);
         return () -> Model.assembler(classLoader)
                 .discoverModels(classLoader)
                 .putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true);
-    }
-
-    private static URLClassLoader createDependenciesClassLoader(List<Path> dependencies) throws MalformedURLException {
-        // Taken (roughly) from smithy-ci IsolatedRunnable
-        URL[] urls = new URL[dependencies.size()];
-        int i = 0;
-        for (Path dependency : dependencies) {
-            urls[i++] = dependency.toUri().toURL();
-        }
-        return new URLClassLoader(urls);
-    }
-
-    // sources and imports can contain directories or files, relative or absolute
-    private static List<Path> collectAllSmithyPaths(Path root, List<String> sources, List<String> imports) {
-        List<Path> paths = new ArrayList<>();
-        for (String file : sources) {
-            Path path = root.resolve(file).normalize();
-            collectDirectory(paths, root, path);
-        }
-        for (String file : imports) {
-            Path path = root.resolve(file).normalize();
-            collectDirectory(paths, root, path);
-        }
-        return paths;
-    }
-
-    // All of this copied from smithy-build SourcesPlugin
-    private static void collectDirectory(List<Path> accumulator, Path root, Path current) {
-        try {
-            if (Files.isDirectory(current)) {
-                try (Stream<Path> paths = Files.list(current)) {
-                    paths.filter(p -> !p.equals(current))
-                            .filter(p -> Files.isDirectory(p) || Files.isRegularFile(p))
-                            .forEach(p -> collectDirectory(accumulator, root, p));
-                }
-            } else if (Files.isRegularFile(current)) {
-                if (current.toString().endsWith(".jar")) {
-                    String jarRoot = root.equals(current)
-                            ? current.toString()
-                            : (current + File.separator);
-                    collectJar(accumulator, jarRoot, current);
-                } else {
-                    collectFile(accumulator, current);
-                }
-            }
-        } catch (IOException ignored) {
-            // For now just ignore this - the assembler would have run into the same issues
-        }
-    }
-
-    private static void collectJar(List<Path> accumulator, String jarRoot, Path jarPath) {
-        URL manifestUrl = ModelDiscovery.createSmithyJarManifestUrl(jarPath.toString());
-
-        String prefix = computeJarFilePrefix(jarRoot, jarPath);
-        for (URL model : ModelDiscovery.findModels(manifestUrl)) {
-            String name = ModelDiscovery.getSmithyModelPathFromJarUrl(model);
-            Path target = Paths.get(prefix + name);
-            collectFile(accumulator, target);
-        }
-    }
-
-    private static String computeJarFilePrefix(String jarRoot, Path jarPath) {
-        Path jarFilenamePath = jarPath.getFileName();
-
-        if (jarFilenamePath == null) {
-            return jarRoot;
-        }
-
-        String jarFilename = jarFilenamePath.toString();
-        return jarRoot + jarFilename.substring(0, jarFilename.length() - ".jar".length()) + File.separator;
-    }
-
-    private static void collectFile(List<Path> accumulator, Path target) {
-        if (target == null) {
-            return;
-        }
-        String filename = target.toString();
-        if (filename.endsWith(".smithy") || filename.endsWith(".json")) {
-            accumulator.add(target);
-        }
     }
 }

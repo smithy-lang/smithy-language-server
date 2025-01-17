@@ -5,165 +5,123 @@
 
 package software.amazon.smithy.lsp.project;
 
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.net.URL;
+import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
+import java.util.concurrent.locks.ReentrantLock;
 import software.amazon.smithy.build.model.MavenConfig;
-import software.amazon.smithy.model.node.Node;
-import software.amazon.smithy.model.node.ObjectNode;
-import software.amazon.smithy.model.node.StringNode;
+import software.amazon.smithy.model.validation.ValidationEvent;
 
 /**
  * A complete view of all a project's configuration that is needed to load it,
  * merged from all configuration sources.
  */
-public final class ProjectConfig {
+final class ProjectConfig {
+    private static final MavenConfig DEFAULT_MAVEN = MavenConfig.builder().build();
+
     private final List<String> sources;
     private final List<String> imports;
-    private final String outputDirectory;
-    private final List<ProjectDependency> dependencies;
-    private final MavenConfig mavenConfig;
-    private final Map<String, BuildFile> buildFiles;
+    private final List<SmithyProjectJson.ProjectDependency> projectDependencies;
+    private final MavenConfig maven;
+    private final BuildFiles buildFiles;
+    private final List<Path> modelPaths;
+    private final List<URL> resolvedDependencies;
+    private final ReentrantLock eventsLock = new ReentrantLock();
+    private List<ValidationEvent> events;
 
-    private ProjectConfig(Builder builder) {
-        this.sources = builder.sources;
-        this.imports = builder.imports;
-        this.outputDirectory = builder.outputDirectory;
-        this.dependencies = builder.dependencies;
-        this.mavenConfig = builder.mavenConfig;
-        this.buildFiles = builder.buildFiles;
+    ProjectConfig(
+            List<String> sources,
+            List<String> imports,
+            List<SmithyProjectJson.ProjectDependency> projectDependencies,
+            MavenConfig maven,
+            BuildFiles buildFiles
+    ) {
+        this.sources = sources;
+        this.imports = imports;
+        this.projectDependencies = projectDependencies;
+        this.maven = maven == null ? DEFAULT_MAVEN : maven;
+        this.buildFiles = buildFiles;
+        this.modelPaths = List.of();
+        this.resolvedDependencies = List.of();
+        this.events = List.of();
+    }
+
+    ProjectConfig(
+            ProjectConfig config,
+            List<Path> modelPaths,
+            List<URL> resolvedDependencies,
+            List<ValidationEvent> events
+    ) {
+        this.sources = config.sources;
+        this.imports = config.imports;
+        this.projectDependencies = config.projectDependencies;
+        this.maven = config.maven;
+        this.buildFiles = config.buildFiles;
+        this.modelPaths = modelPaths;
+        this.resolvedDependencies = resolvedDependencies;
+        this.events = events;
     }
 
     static ProjectConfig empty() {
-        return builder().build();
+        return new ProjectConfig(
+                List.of(), List.of(), List.of(), DEFAULT_MAVEN, BuildFiles.empty()
+        );
     }
 
-    static Builder builder() {
-        return new Builder();
+    static ProjectConfig detachedConfig(Path modelPath) {
+        return new ProjectConfig(
+                empty(),
+                List.of(modelPath),
+                List.of(),
+                List.of()
+        );
     }
 
-    /**
-     * @return All explicitly configured sources
-     */
-    public List<String> sources() {
+    List<String> sources() {
         return sources;
     }
 
-    /**
-     * @return All explicitly configured imports
-     */
-    public List<String> imports() {
+    List<String> imports() {
         return imports;
     }
 
-    /**
-     * @return The configured output directory, if one is present
-     */
-    public Optional<String> outputDirectory() {
-        return Optional.ofNullable(outputDirectory);
+    List<SmithyProjectJson.ProjectDependency> projectDependencies() {
+        return projectDependencies;
     }
 
-    /**
-     * @return All configured external (non-maven) dependencies
-     */
-    public List<ProjectDependency> dependencies() {
-        return dependencies;
+    MavenConfig maven() {
+        return maven;
     }
 
-    /**
-     * @return The Maven configuration, if present
-     */
-    public Optional<MavenConfig> maven() {
-        return Optional.ofNullable(mavenConfig);
-    }
-
-    /**
-     * @return Map of path to each {@link BuildFile} loaded in the project
-     */
-    public Map<String, BuildFile> buildFiles() {
+    BuildFiles buildFiles() {
         return buildFiles;
     }
 
-    static final class Builder {
-        final List<String> sources = new ArrayList<>();
-        final List<String> imports = new ArrayList<>();
-        String outputDirectory;
-        final List<ProjectDependency> dependencies = new ArrayList<>();
-        MavenConfig mavenConfig;
-        private final Map<String, BuildFile> buildFiles = new HashMap<>();
+    List<Path> modelPaths() {
+        return modelPaths;
+    }
 
-        private Builder() {
+    List<URL> resolvedDependencies() {
+        return resolvedDependencies;
+    }
+
+    List<ValidationEvent> events() {
+        eventsLock.lock();
+        try {
+            return events;
+        } finally {
+            eventsLock.unlock();
         }
+    }
 
-        static Builder load(BuildFile buildFile) {
-            Node node = Node.parseJsonWithComments(buildFile.document().copyText(), buildFile.path());
-            ObjectNode objectNode = node.expectObjectNode();
-            ProjectConfig.Builder projectConfigBuilder = ProjectConfig.builder();
-            objectNode.getArrayMember("sources").ifPresent(arrayNode ->
-                    projectConfigBuilder.sources(arrayNode.getElementsAs(StringNode.class).stream()
-                            .map(StringNode::getValue)
-                            .collect(Collectors.toList())));
-            objectNode.getArrayMember("imports").ifPresent(arrayNode ->
-                    projectConfigBuilder.imports(arrayNode.getElementsAs(StringNode.class).stream()
-                            .map(StringNode::getValue)
-                            .collect(Collectors.toList())));
-            objectNode.getStringMember("outputDirectory").ifPresent(stringNode ->
-                    projectConfigBuilder.outputDirectory(stringNode.getValue()));
-            objectNode.getArrayMember("dependencies").ifPresent(arrayNode ->
-                    projectConfigBuilder.dependencies(arrayNode.getElements().stream()
-                            .map(ProjectDependency::fromNode)
-                            .collect(Collectors.toList())));
-            return projectConfigBuilder;
-        }
+    void validate() {
+        var updatedEvents = ProjectConfigLoader.validateBuildFiles(buildFiles);
 
-        public Builder sources(List<String> sources) {
-            this.sources.clear();
-            this.sources.addAll(sources);
-            return this;
-        }
-
-        public Builder addSources(List<String> sources) {
-            this.sources.addAll(sources);
-            return this;
-        }
-
-        public Builder imports(List<String> imports) {
-            this.imports.clear();
-            this.imports.addAll(imports);
-            return this;
-        }
-
-        public Builder addImports(List<String> imports) {
-            this.imports.addAll(imports);
-            return this;
-        }
-
-        public Builder outputDirectory(String outputDirectory) {
-            this.outputDirectory = outputDirectory;
-            return this;
-        }
-
-        public Builder dependencies(List<ProjectDependency> dependencies) {
-            this.dependencies.clear();
-            this.dependencies.addAll(dependencies);
-            return this;
-        }
-
-        public Builder mavenConfig(MavenConfig mavenConfig) {
-            this.mavenConfig = mavenConfig;
-            return this;
-        }
-
-        public Builder buildFiles(Map<String, BuildFile> buildFiles) {
-            this.buildFiles.putAll(buildFiles);
-            return this;
-        }
-
-        public ProjectConfig build() {
-            return new ProjectConfig(this);
+        eventsLock.lock();
+        try {
+            this.events = updatedEvents;
+        } finally {
+            eventsLock.unlock();
         }
     }
 }

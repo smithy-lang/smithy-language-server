@@ -26,7 +26,6 @@ import software.amazon.smithy.lsp.project.ProjectChange;
 import software.amazon.smithy.lsp.project.ProjectFile;
 import software.amazon.smithy.lsp.project.ProjectLoader;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
-import software.amazon.smithy.lsp.util.Result;
 
 /**
  * Keeps track of the state of the server.
@@ -143,10 +142,9 @@ public final class ServerState implements ManagedFiles {
         LOGGER.finest("Initializing project at " + root);
         lifecycleTasks.cancelAllTasks();
 
-        Result<Project, List<Exception>> loadResult = ProjectLoader.load(root, this);
         String projectName = root.toString();
-        if (loadResult.isOk()) {
-            Project updatedProject = loadResult.unwrap();
+        try {
+            Project updatedProject = ProjectLoader.load(root, this);
 
             if (updatedProject.type() == Project.Type.EMPTY) {
                 removeProjectAndResolveDetached(projectName);
@@ -157,17 +155,15 @@ public final class ServerState implements ManagedFiles {
 
             LOGGER.finest("Initialized project at " + root);
             return List.of();
+        } catch (Exception e) {
+            LOGGER.severe("Failed to load project at " + root);
+
+            // If we overwrite an existing project with an empty one, we lose track of the state of tracked
+            // files. Instead, we will just keep the original project before the reload failure.
+            projects.computeIfAbsent(projectName, ignored -> Project.empty(root));
+
+            return List.of(e);
         }
-
-        LOGGER.severe("Init project failed");
-
-        // TODO: Maybe we just start with this anyways by default, and then add to it
-        //  if we find a smithy-build.json, etc.
-        // If we overwrite an existing project with an empty one, we lose track of the state of tracked
-        // files. Instead, we will just keep the original project before the reload failure.
-        projects.computeIfAbsent(projectName, ignored -> Project.empty(root));
-
-        return loadResult.unwrapErr();
     }
 
     void loadWorkspace(WorkspaceFolder workspaceFolder) {

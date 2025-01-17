@@ -17,14 +17,14 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
-import software.amazon.smithy.lsp.project.ProjectConfigLoader;
+import software.amazon.smithy.lsp.project.BuildFileType;
 
 /**
  * Finds Project roots based on the location of smithy-build.json and .smithy-project.json.
  */
 final class ProjectRootVisitor extends SimpleFileVisitor<Path> {
     private static final PathMatcher PROJECT_ROOT_MATCHER = FileSystems.getDefault().getPathMatcher(
-            "glob:{" + ProjectConfigLoader.SMITHY_BUILD + "," + ProjectConfigLoader.SMITHY_PROJECT + "}");
+            "glob:{" + BuildFileType.SMITHY_BUILD.filename() + "," + BuildFileType.SMITHY_PROJECT.filename() + "}");
     private static final int MAX_VISIT_DEPTH = 10;
 
     private final List<Path> roots = new ArrayList<>();

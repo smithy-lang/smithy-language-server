@@ -447,22 +447,31 @@ public class SmithyLanguageServer implements
             }
         }
 
-        // Don't reload or update the project on build file changes, only on save
-        if (!(projectAndFile.file() instanceof SmithyFile smithyFile)) {
-            return;
-        }
+        projectAndFile.file().reparse();
 
-        smithyFile.reparse();
-        if (!this.serverOptions.getOnlyReloadOnSave()) {
-            Project project = projectAndFile.project();
+        Project project = projectAndFile.project();
+        switch (projectAndFile.file()) {
+            case SmithyFile ignored -> {
+                if (this.serverOptions.getOnlyReloadOnSave()) {
+                    return;
+                }
 
-            // TODO: A consequence of this is that any existing validation events are cleared, which
-            //  is kinda annoying.
-            // Report any parse/shape/trait loading errors
-            CompletableFuture<Void> future = CompletableFuture
-                    .runAsync(() -> project.updateModelWithoutValidating(uri))
-                    .thenComposeAsync(unused -> sendFileDiagnostics(projectAndFile));
-            state.lifecycleTasks().putTask(uri, future);
+                // TODO: A consequence of this is that any existing validation events are cleared, which
+                //  is kinda annoying.
+                // Report any parse/shape/trait loading errors
+                CompletableFuture<Void> future = CompletableFuture
+                        .runAsync(() -> project.updateModelWithoutValidating(uri))
+                        .thenComposeAsync(unused -> sendFileDiagnostics(projectAndFile));
+
+                state.lifecycleTasks().putTask(uri, future);
+            }
+            case BuildFile ignored -> {
+                CompletableFuture<Void> future = CompletableFuture
+                        .runAsync(project::validateConfig)
+                        .thenComposeAsync(unused -> sendFileDiagnostics(projectAndFile));
+
+                state.lifecycleTasks().putTask(uri, future);
+            }
         }
     }
 
@@ -654,6 +663,13 @@ public class SmithyLanguageServer implements
                     projectAndFile, this.serverOptions.getMinimumSeverity());
             var publishDiagnosticsParams = new PublishDiagnosticsParams(projectAndFile.uri(), diagnostics);
             client.publishDiagnostics(publishDiagnosticsParams);
+        });
+    }
+
+    private CompletableFuture<Void> sendFileDiagnostics(String uri, List<Diagnostic> diagnostics) {
+        return CompletableFuture.runAsync(() -> {
+            var params = new PublishDiagnosticsParams(uri, diagnostics);
+            client.publishDiagnostics(params);
         });
     }
 }
