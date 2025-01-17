@@ -43,7 +43,6 @@ import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Diagnostic;
-import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeConfigurationParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
@@ -720,7 +719,8 @@ public class SmithyLanguageServer implements
 
     private CompletableFuture<Void> sendFileDiagnostics(ProjectAndFile projectAndFile) {
         return CompletableFuture.runAsync(() -> {
-            List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(projectAndFile, this.serverOptions.getMinimumSeverity());
+            List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(
+                    projectAndFile, this.serverOptions.getMinimumSeverity());
             var publishDiagnosticsParams = new PublishDiagnosticsParams(projectAndFile.uri(), diagnostics);
             client.publishDiagnostics(publishDiagnosticsParams);
         });
