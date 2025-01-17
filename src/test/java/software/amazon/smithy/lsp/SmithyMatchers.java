@@ -42,7 +42,7 @@ public final class SmithyMatchers {
     }
 
     public static Matcher<Model> hasShapeWithId(String id) {
-        return new CustomTypeSafeMatcher<>("a model with the shape id `" + id + "`") {
+        return new CustomTypeSafeMatcher<>("has shape id `" + id + "`") {
             @Override
             protected boolean matchesSafely(Model item) {
                 return item.getShape(ShapeId.from(id)).isPresent();
@@ -59,7 +59,7 @@ public final class SmithyMatchers {
     }
 
     public static Matcher<ValidationEvent> eventWithMessage(Matcher<String> message) {
-        return new CustomTypeSafeMatcher<>("has matching message") {
+        return new CustomTypeSafeMatcher<>("has message matching " + message.toString()) {
             @Override
             protected boolean matchesSafely(ValidationEvent item) {
                 return message.matches(item.getMessage());
@@ -68,6 +68,15 @@ public final class SmithyMatchers {
             @Override
             public void describeMismatchSafely(ValidationEvent event, Description description) {
                 description.appendDescriptionOf(message).appendText("was " + event.getMessage());
+            }
+        };
+    }
+
+    public static Matcher<ValidationEvent> eventWithId(Matcher<String> id) {
+        return new CustomTypeSafeMatcher<>("has id matching " + id.toString()) {
+            @Override
+            protected boolean matchesSafely(ValidationEvent item) {
+                return id.matches(item.getId());
             }
         };
     }

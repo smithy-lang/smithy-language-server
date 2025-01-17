@@ -156,7 +156,7 @@ public class HoverHandlerTest {
         TestWorkspace workspace = TestWorkspace.singleModel(text);
         Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
         String uri = workspace.getUri("main.smithy");
-        SmithyFile smithyFile = project.getSmithyFile(uri);
+        SmithyFile smithyFile = (SmithyFile) project.getProjectFile(uri);
 
         List<String> hover = new ArrayList<>();
         HoverHandler handler = new HoverHandler(project, (IdlFile) smithyFile, Severity.WARNING);

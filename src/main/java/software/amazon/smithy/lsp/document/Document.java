@@ -146,7 +146,6 @@ public final class Document {
             return -1;
         }
 
-
         int idx = startLineIdx + character;
         if (line == lastLine()) {
             if (idx >= buffer.length()) {
@@ -196,9 +195,7 @@ public final class Document {
 
         Position endPos;
         if (end == length()) {
-            int lastLine = lastLine();
-            int lastCol = length() - lineIndices[lastLine];
-            endPos = new Position(lastLine, lastCol);
+            endPos = end();
         } else {
             endPos = positionAtIndex(end);
         }
@@ -234,9 +231,7 @@ public final class Document {
      * @return The end position of this document
      */
     public Position end() {
-        return new Position(
-                lineIndices.length - 1,
-                buffer.length() - lineIndices[lineIndices.length - 1]);
+        return new Position(lastLine(), lastColExclusive());
     }
 
     /**
@@ -267,111 +262,6 @@ public final class Document {
     }
 
     /**
-     * @param range The range to borrow the text of
-     * @return A reference to the text in this document within the given {@code range}
-     *  or {@code null} if the range is out of bounds
-     */
-    public CharBuffer borrowRange(Range range) {
-        int startLine = range.getStart().getLine();
-        int startChar = range.getStart().getCharacter();
-        int endLine = range.getEnd().getLine();
-        int endChar = range.getEnd().getCharacter();
-
-        // TODO: Maybe make this return the whole thing, thing up to an index, or thing after an
-        //  index if one of the indicies is out of bounds.
-        int startLineIdx = indexOfLine(startLine);
-        int endLineIdx = indexOfLine(endLine);
-        if (startLineIdx < 0 || endLineIdx < 0) {
-            return null;
-        }
-
-        int startIdx = startLineIdx + startChar;
-        int endIdx = endLineIdx + endChar;
-        if (startIdx > buffer.length() || endIdx > buffer.length()) {
-            return null;
-        }
-
-        return CharBuffer.wrap(buffer, startIdx, endIdx);
-    }
-
-    /**
-     * @param position The position within the token to borrow
-     * @return A reference to the token that the given {@code position} is
-     *  within, or {@code null} if the position is not within a token
-     */
-    public CharBuffer borrowToken(Position position) {
-        int idx = indexOfPosition(position);
-        if (idx < 0) {
-            return null;
-        }
-
-        char atIdx = buffer.charAt(idx);
-        // Not a token
-        if (!Character.isLetterOrDigit(atIdx) && atIdx != '_') {
-            return null;
-        }
-
-        int startIdx = idx;
-        while (startIdx >= 0) {
-            char c = buffer.charAt(startIdx);
-            if (Character.isLetterOrDigit(c) || c == '_') {
-                startIdx--;
-            } else {
-                break;
-            }
-        }
-
-        int endIdx = idx;
-        while (endIdx < buffer.length()) {
-            char c = buffer.charAt(endIdx);
-            if (Character.isLetterOrDigit(c) || c == '_') {
-                endIdx++;
-            } else {
-                break;
-            }
-        }
-
-        return CharBuffer.wrap(buffer, startIdx + 1, endIdx);
-    }
-
-    /**
-     * @param line The line to borrow
-     * @return A reference to the text in the given line, or {@code null} if
-     *  the line doesn't exist
-     */
-    public CharBuffer borrowLine(int line) {
-        if (line >= lineIndices.length || line < 0) {
-            return null;
-        }
-
-        int lineStart = indexOfLine(line);
-        if (line + 1 >= lineIndices.length) {
-            return CharBuffer.wrap(buffer, lineStart, buffer.length());
-        }
-
-        return CharBuffer.wrap(buffer, lineStart, indexOfLine(line + 1));
-    }
-
-    /**
-     * @param start The index of the start of the span to borrow
-     * @param end The end of the index of the span to borrow (exclusive)
-     * @return A reference to the text within the indicies {@code start} and
-     *  {@code end}, or {@code null} if the span is out of bounds or start > end
-     */
-    public CharBuffer borrowSpan(int start, int end) {
-        if (start < 0 || end < 0) {
-            return null;
-        }
-
-        // end is exclusive
-        if (end > buffer.length() || start > end) {
-            return null;
-        }
-
-        return CharBuffer.wrap(buffer, start, end);
-    }
-
-    /**
      * @return A copy of the text of this document
      */
     public String copyText() {
@@ -384,12 +274,20 @@ public final class Document {
      *  or {@code null} if the range is out of bounds
      */
     public String copyRange(Range range) {
-        CharBuffer borrowed = borrowRange(range);
-        if (borrowed == null) {
-            return null;
-        }
+        int start = indexOfPosition(range.getStart());
 
-        return borrowed.toString();
+        int end;
+        Position endPosition = range.getEnd();
+        if (endPosition.getLine() == lastLine() && endPosition.getCharacter() == lastColExclusive()) {
+            end = length();
+        } else {
+            end = indexOfPosition(range.getEnd());
+        }
+        return copySpan(start, end);
+    }
+
+    private int lastColExclusive() {
+        return length() - lineIndices[lastLine()];
     }
 
     /**
@@ -479,18 +377,11 @@ public final class Document {
         }
 
         // We go past the start and end in each loop, so startIdx is before the start character, and endIdx
-        // is after the end character.
+        // is after the end character. Since end is exclusive (both for creating the buffer and getting the
+        // range) we can leave it.
         int startCharIdx = startIdx + 1;
-        int endCharIdx = endIdx - 1;
-
-        // For creating the buffer and the range, the start is inclusive, and the end is exclusive.
-        CharBuffer wrapped = CharBuffer.wrap(buffer, startCharIdx, endCharIdx + 1);
-        Position start = positionAtIndex(startCharIdx);
-        // However, we can't get the position for an index that may be out of bounds, so we need to make
-        // the end position exclusive manually.
-        Position end = positionAtIndex(endCharIdx);
-        end.setCharacter(end.getCharacter() + 1);
-        Range range = new Range(start, end);
+        CharBuffer wrapped = CharBuffer.wrap(buffer, startCharIdx, endIdx);
+        Range range = rangeBetween(startCharIdx, endIdx);
         return new DocumentId(type, wrapped, range);
     }
 
@@ -505,11 +396,16 @@ public final class Document {
      *  {@code end}, or {@code null} if the span is out of bounds or start > end
      */
     public String copySpan(int start, int end) {
-        CharBuffer borrowed = borrowSpan(start, end);
-        if (borrowed == null) {
+        if (start < 0 || end < 0) {
             return null;
         }
-        return borrowed.toString();
+
+        // end is exclusive
+        if (end > buffer.length() || start > end) {
+            return null;
+        }
+
+        return CharBuffer.wrap(buffer, start, end).toString();
     }
 
     /**

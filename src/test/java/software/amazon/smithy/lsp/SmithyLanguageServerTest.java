@@ -1,7 +1,7 @@
 package software.amazon.smithy.lsp;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.anEmptyMap;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
@@ -35,10 +35,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.Diagnostic;
@@ -112,11 +109,16 @@ public class SmithyLanguageServerTest {
 
         String uri = workspace.getUri("main.smithy");
 
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text(model)
+                .build());
+
         TextDocumentIdentifier id = new TextDocumentIdentifier(uri);
         DocumentFormattingParams params = new DocumentFormattingParams(id, new FormattingOptions());
         List<? extends TextEdit> edits = server.formatting(params).get();
-        Document document = server.getFirstProject().getDocument(uri);
 
+        Document document = server.getState().getManagedDocument(uri);
         assertThat(edits, containsInAnyOrder(makesEditedDocument(document, safeString("""
                 $version: "2"
 
@@ -174,10 +176,10 @@ public class SmithyLanguageServerTest {
         server.didChange(changeBuilder.range(rangeBuilder.shiftRight().build()).text(" ").build());
         server.didChange(changeBuilder.range(rangeBuilder.shiftRight().build()).text("G").build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
         // mostly so you can see what it looks like
-        assertThat(server.getFirstProject().getDocument(uri).copyText(), equalTo(safeString("""
+        assertThat(server.getState().getManagedDocument(uri).copyText(), equalTo(safeString("""
                 $version: "2"
 
                 namespace com.foo
@@ -218,7 +220,7 @@ public class SmithyLanguageServerTest {
                 .text(model)
                 .build();
         server.didOpen(openParams);
-        assertThat(server.getFirstProject().modelResult().getValidationEvents(), empty());
+        assertThat(server.getState().findProjectAndFile(uri).project().modelResult().getValidationEvents(), empty());
 
         DidChangeTextDocumentParams didChangeParams = new RequestBuilders.DidChange()
                 .uri(uri)
@@ -227,15 +229,15 @@ public class SmithyLanguageServerTest {
                 .build();
         server.didChange(didChangeParams);
 
-        server.getState().lifecycleManager().getTask(uri).get();
+        server.getState().lifecycleTasks().getTask(uri).get();
 
-        assertThat(server.getFirstProject().modelResult().getValidationEvents(),
+        assertThat(server.getState().findProjectAndFile(uri).project().modelResult().getValidationEvents(),
                 containsInAnyOrder(eventWithMessage(containsString("Error creating trait"))));
 
         DidSaveTextDocumentParams didSaveParams = new RequestBuilders.DidSave().uri(uri).build();
         server.didSave(didSaveParams);
 
-        assertThat(server.getFirstProject().modelResult().getValidationEvents(),
+        assertThat(server.getState().findProjectAndFile(uri).project().modelResult().getValidationEvents(),
                 containsInAnyOrder(eventWithMessage(containsString("Error creating trait"))));
     }
 
@@ -260,7 +262,7 @@ public class SmithyLanguageServerTest {
         Diagnostic diagnostic = diagnostics.get(0);
         assertThat(diagnostic.getMessage(), startsWith("Target.UnresolvedShape"));
 
-        Document document = server.getFirstProject().getDocument(uri);
+        Document document = server.getState().findProjectAndFile(uri).file().document();
         assertThat(diagnostic.getRange(), hasText(document, equalTo("Bar")));
     }
 
@@ -283,7 +285,6 @@ public class SmithyLanguageServerTest {
         assertThat(diagnostics, hasSize(1));
 
         Diagnostic diagnostic = diagnostics.getFirst();
-        Document document = server.getFirstProject().getDocument(uri);
 
         assertThat(diagnostic.getRange(), equalTo(
                 new Range(
@@ -310,7 +311,7 @@ public class SmithyLanguageServerTest {
                 server.getState().findProjectAndFile(uri), server.getMinimumSeverity());
 
         Diagnostic diagnostic = diagnostics.getFirst();
-        Document document = server.getFirstProject().getDocument(uri);
+        Document document = server.getState().findProjectAndFile(uri).file().document();
 
         assertThat(diagnostic.getRange(), hasText(document, equalTo("mything#SomeUnknownThing")));
 
@@ -343,7 +344,7 @@ public class SmithyLanguageServerTest {
         Diagnostic diagnostic = diagnostics.get(0);
         assertThat(diagnostic.getMessage(), startsWith("Model.UnresolvedTrait"));
 
-        Document document = server.getFirstProject().getDocument(uri);
+        Document document = server.getState().findProjectAndFile(uri).file().document();
         assertThat(diagnostic.getRange(), hasText(document, equalTo("@bar")));
     }
 
@@ -425,7 +426,6 @@ public class SmithyLanguageServerTest {
 
         String preludeUri = preludeLocation.getUri();
         assertThat(preludeUri, startsWith("smithyjar"));
-        Logger.getLogger(getClass().getName()).severe("DOCUMENT LINES: " + server.getFirstProject().getDocument(preludeUri).fullRange());
 
         Hover appliedTraitInPreludeHover = server.hover(RequestBuilders.positionRequest()
                 .uri(preludeUri)
@@ -464,15 +464,12 @@ public class SmithyLanguageServerTest {
                 .build());
 
         // Make sure the task is running, then wait for it
-        CompletableFuture<Void> future = server.getState().lifecycleManager().getTask(uri);
+        CompletableFuture<Void> future = server.getState().lifecycleTasks().getTask(uri);
         assertThat(future, notNullValue());
         future.get();
 
-        assertThat(server.getState().managedUris().contains(uri), is(true));
-        assertThat(server.getState().isDetached(uri), is(false));
-        assertThat(server.getFirstProject().getSmithyFile(uri), notNullValue());
-        assertThat(server.getState().findProjectAndFile(uri), notNullValue());
-        assertThat(server.getState().findProjectAndFile(uri).file().document().copyText(), equalTo("$"));
+        assertManagedMatches(server, uri, Project.Type.NORMAL, workspace.getRoot());
+        assertThat(server.getState().findManaged(uri).file().document().copyText(), equalTo("$"));
     }
 
     @Test
@@ -501,8 +498,7 @@ public class SmithyLanguageServerTest {
                 .event(uri, FileChangeType.Deleted)
                 .build());
 
-        assertThat(server.getState().managedUris().contains(uri), is(false));
-        assertThat(server.getState().findProjectAndFile(uri), nullValue());
+        assertThat(server.getState().findManaged(uri), nullValue());
     }
 
     @Test
@@ -524,9 +520,7 @@ public class SmithyLanguageServerTest {
                 .text(modelText)
                 .build());
 
-        assertThat(server.getState().managedUris().contains(uri), is(true));
-        assertThat(server.getState().isDetached(uri), is(true));
-        assertThat(server.getState().findProjectAndFile(uri), notNullValue());
+        assertManagedMatches(server, uri, Project.Type.DETACHED, uri);
 
         String movedFilename = "model/main.smithy";
         workspace.moveModel(filename, movedFilename);
@@ -542,12 +536,8 @@ public class SmithyLanguageServerTest {
                 .event(movedUri, FileChangeType.Created)
                 .build());
 
-        assertThat(server.getState().managedUris().contains(uri), is(false));
-        assertThat(server.getState().isDetached(uri), is(false));
-        assertThat(server.getState().findProjectAndFile(uri), nullValue());
-        assertThat(server.getState().managedUris().contains(movedUri), is(true));
-        assertThat(server.getState().isDetached(movedUri), is(false));
-        assertThat(server.getState().findProjectAndFile(movedUri), notNullValue());
+        assertThat(server.getState().findManaged(uri), nullValue());
+        assertManagedMatches(server, movedUri, Project.Type.NORMAL, workspace.getRoot());
     }
 
     @Test
@@ -569,9 +559,7 @@ public class SmithyLanguageServerTest {
                 .text(modelText)
                 .build());
 
-        assertThat(server.getState().managedUris().contains(uri), is(true));
-        assertThat(server.getState().isDetached(uri), is(false));
-        assertThat(server.getState().findProjectAndFile(uri), notNullValue());
+        assertManagedMatches(server, uri, Project.Type.NORMAL, workspace.getRoot());
 
         String movedFilename = "main.smithy";
         workspace.moveModel(filename, movedFilename);
@@ -588,12 +576,8 @@ public class SmithyLanguageServerTest {
                 .event(uri, FileChangeType.Deleted)
                 .build());
 
-        assertThat(server.getState().managedUris().contains(uri), is(false));
-        assertThat(server.getState().isDetached(uri), is(false));
-        assertThat(server.getState().findProjectAndFile(uri), nullValue());
-        assertThat(server.getState().managedUris().contains(movedUri), is(true));
-        assertThat(server.getState().isDetached(movedUri), is(true));
-        assertThat(server.getState().findProjectAndFile(movedUri), notNullValue());
+        assertThat(server.getState().findManaged(uri), nullValue());
+        assertManagedMatches(server, movedUri, Project.Type.DETACHED, movedUri);
     }
 
     @Test
@@ -624,9 +608,7 @@ public class SmithyLanguageServerTest {
                 .text(modelText)
                 .build());
 
-        assertThat(server.getState().managedUris().contains(uri), is(true));
-        assertThat(server.getState().isDetached(uri), is(false));
-        assertThat(server.getState().findProjectAndFile(uri), notNullValue());
+        assertManagedMatches(server, uri, Project.Type.NORMAL, workspace.getRoot());
     }
 
     @Test
@@ -654,7 +636,7 @@ public class SmithyLanguageServerTest {
         TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
-        Map<String, Node> metadataBefore = server.getFirstProject().modelResult().unwrap().getMetadata();
+        Map<String, Node> metadataBefore = server.getState().findProjectByRoot(workspace.getRoot().toString()).modelResult().unwrap().getMetadata();
         assertThat(metadataBefore, hasKey("foo"));
         assertThat(metadataBefore, hasKey("bar"));
         assertThat(metadataBefore.get("foo"), instanceOf(ArrayNode.class));
@@ -674,9 +656,9 @@ public class SmithyLanguageServerTest {
                 .uri(uri)
                 .build());
 
-        server.getState().lifecycleManager().getTask(uri).get();
+        server.getState().lifecycleTasks().getTask(uri).get();
 
-        Map<String, Node> metadataAfter = server.getFirstProject().modelResult().unwrap().getMetadata();
+        Map<String, Node> metadataAfter = server.getState().findProjectByRoot(workspace.getRoot().toString()).modelResult().unwrap().getMetadata();
         assertThat(metadataAfter, hasKey("foo"));
         assertThat(metadataAfter, hasKey("bar"));
         assertThat(metadataAfter.get("foo"), instanceOf(ArrayNode.class));
@@ -688,9 +670,9 @@ public class SmithyLanguageServerTest {
                 .text("")
                 .build());
 
-        server.getState().lifecycleManager().getTask(uri).get();
+        server.getState().lifecycleTasks().getTask(uri).get();
 
-        Map<String, Node> metadataAfter2 = server.getFirstProject().modelResult().unwrap().getMetadata();
+        Map<String, Node> metadataAfter2 = server.getState().findProjectByRoot(workspace.getRoot().toString()).modelResult().unwrap().getMetadata();
         assertThat(metadataAfter2, hasKey("foo"));
         assertThat(metadataAfter2, hasKey("bar"));
         assertThat(metadataAfter2.get("foo"), instanceOf(ArrayNode.class));
@@ -722,7 +704,7 @@ public class SmithyLanguageServerTest {
         TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
-        Map<String, Node> metadataBefore = server.getFirstProject().modelResult().unwrap().getMetadata();
+        Map<String, Node> metadataBefore = server.getState().findProjectByRoot(workspace.getRoot().toString()).modelResult().unwrap().getMetadata();
         assertThat(metadataBefore, hasKey("foo"));
         assertThat(metadataBefore, hasKey("bar"));
         assertThat(metadataBefore.get("foo"), instanceOf(ArrayNode.class));
@@ -735,16 +717,15 @@ public class SmithyLanguageServerTest {
                 .event(uri, FileChangeType.Deleted)
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        Map<String, Node> metadataAfter = server.getFirstProject().modelResult().unwrap().getMetadata();
+        Map<String, Node> metadataAfter = server.getState().findProjectByRoot(workspace.getRoot().toString()).modelResult().unwrap().getMetadata();
         assertThat(metadataAfter, hasKey("foo"));
         assertThat(metadataAfter, hasKey("bar"));
         assertThat(metadataAfter.get("foo"), instanceOf(ArrayNode.class));
         assertThat(metadataAfter.get("foo").expectArrayNode().size(), equalTo(2));
     }
 
-    // TODO: Somehow this is flaky
     @Test
     public void addingOpenedDetachedFile() throws Exception {
         TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
@@ -761,18 +742,14 @@ public class SmithyLanguageServerTest {
 
         String uri = workspace.getUri("main.smithy");
 
-        assertThat(server.getState().managedUris(), not(hasItem(uri)));
-        assertThat(server.getState().isDetached(uri), is(false));
-        assertThat(server.getState().findProjectAndFile(uri), nullValue());
+        assertThat(server.getState().findManaged(uri), nullValue());
 
         server.didOpen(RequestBuilders.didOpen()
                 .uri(uri)
                 .text(modelText)
                 .build());
 
-        assertThat(server.getState().managedUris(), hasItem(uri));
-        assertThat(server.getState().isDetached(uri), is(true));
-        assertThat(server.getState().findProjectAndFile(uri), notNullValue());
+        assertManagedMatches(server, uri, Project.Type.DETACHED, uri);
 
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
@@ -792,13 +769,13 @@ public class SmithyLanguageServerTest {
                 .event(workspace.getUri("smithy-build.json"), FileChangeType.Changed)
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getState().managedUris(), hasItem(uri));
-        assertThat(server.getState().isDetached(uri), is(false));
-        assertThat(server.getFirstProject().getSmithyFile(uri), notNullValue());
-        assertThat(server.getFirstProject().modelResult().unwrap(), hasShapeWithId("com.foo#Foo"));
-        assertThat(server.getFirstProject().modelResult().unwrap(), hasShapeWithId("com.foo#Bar"));
+        assertManagedMatches(server, uri, Project.Type.NORMAL, workspace.getRoot());
+        assertThat(server.getState().findManaged(uri).project().modelResult().unwrap(), allOf(
+                hasShapeWithId("com.foo#Foo"),
+                hasShapeWithId("com.foo#Bar")
+        ));
     }
 
     @Test
@@ -832,14 +809,13 @@ public class SmithyLanguageServerTest {
                 .event(workspace.getUri("smithy-build.json"), FileChangeType.Changed)
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getState().managedUris(), hasItem(uri));
-        assertThat(server.getState().isDetached(uri), is(true));
-        ProjectAndFile projectAndFile = server.getState().findProjectAndFile(uri);
-        assertThat(projectAndFile, notNullValue());
-        assertThat(projectAndFile.project().modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
-        assertThat(projectAndFile.project().modelResult(), hasValue(hasShapeWithId("com.foo#Bar")));
+        assertManagedMatches(server, uri, Project.Type.DETACHED, uri);
+        assertThat(server.getState().findManaged(uri).project().modelResult(), hasValue(allOf(
+                hasShapeWithId("com.foo#Foo"),
+                hasShapeWithId("com.foo#Bar")
+        )));
     }
 
     @Test
@@ -876,14 +852,10 @@ public class SmithyLanguageServerTest {
                 .text(modelText)
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getState().managedUris().contains(uri), is(false));
-        assertThat(server.getState().findProjectAndFile(uri), nullValue());
-        assertThat(server.getState().isDetached(uri), is(false));
-        assertThat(server.getState().managedUris().contains(movedUri), is(true));
-        assertThat(server.getState().findProjectAndFile(movedUri), notNullValue());
-        assertThat(server.getState().isDetached(movedUri), is(true));
+        assertThat(server.getState().findManaged(uri), nullValue());
+        assertManagedMatches(server, movedUri, Project.Type.DETACHED, movedUri);
     }
 
     @Test
@@ -912,7 +884,7 @@ public class SmithyLanguageServerTest {
                 .text(modelText1)
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
         List<PublishDiagnosticsParams> publishedDiagnostics1 = client.diagnostics;
         assertThat(publishedDiagnostics1, hasSize(1));
@@ -938,7 +910,7 @@ public class SmithyLanguageServerTest {
                 .event(uri2, FileChangeType.Created)
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
         List<PublishDiagnosticsParams> publishedDiagnostics2 = client.diagnostics;
         assertThat(publishedDiagnostics2, hasSize(2)); // sent more diagnostics
@@ -957,12 +929,19 @@ public class SmithyLanguageServerTest {
         TestWorkspace workspace = TestWorkspace.multipleModels(modelText1, modelText2);
         SmithyLanguageServer server = initFromWorkspace(workspace);
 
-        String uri = workspace.getUri("model-0.smithy");
+        Project project = server.getState().findProjectByRoot(workspace.getRoot().toString());
+        assertThat(project, notNullValue());
+        assertThat(project.modelResult().isBroken(), is(true));
+        assertThat(project.modelResult().getResult().isPresent(), is(true));
+        assertThat(project.modelResult().getResult().get(), hasShapeWithId("com.foo#Foo"));
 
-        assertThat(server.getFirstProject().getSmithyFile(uri), notNullValue());
-        assertThat(server.getFirstProject().modelResult().isBroken(), is(true));
-        assertThat(server.getFirstProject().modelResult().getResult().isPresent(), is(true));
-        assertThat(server.getFirstProject().modelResult().getResult().get(), hasShapeWithId("com.foo#Foo"));
+        String uri = workspace.getUri("model-1.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text(modelText2)
+                .build());
+
+        assertManagedMatches(server, uri, Project.Type.NORMAL, workspace.getRoot());
     }
 
     @Test
@@ -980,14 +959,14 @@ public class SmithyLanguageServerTest {
                 .text(modelText)
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getState().isDetached(uri), is(true));
+        assertManagedMatches(server, uri, Project.Type.DETACHED, uri);
         ProjectAndFile projectAndFile = server.getState().findProjectAndFile(uri);
         assertThat(projectAndFile, notNullValue());
         assertThat(projectAndFile.project().modelResult().isBroken(), is(true));
         assertThat(projectAndFile.project().modelResult().getResult().isPresent(), is(true));
-        assertThat(projectAndFile.project().smithyFiles().keySet(), hasItem(endsWith(filename)));
+        assertThat(projectAndFile.project().getAllSmithyFilePaths(), hasItem(endsWith(filename)));
 
         server.didChange(RequestBuilders.didChange()
                 .uri(uri)
@@ -998,18 +977,17 @@ public class SmithyLanguageServerTest {
                         """))
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getState().isDetached(uri), is(true));
+        assertManagedMatches(server, uri, Project.Type.DETACHED, uri);
         ProjectAndFile projectAndFile1 = server.getState().findProjectAndFile(uri);
         assertThat(projectAndFile1, notNullValue());
         assertThat(projectAndFile1.project().modelResult().isBroken(), is(false));
         assertThat(projectAndFile1.project().modelResult().getResult().isPresent(), is(true));
-        assertThat(projectAndFile1.project().smithyFiles().keySet(), hasItem(endsWith(filename)));
+        assertThat(projectAndFile1.project().getAllSmithyFilePaths(), hasItem(endsWith(filename)));
         assertThat(projectAndFile1.project().modelResult().unwrap(), hasShapeWithId("com.foo#Foo"));
     }
 
-    // TODO: apparently flaky
     @Test
     public void addingDetachedFileWithInvalidSyntax() throws Exception {
         TestWorkspace workspace = TestWorkspace.emptyWithDirSource();
@@ -1025,12 +1003,9 @@ public class SmithyLanguageServerTest {
                 .text("")
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getState().isDetached(uri), is(true));
-        ProjectAndFile projectAndFile = server.getState().findProjectAndFile(uri);
-        assertThat(projectAndFile, notNullValue());
-        assertThat(projectAndFile.project().getSmithyFile(uri), notNullValue());
+        assertManagedMatches(server, uri, Project.Type.DETACHED, uri);
 
         List<String> updatedSources = new ArrayList<>(workspace.getConfig().getSources());
         updatedSources.add(filename);
@@ -1059,12 +1034,10 @@ public class SmithyLanguageServerTest {
                 .range(LspAdapter.point(2, 0))
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getState().isDetached(uri), is(false));
-        assertThat(server.getState().detachedProjects().keySet(), empty());
-        assertThat(server.getFirstProject().getSmithyFile(uri), notNullValue());
-        assertThat(server.getFirstProject().modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
+        assertManagedMatches(server, uri, Project.Type.NORMAL, workspace.getRoot());
+        assertThat(server.getState().findManaged(uri).project().modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
     }
 
     @Test
@@ -1095,10 +1068,14 @@ public class SmithyLanguageServerTest {
                 .text("2")
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getFirstProject().modelResult(), hasValue(hasShapeWithId("com.foo#Bar")));
-        Shape foo = server.getFirstProject().modelResult().getResult().get().expectShape(ShapeId.from("com.foo#Foo"));
+        ProjectAndFile projectAndFile = server.getState().findProjectAndFile(uri2);
+        assertThat(projectAndFile, notNullValue());
+        assertThat(projectAndFile.project().modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
+        assertThat(projectAndFile.project().modelResult(), hasValue(hasShapeWithId("com.foo#Bar")));
+
+        Shape foo = projectAndFile.project().modelResult().getResult().get().expectShape(ShapeId.from("com.foo#Foo"));
         assertThat(foo.getIntroducedTraits().keySet(), containsInAnyOrder(LengthTrait.ID));
         assertThat(foo.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(2L)));
 
@@ -1114,11 +1091,15 @@ public class SmithyLanguageServerTest {
                 .text(safeString("string Another\n"))
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getFirstProject().modelResult(), hasValue(hasShapeWithId("com.foo#Bar")));
-        assertThat(server.getFirstProject().modelResult(), hasValue(hasShapeWithId("com.foo#Another")));
-        foo = server.getFirstProject().modelResult().getResult().get().expectShape(ShapeId.from("com.foo#Foo"));
+        projectAndFile = server.getState().findProjectAndFile(uri1);
+        assertThat(projectAndFile, notNullValue());
+        assertThat(projectAndFile.project().modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
+        assertThat(projectAndFile.project().modelResult(), hasValue(hasShapeWithId("com.foo#Bar")));
+        assertThat(projectAndFile.project().modelResult(), hasValue(hasShapeWithId("com.foo#Another")));
+
+        foo = projectAndFile.project().modelResult().getResult().get().expectShape(ShapeId.from("com.foo#Foo"));
         assertThat(foo.getIntroducedTraits().keySet(), containsInAnyOrder(LengthTrait.ID));
         assertThat(foo.expectTrait(LengthTrait.class).getMin(), anOptionalOf(equalTo(2L)));
     }
@@ -1183,7 +1164,7 @@ public class SmithyLanguageServerTest {
                         """))
                 .range(LspAdapter.origin())
                 .build());
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
         ProjectAndFile projectAndFile = server.getState().findProjectAndFile(uri);
         assertThat(projectAndFile, notNullValue());
@@ -1212,17 +1193,14 @@ public class SmithyLanguageServerTest {
 
         SmithyLanguageServer server = initFromWorkspaces(workspaceFoo, workspaceBar);
 
-        assertThat(server.getState().attachedProjects(), hasKey(workspaceFoo.getName()));
-        assertThat(server.getState().attachedProjects(), hasKey(workspaceBar.getName()));
+        Project projectFoo = server.getState().findProjectByRoot(workspaceFoo.getName());
+        Project projectBar = server.getState().findProjectByRoot(workspaceBar.getName());
 
-        assertThat(server.getState().findProjectAndFile(workspaceFoo.getUri("foo.smithy")), notNullValue());
-        assertThat(server.getState().findProjectAndFile(workspaceBar.getUri("bar.smithy")), notNullValue());
+        assertThat(projectFoo, notNullValue());
+        assertThat(projectBar, notNullValue());
 
-        Project projectFoo = server.getState().attachedProjects().get(workspaceFoo.getName());
-        Project projectBar = server.getState().attachedProjects().get(workspaceBar.getName());
-
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("foo.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("bar.smithy")));
+        assertThat(projectFoo.getAllSmithyFilePaths(), hasItem(endsWith("foo.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("bar.smithy")));
 
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
         assertThat(projectBar.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.bar#Bar")));
@@ -1278,10 +1256,10 @@ public class SmithyLanguageServerTest {
                 .uri(barUri)
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        Project projectFoo = server.getState().attachedProjects().get(workspaceFoo.getName());
-        Project projectBar = server.getState().attachedProjects().get(workspaceBar.getName());
+        Project projectFoo = server.getState().findProjectByRoot(workspaceFoo.getName());
+        Project projectBar = server.getState().findProjectByRoot(workspaceBar.getName());
 
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Bar")));
@@ -1349,14 +1327,14 @@ public class SmithyLanguageServerTest {
                 .range(LspAdapter.point(3, 0))
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        Project projectFoo = server.getState().attachedProjects().get(workspaceFoo.getName());
-        Project projectBar = server.getState().attachedProjects().get(workspaceBar.getName());
+        Project projectFoo = server.getState().findProjectByRoot(workspaceFoo.getName());
+        Project projectBar = server.getState().findProjectByRoot(workspaceBar.getName());
 
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("other.smithy")));
+        assertThat(projectFoo.getAllSmithyFilePaths(), hasItem(endsWith("main.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("main.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("other.smithy")));
 
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Bar")));
@@ -1417,6 +1395,9 @@ public class SmithyLanguageServerTest {
                 .event(workspaceBar.getUri("smithy-build.json"), FileChangeType.Changed)
                 .build());
 
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(workspaceBar.getUri("model/main.smithy"))
+                .build());
         server.didChange(RequestBuilders.didChange()
                 .uri(workspaceBar.getUri("model/main.smithy"))
                 .text("""
@@ -1429,24 +1410,23 @@ public class SmithyLanguageServerTest {
                 .range(LspAdapter.origin())
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getState().detachedProjects(), anEmptyMap());
         assertThat(server.getState().findProjectAndFile(newUri), notNullValue());
         assertThat(server.getState().findProjectAndFile(workspaceBar.getUri("model/main.smithy")), notNullValue());
         assertThat(server.getState().findProjectAndFile(workspaceFoo.getUri("model/main.smithy")), notNullValue());
 
-        Project projectFoo = server.getState().attachedProjects().get(workspaceFoo.getName());
-        Project projectBar = server.getState().attachedProjects().get(workspaceBar.getName());
+        Project projectFoo = server.getState().findProjectByRoot(workspaceFoo.getName());
+        Project projectBar = server.getState().findProjectByRoot(workspaceBar.getName());
 
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("main.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("other.smithy")));
+        assertThat(projectFoo.getAllSmithyFilePaths(), hasItem(endsWith("main.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("main.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("other.smithy")));
 
-        assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
-        assertThat(projectBar.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.bar#Bar")));
-        assertThat(projectBar.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.bar#Bar$other")));
-        assertThat(projectBar.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.other#Other")));
+        assertThat(projectFoo.modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
+        assertThat(projectBar.modelResult(), hasValue(hasShapeWithId("com.bar#Bar")));
+        assertThat(projectBar.modelResult(), hasValue(hasShapeWithId("com.bar#Bar$other")));
+        assertThat(projectBar.modelResult(), hasValue(hasShapeWithId("com.other#Other")));
     }
 
     @Test
@@ -1487,19 +1467,16 @@ public class SmithyLanguageServerTest {
                 .text(barModel)
                 .build());
 
-        server.getState().lifecycleManager().waitForAllTasks();
+        server.getState().lifecycleTasks().waitForAllTasks();
 
-        assertThat(server.getState().attachedProjects(), hasKey(workspaceFoo.getName()));
-        assertThat(server.getState().attachedProjects(), hasKey(workspaceBar.getName()));
+        assertManagedMatches(server, workspaceFoo.getUri("foo.smithy"), Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, workspaceBar.getUri("bar.smithy"), Project.Type.NORMAL, workspaceBar.getRoot());
 
-        assertThat(server.getState().findProjectAndFile(workspaceFoo.getUri("foo.smithy")), notNullValue());
-        assertThat(server.getState().findProjectAndFile(workspaceBar.getUri("bar.smithy")), notNullValue());
+        Project projectFoo = server.getState().findProjectByRoot(workspaceFoo.getName());
+        Project projectBar = server.getState().findProjectByRoot(workspaceBar.getName());
 
-        Project projectFoo = server.getState().attachedProjects().get(workspaceFoo.getName());
-        Project projectBar = server.getState().attachedProjects().get(workspaceBar.getName());
-
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("foo.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("bar.smithy")));
+        assertThat(projectFoo.getAllSmithyFilePaths(), hasItem(endsWith("foo.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("bar.smithy")));
 
         assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
         assertThat(projectBar.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.bar#Bar")));
@@ -1529,13 +1506,15 @@ public class SmithyLanguageServerTest {
 
         SmithyLanguageServer server = initFromWorkspaces(workspaceFoo, workspaceBar);
 
+        String fooUri = workspaceFoo.getUri("foo.smithy");
         server.didOpen(RequestBuilders.didOpen()
-                .uri(workspaceFoo.getUri("foo.smithy"))
+                .uri(fooUri)
                 .text(fooModel)
                 .build());
 
+        String barUri = workspaceBar.getUri("bar.smithy");
         server.didOpen(RequestBuilders.didOpen()
-                .uri(workspaceBar.getUri("bar.smithy"))
+                .uri(barUri)
                 .text(barModel)
                 .build());
 
@@ -1543,22 +1522,17 @@ public class SmithyLanguageServerTest {
                 .removed(workspaceBar.getRoot().toUri().toString(), "bar")
                 .build());
 
-        assertThat(server.getState().attachedProjects(), hasKey(workspaceFoo.getName()));
-        assertThat(server.getState().attachedProjects(), not(hasKey(workspaceBar.getName())));
-        assertThat(server.getState().detachedProjects(), hasKey(endsWith("bar.smithy")));
-        assertThat(server.getState().isDetached(workspaceBar.getUri("bar.smithy")), is(true));
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.DETACHED, barUri);
 
-        assertThat(server.getState().findProjectAndFile(workspaceFoo.getUri("foo.smithy")), notNullValue());
-        assertThat(server.getState().findProjectAndFile(workspaceBar.getUri("bar.smithy")), notNullValue());
+        Project projectFoo = server.getState().findProjectByRoot(workspaceFoo.getName());
+        Project projectBar = server.getState().findProjectByRoot(barUri);
 
-        Project projectFoo = server.getState().attachedProjects().get(workspaceFoo.getName());
-        Project projectBar = server.getState().findProjectAndFile(workspaceBar.getUri("bar.smithy")).project();
+        assertThat(projectFoo.getAllSmithyFilePaths(), hasItem(endsWith("foo.smithy")));
+        assertThat(projectBar.getAllSmithyFilePaths(), hasItem(endsWith("bar.smithy")));
 
-        assertThat(projectFoo.smithyFiles(), hasKey(endsWith("foo.smithy")));
-        assertThat(projectBar.smithyFiles(), hasKey(endsWith("bar.smithy")));
-
-        assertThat(projectFoo.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
-        assertThat(projectBar.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.bar#Bar")));
+        assertThat(projectFoo.modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
+        assertThat(projectBar.modelResult(), hasValue(hasShapeWithId("com.bar#Bar")));
     }
 
     @Test
@@ -1590,9 +1564,8 @@ public class SmithyLanguageServerTest {
 
         SmithyLanguageServer server = initFromRoot(root);
 
-        assertThat(server.getState().attachedProjects().keySet(), containsInAnyOrder(
-                workspaceFoo.getName(),
-                workspaceBar.getName()));
+        assertThat(server.getState().findProjectByRoot(workspaceFoo.getName()), notNullValue());
+        assertThat(server.getState().findProjectByRoot(workspaceBar.getName()), notNullValue());
         assertThat(server.getState().workspacePaths(), contains(root));
     }
 
@@ -1631,9 +1604,8 @@ public class SmithyLanguageServerTest {
                 .build());
 
         assertThat(server.getState().workspacePaths(), contains(root));
-        assertThat(server.getState().attachedProjects().keySet(), containsInAnyOrder(
-                workspaceFoo.getName(),
-                workspaceBar.getName()));
+        assertThat(server.getState().findProjectByRoot(workspaceFoo.getName()), notNullValue());
+        assertThat(server.getState().findProjectByRoot(workspaceBar.getName()), notNullValue());
     }
 
     @Test
@@ -1665,10 +1637,9 @@ public class SmithyLanguageServerTest {
 
         SmithyLanguageServer server = initFromRoot(root);
 
-        assertThat(server.getState().attachedProjects().keySet(), containsInAnyOrder(
-                workspaceFoo.getName(),
-                workspaceBar.getName()));
         assertThat(server.getState().workspacePaths(), contains(root));
+        assertThat(server.getState().findProjectByRoot(workspaceFoo.getName()), notNullValue());
+        assertThat(server.getState().findProjectByRoot(workspaceBar.getName()), notNullValue());
 
         workspaceFoo.deleteModel("smithy-build.json");
 
@@ -1677,7 +1648,8 @@ public class SmithyLanguageServerTest {
                 .build());
 
         assertThat(server.getState().workspacePaths(), contains(root));
-        assertThat(server.getState().attachedProjects().keySet(), contains(workspaceBar.getName()));
+        assertThat(server.getState().findProjectByRoot(workspaceFoo.getName()), nullValue());
+        assertThat(server.getState().findProjectByRoot(workspaceBar.getName()), notNullValue());
     }
 
     @Test
@@ -1709,22 +1681,34 @@ public class SmithyLanguageServerTest {
 
         SmithyLanguageServer server = initFromRoot(root);
 
+        String fooUri = workspaceFoo.getUri("foo.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(fooUri)
+                .text(fooModel)
+                .build());
+
+        String barUri = workspaceBar.getUri("bar.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(barUri)
+                .text(barModel)
+                .build());
+
         String bazModel = """
                         $version: "2"
                         namespace com.baz
                         structure Baz {}
                         """;
         workspaceFoo.addModel("baz.smithy", bazModel);
+        String bazUri = workspaceFoo.getUri("baz.smithy");
         server.didOpen(RequestBuilders.didOpen()
-                .uri(workspaceFoo.getUri("baz.smithy"))
+                .uri(bazUri)
                 .text(bazModel)
                 .build());
 
         assertThat(server.getState().workspacePaths(), contains(root));
-        assertThat(server.getState().attachedProjects().keySet(), containsInAnyOrder(
-                workspaceFoo.getName(),
-                workspaceBar.getName()));
-        assertThat(server.getState().detachedProjects().keySet(), contains(workspaceFoo.getUri("baz.smithy")));
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.NORMAL, workspaceBar.getRoot());
+        assertManagedMatches(server, bazUri, Project.Type.DETACHED, bazUri);
 
         workspaceFoo.addModel(".smithy-project.json", """
                 {
@@ -1734,10 +1718,9 @@ public class SmithyLanguageServerTest {
                 .event(workspaceFoo.getUri(".smithy-project.json"), FileChangeType.Created)
                 .build());
 
-        assertThat(server.getState().attachedProjects().keySet(), containsInAnyOrder(
-                workspaceFoo.getName(),
-                workspaceBar.getName()));
-        assertThat(server.getState().detachedProjects().keySet(), empty());
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.NORMAL, workspaceBar.getRoot());
+        assertManagedMatches(server, bazUri, Project.Type.NORMAL, workspaceFoo.getRoot());
     }
 
     @Test
@@ -1779,26 +1762,37 @@ public class SmithyLanguageServerTest {
 
         SmithyLanguageServer server = initFromRoot(root);
 
+        String fooUri = workspaceFoo.getUri("foo.smithy");
         server.didOpen(RequestBuilders.didOpen()
-                .uri(workspaceFoo.getUri("baz.smithy"))
+                .uri(fooUri)
+                .text(fooModel)
+                .build());
+
+        String barUri = workspaceBar.getUri("bar.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(barUri)
+                .text(barModel)
+                .build());
+
+        String bazUri = workspaceFoo.getUri("baz.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(bazUri)
                 .text(bazModel)
                 .build());
 
         assertThat(server.getState().workspacePaths(), contains(root));
-        assertThat(server.getState().attachedProjects().keySet(), containsInAnyOrder(
-                workspaceFoo.getName(),
-                workspaceBar.getName()));
-        assertThat(server.getState().detachedProjects().keySet(), empty());
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.NORMAL, workspaceBar.getRoot());
+        assertManagedMatches(server, bazUri, Project.Type.NORMAL, workspaceFoo.getRoot());
 
         workspaceFoo.deleteModel(".smithy-project.json");
         server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
                 .event(workspaceFoo.getUri(".smithy-project.json"), FileChangeType.Deleted)
                 .build());
 
-        assertThat(server.getState().attachedProjects().keySet(), containsInAnyOrder(
-                workspaceFoo.getName(),
-                workspaceBar.getName()));
-        assertThat(server.getState().detachedProjects().keySet(), contains(workspaceFoo.getUri("baz.smithy")));
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.NORMAL, workspaceBar.getRoot());
+        assertManagedMatches(server, bazUri, Project.Type.DETACHED, bazUri);
     }
 
     @Test
@@ -1816,14 +1810,8 @@ public class SmithyLanguageServerTest {
                 """);
         SmithyLanguageServer server = initFromWorkspaces(workspace);
 
-        assertServerState(server, new ServerState(
-                Map.of(
-                        workspace.getName(),
-                        new ProjectState(
-                                Set.of(workspace.getUri("model/main.json")),
-                                Set.of(workspace.getUri("smithy-build.json")))),
-                Map.of()
-        ));
+        Project project = server.getState().findProjectByRoot(workspace.getName());
+        assertThat(project.modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
     }
 
     @Test
@@ -1839,8 +1827,7 @@ public class SmithyLanguageServerTest {
                 .text(smithyBuildJson)
                 .build());
 
-        assertThat(server.getState().managedUris(), contains(uri));
-        assertThat(server.getState().getManagedDocument(uri), notNullValue());
+        assertManagedMatches(server, uri, Project.Type.NORMAL, workspace.getRoot());
         assertThat(server.getState().getManagedDocument(uri).copyText(), equalTo(smithyBuildJson));
 
         String updatedSmithyBuildJson = """
@@ -1862,8 +1849,7 @@ public class SmithyLanguageServerTest {
                 .uri(uri)
                 .build());
 
-        assertThat(server.getState().managedUris(), not(contains(uri)));
-        assertThat(server.getState().getManagedDocument(uri), nullValue());
+        assertThat(server.getState().findManaged(uri), nullValue());
     }
 
     @Test
@@ -1884,12 +1870,13 @@ public class SmithyLanguageServerTest {
                 string Foo
                 """;
         workspace.addModel("foo.smithy", model);
+        String fooUri = workspace.getUri("foo.smithy");
         server.didOpen(RequestBuilders.didOpen()
-                .uri(workspace.getUri("foo.smithy"))
+                .uri(fooUri)
                 .text(model)
                 .build());
 
-        assertThat(server.getState().detachedProjects().keySet(), contains(workspace.getUri("foo.smithy")));
+        assertManagedMatches(server, fooUri, Project.Type.DETACHED, fooUri);
 
         String updatedBuildJson = """
                 {
@@ -1905,14 +1892,7 @@ public class SmithyLanguageServerTest {
                 .uri(buildJsonUri)
                 .build());
 
-        assertThat(server.getState().managedUris(), containsInAnyOrder(
-                buildJsonUri,
-                workspace.getUri("foo.smithy")));
-        assertServerState(server, new ServerState(
-                Map.of(workspace.getName(), new ProjectState(
-                        Set.of(workspace.getUri("foo.smithy")),
-                        Set.of(buildJsonUri))),
-                Map.of()));
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspace.getRoot());
     }
 
     @Test
@@ -1962,41 +1942,28 @@ public class SmithyLanguageServerTest {
         assertThat(options.getOnlyReloadOnSave(), equalTo(true)); // Explicitly set value
     }
 
-    private void assertServerState(SmithyLanguageServer server, ServerState expected) {
-        ServerState actual = ServerState.from(server);
-        assertThat(actual, equalTo(expected));
+    private void assertManagedMatches(
+            SmithyLanguageServer server,
+            String uri,
+            Project.Type expectedType,
+            String expectedRootUri
+    ) {
+        ProjectAndFile projectAndFile = server.getState().findManaged(uri);
+        assertThat(projectAndFile, notNullValue());
+        assertThat(projectAndFile.project().type(), equalTo(expectedType));
+        assertThat(projectAndFile.project().root().toString(), equalTo(LspAdapter.toPath(expectedRootUri)));
     }
 
-    record ServerState(
-            Map<String, ProjectState> attached,
-            Map<String, ProjectState> detached
+    private void assertManagedMatches(
+            SmithyLanguageServer server,
+            String uri,
+            Project.Type expectedType,
+            Path expectedRootPath
     ) {
-        static ServerState from(SmithyLanguageServer server) {
-            return new ServerState(
-                    server.getState().attachedProjects().entrySet().stream()
-                            .collect(Collectors.toMap(Map.Entry::getKey, e -> ProjectState.from(e.getValue()))),
-                    server.getState().detachedProjects().entrySet().stream()
-                            .collect(Collectors.toMap(Map.Entry::getKey, e -> ProjectState.from(e.getValue()))));
-        }
-    }
-
-    record ProjectState(
-            Set<String> smithyFileUris,
-            Set<String> buildFileUris
-    ) {
-        static ProjectState from(Project project) {
-            Set<String> smithyFileUris = project.smithyFiles().keySet()
-                    .stream()
-                    .map(LspAdapter::toUri)
-                    // Ignore these to make comparisons simpler
-                    .filter(uri -> !LspAdapter.isSmithyJarFile(uri))
-                    .collect(Collectors.toSet());
-            Set<String> buildFileUris = project.config().buildFiles().keySet()
-                    .stream()
-                    .map(LspAdapter::toUri)
-                    .collect(Collectors.toSet());
-            return new ProjectState(smithyFileUris, buildFileUris);
-        }
+        ProjectAndFile projectAndFile = server.getState().findManaged(uri);
+        assertThat(projectAndFile, notNullValue());
+        assertThat(projectAndFile.project().type(), equalTo(expectedType));
+        assertThat(projectAndFile.project().root(), equalTo(expectedRootPath));
     }
 
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {

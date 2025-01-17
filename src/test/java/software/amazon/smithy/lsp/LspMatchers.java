@@ -89,23 +89,20 @@ public final class LspMatchers {
     }
 
     public static Matcher<Range> hasText(Document document, Matcher<String> expected) {
-        return new CustomTypeSafeMatcher<>("text in range") {
+        return new CustomTypeSafeMatcher<>("text in range " + expected.toString()) {
             @Override
             protected boolean matchesSafely(Range item) {
-                CharSequence borrowed = document.borrowRange(item);
-                if (borrowed == null) {
-                    return false;
-                }
-                return expected.matches(borrowed.toString());
+                String actual = document.copyRange(item);
+                return expected.matches(actual);
             }
 
             @Override
             public void describeMismatchSafely(Range range, Description description) {
-                if (document.borrowRange(range) == null) {
+                if (document.copyRange(range) == null) {
                     description.appendText("text was null");
                 } else {
                     description.appendDescriptionOf(expected)
-                            .appendText("was " + document.borrowRange(range).toString());
+                            .appendText("was " + document.copyRange(range));
                 }
             }
         };

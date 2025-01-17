@@ -17,6 +17,7 @@ import software.amazon.smithy.lsp.TestWorkspace;
 import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectLoader;
+import software.amazon.smithy.lsp.project.SmithyFile;
 
 public class DocumentSymbolTest {
     @Test
@@ -50,7 +51,7 @@ public class DocumentSymbolTest {
         TestWorkspace workspace = TestWorkspace.singleModel(text);
         Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
         String uri = workspace.getUri("main.smithy");
-        IdlFile idlFile = (IdlFile) project.getSmithyFile(uri);
+        IdlFile idlFile = (IdlFile) (SmithyFile) project.getProjectFile(uri);
 
         List<String> names = new ArrayList<>();
         var handler = new DocumentSymbolHandler(idlFile.document(), idlFile.getParse().statements());

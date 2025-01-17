@@ -255,88 +255,11 @@ public class DocumentTest {
     }
 
     @Test
-    public void borrowsToken() {
-        String s = "abc\n" +
-                   "def";
-        Document document = makeDocument(s);
+    public void foo() {
+        Document a = makeDocument("abc");
+        Document b = makeDocument("def\n");
 
-        CharSequence token = document.borrowToken(new Position(0, 2));
-
-        assertThat(token, string("abc"));
-    }
-
-    @Test
-    public void borrowsTokenWithNoWs() {
-        String s = "abc";
-        Document document = makeDocument(s);
-
-        CharSequence token = document.borrowToken(new Position(0, 1));
-
-        assertThat(token, string("abc"));
-    }
-
-    @Test
-    public void borrowsTokenAtStart() {
-        String s = "abc\n" +
-                   "def";
-        Document document = makeDocument(s);
-
-        CharSequence token = document.borrowToken(new Position(0, 0));
-
-        assertThat(token, string("abc"));
-    }
-
-    @Test
-    public void borrowsTokenAtEnd() {
-        String s = "abc\n" +
-                   "def";
-        Document document = makeDocument(s);
-
-        CharSequence token = document.borrowToken(new Position(1, 2));
-
-        assertThat(token, string("def"));
-    }
-
-    @Test
-    public void borrowsTokenAtBoundaryStart() {
-        String s = "a bc d";
-        Document document = makeDocument(s);
-
-        CharSequence token = document.borrowToken(new Position(0, 2));
-
-        assertThat(token, string("bc"));
-    }
-
-    @Test
-    public void borrowsTokenAtBoundaryEnd() {
-        String s = "a bc d";
-        Document document = makeDocument(s);
-
-        CharSequence token = document.borrowToken(new Position(0, 3));
-
-        assertThat(token, string("bc"));
-    }
-
-    @Test
-    public void doesntBorrowNonToken() {
-        String s = "abc def";
-        Document document = makeDocument(s);
-
-        CharSequence token = document.borrowToken(new Position(0, 3));
-
-        assertThat(token, nullValue());
-    }
-
-    @Test
-    public void borrowsLine() {
-        Document document = makeDocument("abc\n\ndef");
-
-        assertThat(makeDocument("").borrowLine(0), string(""));
-        assertThat(document.borrowLine(0), string(safeString("abc\n")));
-        assertThat(document.borrowLine(1), string(safeString("\n")));
-        assertThat(document.borrowLine(2), string("def"));
-        assertThat(document.borrowLine(-1), nullValue());
-        assertThat(document.borrowLine(3), nullValue());
+        System.out.println();
     }
 
     @Test
@@ -368,23 +291,6 @@ public class DocumentTest {
         assertThat(document.lastIndexOf("ab", 0), is(0)); // can match even if match goes out of boundary
         assertThat(document.lastIndexOf("ab", -1), is(-1));
         assertThat(document.lastIndexOf(" ", safeIndex(8, 1)), is(-1)); // not found
-    }
-
-    @Test
-    public void borrowsSpan() {
-        Document empty = makeDocument("");
-        Document line = makeDocument("abc");
-        Document multi = makeDocument("abc\ndef\n\n");
-
-        assertThat(empty.borrowSpan(0, 1), nullValue()); // empty
-        assertThat(line.borrowSpan(-1, 1), nullValue()); // negative
-        assertThat(line.borrowSpan(0, 0), string("")); // empty
-        assertThat(line.borrowSpan(0, 1), string("a")); // one
-        assertThat(line.borrowSpan(0, 3), string("abc")); // all
-        assertThat(line.borrowSpan(0, 4), nullValue()); // oob
-        assertThat(multi.borrowSpan(0, safeIndex(4, 1)), string(safeString("abc\n"))); // with newline
-        assertThat(multi.borrowSpan(3, safeIndex(5, 1)), string(safeString("\nd"))); // inner
-        assertThat(multi.borrowSpan(safeIndex(5, 1), safeIndex(9, 3)), string(safeString("ef\n\n"))); // up to end
     }
 
     @Test

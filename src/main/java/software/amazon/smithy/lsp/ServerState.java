@@ -10,16 +10,19 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
+import org.eclipse.lsp4j.FileEvent;
 import org.eclipse.lsp4j.WorkspaceFolder;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectAndFile;
+import software.amazon.smithy.lsp.project.ProjectChange;
 import software.amazon.smithy.lsp.project.ProjectFile;
 import software.amazon.smithy.lsp.project.ProjectLoader;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
@@ -27,40 +30,51 @@ import software.amazon.smithy.lsp.util.Result;
 
 /**
  * Keeps track of the state of the server.
- *
- * @param detachedProjects Map of smithy file **uri** to detached project
- *                         for that file
- * @param attachedProjects Map of directory **path** to attached project roots
- * @param workspacePaths Paths to roots of each workspace open in the client
- * @param managedUris Uris of each file managed by the server/client, i.e.
- *                    files which may be updated by didChange
- * @param lifecycleManager Container for ongoing tasks
  */
-public record ServerState(
-        Map<String, Project> detachedProjects,
-        Map<String, Project> attachedProjects,
-        Set<Path> workspacePaths,
-        Set<String> managedUris,
-        DocumentLifecycleManager lifecycleManager
-) {
+public final class ServerState implements ManagedFiles {
     private static final Logger LOGGER = Logger.getLogger(ServerState.class.getName());
+
+    private final Map<String, Project> projects;
+    private final Set<Path> workspacePaths;
+    private final Set<String> managedUris;
+    private final FileTasks lifecycleTasks;
 
     /**
      * Create a new, empty server state.
      */
     public ServerState() {
-        this(
-                new HashMap<>(),
-                new HashMap<>(),
-                new HashSet<>(),
-                new HashSet<>(),
-                new DocumentLifecycleManager());
+        this.projects = new HashMap<>();
+        this.workspacePaths = new HashSet<>();
+        this.managedUris = new HashSet<>();
+        this.lifecycleTasks = new FileTasks();
     }
 
     /**
-     * @param uri Uri of the document to get
-     * @return The document if found and it is managed, otherwise {@code null}
+     * @return All projects tracked by the server.
      */
+    public Collection<Project> getAllProjects() {
+        return projects.values();
+    }
+
+    /**
+     * @return All files managed by the server, including their projects.
+     */
+    public Collection<ProjectAndFile> getAllManaged() {
+        List<ProjectAndFile> allManaged = new ArrayList<>(managedUris.size());
+        for (String uri : managedUris) {
+            allManaged.add(findManaged(uri));
+        }
+        return allManaged;
+    }
+
+    /**
+     * @return All workspace paths tracked by the server.
+     */
+    public Set<Path> workspacePaths() {
+        return workspacePaths;
+    }
+
+    @Override
     public Document getManagedDocument(String uri) {
         if (managedUris.contains(uri)) {
             ProjectAndFile projectAndFile = findProjectAndFile(uri);
@@ -72,31 +86,19 @@ public record ServerState(
         return null;
     }
 
-    /**
-     * @param path The path of the document to get
-     * @return The document if found and it is managed, otherwise {@code null}
-     */
-    public Document getManagedDocument(Path path) {
-        if (managedUris.isEmpty()) {
-            return null;
-        }
+    FileTasks lifecycleTasks() {
+        return lifecycleTasks;
+    }
 
-        String uri = LspAdapter.toUri(path.toString());
-        return getManagedDocument(uri);
+    Project findProjectByRoot(String root) {
+        return projects.get(root);
     }
 
     ProjectAndFile findProjectAndFile(String uri) {
-        ProjectAndFile attached = findAttachedAndRemoveDetached(uri);
-        if (attached != null) {
-            return attached;
-        }
-
-        Project detachedProject = detachedProjects.get(uri);
-        if (detachedProject != null) {
-            String path = LspAdapter.toPath(uri);
-            ProjectFile projectFile = detachedProject.getProjectFile(path);
+        for (Project project : projects.values()) {
+            ProjectFile projectFile = project.getProjectFile(uri);
             if (projectFile != null) {
-                return new ProjectAndFile(uri, detachedProject, projectFile, true);
+                return new ProjectAndFile(uri, project, projectFile);
             }
         }
 
@@ -105,61 +107,52 @@ public record ServerState(
         return null;
     }
 
-    boolean isDetached(String uri) {
-        if (detachedProjects.containsKey(uri)) {
-            ProjectAndFile attached = findAttachedAndRemoveDetached(uri);
-            // The file is only truly detached if the above didn't find an attached project
-            // for the given file
-            return attached == null;
+    ProjectAndFile findManaged(String uri) {
+        if (managedUris.contains(uri)) {
+            return findProjectAndFile(uri);
         }
-
-        return false;
-    }
-
-    /**
-     * Searches for the given {@code uri} in attached projects, and if found,
-     * makes sure any old detached projects for that file are removed.
-     *
-     * @param uri The uri of the project and file to find
-     * @return The attached project and file, or null if not found
-     */
-    private ProjectAndFile findAttachedAndRemoveDetached(String uri) {
-        String path = LspAdapter.toPath(uri);
-        // We might be in a state where a file was added to a tracked project,
-        // but was opened before the project loaded. This would result in it
-        // being placed in a detachedProjects project. Removing it here is basically
-        // like removing it lazily, although it does feel a little hacky.
-        for (Project project : attachedProjects.values()) {
-            ProjectFile projectFile = project.getProjectFile(path);
-            if (projectFile != null) {
-                detachedProjects.remove(uri);
-                return new ProjectAndFile(uri, project, projectFile, false);
-            }
-        }
-
         return null;
     }
 
-    void createDetachedProject(String uri, String text) {
-        Project project = ProjectLoader.loadDetached(uri, text);
-        detachedProjects.put(uri, project);
+    ProjectAndFile open(String uri, String text) {
+        managedUris.add(uri);
+
+        ProjectAndFile projectAndFile = findProjectAndFile(uri);
+        if (projectAndFile != null) {
+            projectAndFile.file().document().applyEdit(null, text);
+        } else {
+            createDetachedProject(uri, text);
+            projectAndFile = findProjectAndFile(uri); // Note: This will always be present
+        }
+
+        return projectAndFile;
+    }
+
+    void close(String uri) {
+        managedUris.remove(uri);
+
+        ProjectAndFile projectAndFile = findProjectAndFile(uri);
+        if (projectAndFile != null && projectAndFile.project().type() == Project.Type.DETACHED) {
+            // Only cancel tasks for detached projects, since we're dropping the project
+            lifecycleTasks.cancelTask(uri);
+            projects.remove(uri);
+        }
     }
 
     List<Exception> tryInitProject(Path root) {
         LOGGER.finest("Initializing project at " + root);
-        lifecycleManager.cancelAllTasks();
+        lifecycleTasks.cancelAllTasks();
 
         Result<Project, List<Exception>> loadResult = ProjectLoader.load(root, this);
         String projectName = root.toString();
         if (loadResult.isOk()) {
             Project updatedProject = loadResult.unwrap();
 
-            // If the project didn't load any config files, it is now empty and should be removed
-            if (updatedProject.config().buildFiles().isEmpty()) {
+            if (updatedProject.type() == Project.Type.EMPTY) {
                 removeProjectAndResolveDetached(projectName);
             } else {
-                resolveDetachedProjects(attachedProjects.get(projectName), updatedProject);
-                attachedProjects.put(projectName, updatedProject);
+                resolveDetachedProjects(projects.get(projectName), updatedProject);
+                projects.put(projectName, updatedProject);
             }
 
             LOGGER.finest("Initialized project at " + root);
@@ -172,7 +165,7 @@ public record ServerState(
         //  if we find a smithy-build.json, etc.
         // If we overwrite an existing project with an empty one, we lose track of the state of tracked
         // files. Instead, we will just keep the original project before the reload failure.
-        attachedProjects.computeIfAbsent(projectName, ignored -> Project.empty(root));
+        projects.computeIfAbsent(projectName, ignored -> Project.empty(root));
 
         return loadResult.unwrapErr();
     }
@@ -197,8 +190,8 @@ public record ServerState(
         // Have to do the removal separately, so we don't modify project.attachedProjects()
         // while iterating through it
         List<String> projectsToRemove = new ArrayList<>();
-        for (var entry : attachedProjects.entrySet()) {
-            if (entry.getValue().root().startsWith(workspaceRoot)) {
+        for (var entry : projects.entrySet()) {
+            if (entry.getValue().type() == Project.Type.NORMAL && entry.getValue().root().startsWith(workspaceRoot)) {
                 projectsToRemove.add(entry.getKey());
             }
         }
@@ -208,8 +201,43 @@ public record ServerState(
         }
     }
 
+    List<Exception> applyFileEvents(List<FileEvent> events) {
+        List<Exception> errors = new ArrayList<>();
+
+        var changes = WorkspaceChanges.computeWorkspaceChanges(events, this);
+
+        for (var entry : changes.byProject().entrySet()) {
+            String projectRoot = entry.getKey();
+            ProjectChange projectChange = entry.getValue();
+
+            Project project = findProjectByRoot(projectRoot);
+
+            if (!projectChange.changedBuildFileUris().isEmpty()) {
+                // Note: this will take care of removing projects when build files are
+                // deleted
+                errors.addAll(tryInitProject(project.root()));
+            } else {
+                Set<String> createdUris = projectChange.createdSmithyFileUris();
+                Set<String> deletedUris = projectChange.deletedSmithyFileUris();
+
+                project.updateFiles(createdUris, deletedUris);
+
+                // If any file was previously opened and created a detached project, remove them
+                for (String createdUri : createdUris) {
+                    projects.remove(createdUri);
+                }
+            }
+        }
+
+        for (var newProjectRoot : changes.newProjectRoots()) {
+            errors.addAll(tryInitProject(newProjectRoot));
+        }
+
+        return errors;
+    }
+
     private void removeProjectAndResolveDetached(String projectName) {
-        Project removedProject = attachedProjects.remove(projectName);
+        Project removedProject = projects.remove(projectName);
         if (removedProject != null) {
             resolveDetachedProjects(removedProject, Project.empty(removedProject.root()));
         }
@@ -219,29 +247,31 @@ public record ServerState(
         // This is a project reload, so we need to resolve any added/removed files
         // that need to be moved to or from detachedProjects projects.
         if (oldProject != null) {
-            Set<String> currentProjectSmithyPaths = oldProject.smithyFiles().keySet();
-            Set<String> updatedProjectSmithyPaths = updatedProject.smithyFiles().keySet();
+            Set<String> currentProjectSmithyPaths = oldProject.getAllSmithyFilePaths();
+            Set<String> updatedProjectSmithyPaths = updatedProject.getAllSmithyFilePaths();
 
             Set<String> addedPaths = new HashSet<>(updatedProjectSmithyPaths);
             addedPaths.removeAll(currentProjectSmithyPaths);
             for (String addedPath : addedPaths) {
                 String addedUri = LspAdapter.toUri(addedPath);
-                if (isDetached(addedUri)) {
-                    detachedProjects.remove(addedUri);
-                }
+                projects.remove(addedUri); // Remove any detached projects
             }
 
             Set<String> removedPaths = new HashSet<>(currentProjectSmithyPaths);
             removedPaths.removeAll(updatedProjectSmithyPaths);
             for (String removedPath : removedPaths) {
                 String removedUri = LspAdapter.toUri(removedPath);
-                // Only move to a detachedProjects project if the file is managed
+                // Only move to a detached project if the file is managed
                 if (managedUris.contains(removedUri)) {
-                    Document removedDocument = oldProject.getDocument(removedUri);
-                    // The copy here is technically unnecessary, if we make ModelAssembler support borrowed strings
+                    Document removedDocument = oldProject.getProjectFile(removedUri).document();
                     createDetachedProject(removedUri, removedDocument.copyText());
                 }
             }
         }
+    }
+
+    private void createDetachedProject(String uri, String text) {
+        Project project = ProjectLoader.loadDetached(uri, text);
+        projects.put(uri, project);
     }
 }

@@ -56,6 +56,7 @@ final class FileWatcherRegistrations {
      */
     static List<Registration> getSmithyFileWatcherRegistrations(Collection<Project> projects) {
         List<FileSystemWatcher> smithyFileWatchers = projects.stream()
+                .filter(project -> project.type() == Project.Type.NORMAL)
                 .flatMap(project -> FilePatterns.getSmithyFileWatchPatterns(project).stream())
                 .map(pattern -> new FileSystemWatcher(Either.forLeft(pattern), WATCH_FILE_KIND))
                 .toList();

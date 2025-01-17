@@ -333,7 +333,8 @@ public class DefinitionHandlerTest {
             Location location,
             String expected
     ) {
-        SmithyFile smithyFile = result.handler.project.getSmithyFile(location.getUri());
+        String uri = location.getUri();
+        SmithyFile smithyFile = (SmithyFile) result.handler.project.getProjectFile(uri);
         assertThat(smithyFile, notNullValue());
 
         int documentIndex = smithyFile.document().indexOfPosition(location.getRange().getStart());
@@ -367,7 +368,7 @@ public class DefinitionHandlerTest {
         TestWorkspace workspace = TestWorkspace.singleModel(text);
         Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
         String uri = workspace.getUri("main.smithy");
-        SmithyFile smithyFile = project.getSmithyFile(uri);
+        SmithyFile smithyFile = (SmithyFile) project.getProjectFile(uri);
 
         List<Location> locations = new ArrayList<>();
         DefinitionHandler handler = new DefinitionHandler(project, (IdlFile) smithyFile);

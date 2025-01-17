@@ -71,7 +71,7 @@ public final class SmithyDiagnostics {
             diagnostics.add(versionDiagnostic);
         }
 
-        if (projectAndFile.isDetached()) {
+        if (projectAndFile.project().type() == Project.Type.DETACHED) {
             diagnostics.add(detachedDiagnostic(smithyFile));
         }
 

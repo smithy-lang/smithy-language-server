@@ -87,7 +87,7 @@ public class SmithyVersionRefactoringTest {
         List<TextEdit> edits = action.getEdit().getChanges().get(uri);
         assertThat(edits, hasSize(1));
         TextEdit edit = edits.get(0);
-        Document document = server.getFirstProject().getDocument(uri);
+        Document document = server.getState().findProjectAndFile(uri).file().document();
         document.applyEdit(edit.getRange(), edit.getNewText());
         assertThat(document.copyText(), equalTo(safeString("""
                 $version: "1"
@@ -141,7 +141,7 @@ public class SmithyVersionRefactoringTest {
         List<TextEdit> edits = action.getEdit().getChanges().get(uri);
         assertThat(edits, hasSize(1));
         TextEdit edit = edits.get(0);
-        Document document = server.getFirstProject().getDocument(uri);
+        Document document = server.getState().findProjectAndFile(uri).file().document();
         document.applyEdit(edit.getRange(), edit.getNewText());
         assertThat(document.copyText(), equalTo("""
                 $version: "2"
