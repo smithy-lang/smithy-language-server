@@ -97,20 +97,31 @@ public final class Document {
      *  doesn't exist
      */
     public int lineOfIndex(int idx) {
-        // TODO: Use binary search or similar
-        if (idx >= length() || idx < 0) {
-            return -1;
-        }
+        int low = 0;
+        int up = lastLine();
 
-        for (int line = 0; line <= lastLine() - 1; line++) {
-            int currentLineIdx = indexOfLine(line);
-            int nextLineIdx = indexOfLine(line + 1);
-            if (idx >= currentLineIdx && idx < nextLineIdx) {
-                return line;
+        while (low <= up) {
+            int mid = (low + up) / 2;
+            int midLineIdx = lineIndices[mid];
+            int midLineEndIdx = lineEndUnchecked(mid);
+            if (idx >= midLineIdx && idx <= midLineEndIdx) {
+                return mid;
+            } else if (idx < midLineIdx) {
+                up = mid - 1;
+            } else {
+                low = mid + 1;
             }
         }
 
-        return lastLine();
+        return -1;
+    }
+
+    private int lineEndUnchecked(int line) {
+        if (line == lastLine()) {
+            return length() - 1;
+        } else {
+            return lineIndices[line + 1] - 1;
+        }
     }
 
     /**
@@ -168,6 +179,34 @@ public final class Document {
     }
 
     /**
+     * @param start The start character offset
+     * @param end The end character offset
+     * @return The range between the two given offsets
+     */
+    public Range rangeBetween(int start, int end) {
+        if (end < start || start < 0) {
+            return null;
+        }
+
+        // The start is inclusive, so it should be within the bounds of the document
+        Position startPos = positionAtIndex(start);
+        if (startPos == null) {
+            return null;
+        }
+
+        Position endPos;
+        if (end == length()) {
+            int lastLine = lastLine();
+            int lastCol = length() - lineIndices[lastLine];
+            endPos = new Position(lastLine, lastCol);
+        } else {
+            endPos = positionAtIndex(end);
+        }
+
+        return new Range(startPos, endPos);
+    }
+
+    /**
      * @param line The line to find the end of
      * @return The index of the end of the given line, or {@code -1} if the
      *  line is out of bounds
@@ -218,23 +257,6 @@ public final class Document {
      */
     public int lastIndexOf(String s, int before) {
         return buffer.lastIndexOf(s, before);
-    }
-
-    /**
-     * @param c The character to find the last index of
-     * @param before The index to stop the search at
-     * @param line The line to search within
-     * @return The index of the last occurrence of {@code c} before {@code before}
-     *  on the line {@code line} or {@code -1} if one doesn't exist
-     */
-    int lastIndexOfOnLine(char c, int before, int line) {
-        int lineIdx = indexOfLine(line);
-        for (int i = before; i >= lineIdx; i--) {
-            if (buffer.charAt(i) == c) {
-                return i;
-            }
-        }
-        return -1;
     }
 
     /**
@@ -313,19 +335,6 @@ public final class Document {
     }
 
     /**
-     * @param position The position within the id to borrow
-     * @return A reference to the id that the given {@code position} is
-     *  within, or {@code null} if the position is not within an id
-     */
-    public CharBuffer borrowId(Position position) {
-        DocumentId id = copyDocumentId(position);
-        if (id == null) {
-            return null;
-        }
-        return id.idSlice();
-    }
-
-    /**
      * @param line The line to borrow
      * @return A reference to the text in the given line, or {@code null} if
      *  the line doesn't exist
@@ -381,32 +390,6 @@ public final class Document {
         }
 
         return borrowed.toString();
-    }
-
-    /**
-     * @param position The position within the token to copy
-     * @return A copy of the token that the given {@code position} is within,
-     *  or {@code null} if the position is not within a token
-     */
-    public String copyToken(Position position) {
-        CharSequence token = borrowToken(position);
-        if (token == null) {
-            return null;
-        }
-        return token.toString();
-    }
-
-    /**
-     * @param position The position within the id to copy
-     * @return A copy of the id that the given {@code position} is
-     *  within, or {@code null} if the position is not within an id
-     */
-    public String copyId(Position position) {
-        CharBuffer id = borrowId(position);
-        if (id == null) {
-            return null;
-        }
-        return id.toString();
     }
 
     /**
@@ -495,29 +478,24 @@ public final class Document {
             type = DocumentId.Type.ID;
         }
 
-        int actualStartIdx = startIdx + 1; // because we go past the actual start in the loop
-        CharBuffer wrapped = CharBuffer.wrap(buffer, actualStartIdx, endIdx); // endIdx here is non-inclusive
-        Position start = positionAtIndex(actualStartIdx);
-        Position end = positionAtIndex(endIdx - 1); // because we go pas the actual end in the loop
+        // We go past the start and end in each loop, so startIdx is before the start character, and endIdx
+        // is after the end character.
+        int startCharIdx = startIdx + 1;
+        int endCharIdx = endIdx - 1;
+
+        // For creating the buffer and the range, the start is inclusive, and the end is exclusive.
+        CharBuffer wrapped = CharBuffer.wrap(buffer, startCharIdx, endCharIdx + 1);
+        Position start = positionAtIndex(startCharIdx);
+        // However, we can't get the position for an index that may be out of bounds, so we need to make
+        // the end position exclusive manually.
+        Position end = positionAtIndex(endCharIdx);
+        end.setCharacter(end.getCharacter() + 1);
         Range range = new Range(start, end);
         return new DocumentId(type, wrapped, range);
     }
 
     private static boolean isIdChar(char c) {
         return Character.isLetterOrDigit(c) || c == '_' || c == '$' || c == '#' || c == '.';
-    }
-
-    /**
-     * @param line The line to copy
-     * @return A copy of the text in the given line, or {@code null} if the line
-     *  doesn't exist
-     */
-    public String copyLine(int line) {
-        CharBuffer borrowed = borrowLine(line);
-        if (borrowed == null) {
-            return null;
-        }
-        return borrowed.toString();
     }
 
     /**
@@ -539,18 +517,6 @@ public final class Document {
      */
     public int length() {
         return buffer.length();
-    }
-
-    /**
-     * @param index The index to get the character at
-     * @return The character at the given index, or {@code \u0000} if one
-     *  doesn't exist
-     */
-    char charAt(int index) {
-        if (index < 0 || index >= length()) {
-            return '\u0000';
-        }
-        return buffer.charAt(index);
     }
 
     // Adapted from String::split

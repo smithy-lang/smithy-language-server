@@ -141,6 +141,9 @@ publishing {
     }
 }
 
+checkstyle {
+    toolVersion = "10.12.4"
+}
 
 dependencies {
     implementation "org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1"
@@ -153,6 +156,8 @@ dependencies {
     testImplementation "org.hamcrest:hamcrest:2.2"
 
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+
+    checkstyle "com.puppycrawl.tools:checkstyle:${checkstyle.toolVersion}"
 }
 
 tasks.withType(Javadoc).all {

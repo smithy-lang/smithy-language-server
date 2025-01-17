@@ -6,13 +6,11 @@
 package software.amazon.smithy.lsp.project;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
@@ -25,6 +23,7 @@ import software.amazon.smithy.model.loader.ModelAssembler;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.shapes.AbstractShapeBuilder;
 import software.amazon.smithy.model.shapes.Shape;
+import software.amazon.smithy.model.shapes.ToShapeId;
 import software.amazon.smithy.model.traits.Trait;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.utils.IoUtils;
@@ -40,20 +39,30 @@ public final class Project {
     private final List<Path> dependencies;
     private final Map<String, SmithyFile> smithyFiles;
     private final Supplier<ModelAssembler> assemblerFactory;
+    private final Map<String, Set<ToShapeId>> definedShapesByFile;
     private ValidatedResult<Model> modelResult;
     // TODO: Move this into SmithyFileDependenciesIndex
     private Map<String, Map<String, Node>> perFileMetadata;
     private SmithyFileDependenciesIndex smithyFileDependenciesIndex;
 
-    private Project(Builder builder) {
-        this.root = Objects.requireNonNull(builder.root);
-        this.config = builder.config;
-        this.dependencies = builder.dependencies;
-        this.smithyFiles = builder.smithyFiles;
-        this.modelResult = builder.modelResult;
-        this.assemblerFactory = builder.assemblerFactory;
-        this.perFileMetadata = builder.perFileMetadata;
-        this.smithyFileDependenciesIndex = builder.smithyFileDependenciesIndex;
+    Project(Path root,
+            ProjectConfig config,
+            List<Path> dependencies,
+            Map<String, SmithyFile> smithyFiles,
+            Supplier<ModelAssembler> assemblerFactory,
+            Map<String, Set<ToShapeId>> definedShapesByFile,
+            ValidatedResult<Model> modelResult,
+            Map<String, Map<String, Node>> perFileMetadata,
+            SmithyFileDependenciesIndex smithyFileDependenciesIndex) {
+        this.root = root;
+        this.config = config;
+        this.dependencies = dependencies;
+        this.smithyFiles = smithyFiles;
+        this.assemblerFactory = assemblerFactory;
+        this.definedShapesByFile = definedShapesByFile;
+        this.modelResult = modelResult;
+        this.perFileMetadata = perFileMetadata;
+        this.smithyFileDependenciesIndex = smithyFileDependenciesIndex;
     }
 
     /**
@@ -63,10 +72,15 @@ public final class Project {
      * @return The empty project
      */
     public static Project empty(Path root) {
-        return builder()
-                .root(root)
-                .modelResult(ValidatedResult.empty())
-                .build();
+        return new Project(root,
+                ProjectConfig.empty(),
+                List.of(),
+                new HashMap<>(),
+                Model::assembler,
+                new HashMap<>(),
+                ValidatedResult.empty(),
+                new HashMap<>(),
+                new SmithyFileDependenciesIndex());
     }
 
     /**
@@ -117,6 +131,13 @@ public final class Project {
      */
     public Map<String, SmithyFile> smithyFiles() {
         return this.smithyFiles;
+    }
+
+    /**
+     * @return A map of paths to the set of shape ids defined in the file at that path.
+     */
+    public Map<String, Set<ToShapeId>> definedShapesByFile() {
+        return this.definedShapesByFile;
     }
 
     /**
@@ -224,7 +245,6 @@ public final class Project {
 
         // So we don't have to recompute the paths later
         Set<String> removedPaths = new HashSet<>(removeUris.size());
-        Set<String> changedPaths = new HashSet<>(changeUris.size());
 
         Set<String> visited = new HashSet<>();
 
@@ -245,7 +265,6 @@ public final class Project {
 
             for (String uri : changeUris) {
                 String path = LspAdapter.toPath(uri);
-                changedPaths.add(path);
 
                 removeFileForReload(assembler, builder, path, visited);
                 removeDependentsForReload(assembler, builder, path, visited);
@@ -281,25 +300,19 @@ public final class Project {
 
         for (String visitedPath : visited) {
             if (!removedPaths.contains(visitedPath)) {
-                SmithyFile current = smithyFiles.get(visitedPath);
-                Set<Shape> updatedShapes = getFileShapes(visitedPath, smithyFiles.get(visitedPath).shapes());
-                // Only recompute the rest of the smithy file if it changed
-                if (changedPaths.contains(visitedPath)) {
-                    // TODO: Could cache validation events
-                    this.smithyFiles.put(visitedPath,
-                            ProjectLoader.buildSmithyFile(visitedPath, current.document(), updatedShapes).build());
-                } else {
-                    current.setShapes(updatedShapes);
-                }
+                Set<ToShapeId> currentShapes = definedShapesByFile.getOrDefault(visitedPath, Set.of());
+                this.definedShapesByFile.put(visitedPath, getFileShapes(visitedPath, currentShapes));
+            } else {
+                this.definedShapesByFile.remove(visitedPath);
             }
         }
 
         for (String uri : addUris) {
             String path = LspAdapter.toPath(uri);
-            Set<Shape> fileShapes = getFileShapes(path, Collections.emptySet());
             Document document = Document.of(IoUtils.readUtf8File(path));
-            SmithyFile smithyFile = ProjectLoader.buildSmithyFile(path, document, fileShapes).build();
-            smithyFiles.put(path, smithyFile);
+            SmithyFile smithyFile = SmithyFile.create(path, document);
+            this.smithyFiles.put(path, smithyFile);
+            this.definedShapesByFile.put(path, getFileShapes(path, Set.of()));
         }
     }
 
@@ -324,21 +337,21 @@ public final class Project {
 
         visited.add(path);
 
-        for (Shape shape : smithyFiles.get(path).shapes()) {
-            builder.removeShape(shape.getId());
+        for (ToShapeId toShapeId : definedShapesByFile.getOrDefault(path, Set.of())) {
+            builder.removeShape(toShapeId.toShapeId());
 
             // This shape may have traits applied to it in other files,
             // so simply removing the shape loses the information about
             // those traits.
 
             // This shape's dependencies files will be removed and re-loaded
-            smithyFileDependenciesIndex.getDependenciesFiles(shape).forEach((depPath) ->
+            smithyFileDependenciesIndex.getDependenciesFiles(toShapeId).forEach((depPath) ->
                     removeFileForReload(assembler, builder, depPath, visited));
 
             // Traits applied in other files are re-added to the assembler so if/when the shape
             // is reloaded, it will have those traits
-            smithyFileDependenciesIndex.getTraitsAppliedInOtherFiles(shape).forEach((trait) ->
-                    assembler.addTrait(shape.getId(), trait));
+            smithyFileDependenciesIndex.getTraitsAppliedInOtherFiles(toShapeId).forEach((trait) ->
+                    assembler.addTrait(toShapeId.toShapeId(), trait));
         }
     }
 
@@ -350,8 +363,8 @@ public final class Project {
     ) {
         // This file may apply traits to shapes in other files. Normally, letting the assembler simply reparse
         // the file would be fine because it would ignore the duplicated trait application coming from the same
-        // source location. But if the apply statement is changed/removed, the old application isn't removed, so we
-        // could get a duplicate trait, or a merged array trait.
+        // source location. But if the apply statement is changed/removed, the old trait isn't removed, so we
+        // could get a duplicate application, or a merged array application.
         smithyFileDependenciesIndex.getDependentFiles(path).forEach((depPath) ->
                 removeFileForReload(assembler, builder, depPath, visited));
         smithyFileDependenciesIndex.getAppliedTraitsInFile(path).forEach((shapeId, traits) -> {
@@ -375,80 +388,11 @@ public final class Project {
         }
     }
 
-    private Set<Shape> getFileShapes(String path, Set<Shape> orDefault) {
+    private Set<ToShapeId> getFileShapes(String path, Set<ToShapeId> orDefault) {
         return this.modelResult.getResult()
                 .map(model -> model.shapes()
                         .filter(shape -> shape.getSourceLocation().getFilename().equals(path))
-                        .collect(Collectors.toSet()))
+                        .collect(Collectors.<ToShapeId>toSet()))
                 .orElse(orDefault);
-    }
-
-    static Builder builder() {
-        return new Builder();
-    }
-
-    static final class Builder {
-        private Path root;
-        private ProjectConfig config = ProjectConfig.empty();
-        private final List<Path> dependencies = new ArrayList<>();
-        private final Map<String, SmithyFile> smithyFiles = new HashMap<>();
-        private ValidatedResult<Model> modelResult;
-        private Supplier<ModelAssembler> assemblerFactory = Model::assembler;
-        private Map<String, Map<String, Node>> perFileMetadata = new HashMap<>();
-        private SmithyFileDependenciesIndex smithyFileDependenciesIndex = new SmithyFileDependenciesIndex();
-
-        private Builder() {
-        }
-
-        public Builder root(Path root) {
-            this.root = root;
-            return this;
-        }
-
-        public Builder config(ProjectConfig config) {
-            this.config = config;
-            return this;
-        }
-
-        public Builder dependencies(List<Path> paths) {
-            this.dependencies.clear();
-            this.dependencies.addAll(paths);
-            return this;
-        }
-
-        public Builder addDependency(Path path) {
-            this.dependencies.add(path);
-            return this;
-        }
-
-        public Builder smithyFiles(Map<String, SmithyFile> smithyFiles) {
-            this.smithyFiles.clear();
-            this.smithyFiles.putAll(smithyFiles);
-            return this;
-        }
-
-        public Builder modelResult(ValidatedResult<Model> modelResult) {
-            this.modelResult = modelResult;
-            return this;
-        }
-
-        public Builder assemblerFactory(Supplier<ModelAssembler> assemblerFactory) {
-            this.assemblerFactory = assemblerFactory;
-            return this;
-        }
-
-        public Builder perFileMetadata(Map<String, Map<String, Node>> perFileMetadata) {
-            this.perFileMetadata = perFileMetadata;
-            return this;
-        }
-
-        public Builder smithyFileDependenciesIndex(SmithyFileDependenciesIndex smithyFileDependenciesIndex) {
-            this.smithyFileDependenciesIndex = smithyFileDependenciesIndex;
-            return this;
-        }
-
-        public Project build() {
-            return new Project(this);
-        }
     }
 }
