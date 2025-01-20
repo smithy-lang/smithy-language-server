@@ -33,9 +33,12 @@ public final class SmithyDiagnostics {
     public static final String UPDATE_VERSION = "migrating-idl-1-to-2";
     public static final String DEFINE_VERSION = "define-idl-version";
     public static final String DETACHED_FILE = "detached-file";
+    public static final String USE_SMITHY_BUILD = "use-smithy-build";
 
     private static final DiagnosticCodeDescription UPDATE_VERSION_DESCRIPTION =
             new DiagnosticCodeDescription("https://smithy.io/2.0/guides/migrating-idl-1-to-2.html");
+    private static final DiagnosticCodeDescription USE_SMITHY_BUILD_DESCRIPTION =
+            new DiagnosticCodeDescription("https://smithy.io/2.0/guides/smithy-build-json.html#using-smithy-build-json");
 
     private SmithyDiagnostics() {
     }
@@ -161,7 +164,24 @@ public final class SmithyDiagnostics {
 
         @Override
         public void addExtraDiagnostics(List<Diagnostic> diagnostics) {
-            // TODO: Add warning diagnostic to build ext files
+            switch (buildFile.type()) {
+                case SMITHY_BUILD_EXT_0, SMITHY_BUILD_EXT_1 -> diagnostics.add(useSmithyBuild());
+            }
+        }
+
+        private Diagnostic useSmithyBuild() {
+            Range range = LspAdapter.origin();
+            Diagnostic diagnostic = createDiagnostic(
+                    range,
+                    String.format("""
+                            You should use smithy-build.json as your build configuration file for Smithy.
+                            The %s file is not supported by Smithy, and support from the language server
+                            will be removed in a later version.
+                            """, buildFile.type().filename()),
+                    USE_SMITHY_BUILD
+            );
+            diagnostic.setCodeDescription(USE_SMITHY_BUILD_DESCRIPTION);
+            return diagnostic;
         }
     }
 
