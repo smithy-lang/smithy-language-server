@@ -38,7 +38,7 @@ public class ProjectConfigTest {
     public void loadsConfigWithEnvVariable() {
         System.setProperty("FOO", "bar");
         Path root = toPath(getClass().getResource("env-config"));
-        ProjectConfig config = load(root);
+        ProjectConfig config = load(root).config();
 
         assertThat(config.maven().getRepositories(), hasSize(1));
         MavenRepository repository = config.maven().getRepositories().stream().findFirst().get();
@@ -50,7 +50,7 @@ public class ProjectConfigTest {
     @Test
     public void loadsLegacyConfig() {
         Path root = toPath(getClass().getResource("legacy-config"));
-        ProjectConfig config = load(root);
+        ProjectConfig config = load(root).config();
 
         assertThat(config.maven().getDependencies(), containsInAnyOrder("baz"));
         assertThat(config.maven().getRepositories().stream()
@@ -61,7 +61,7 @@ public class ProjectConfigTest {
     @Test
     public void prefersNonLegacyConfig() {
         Path root = toPath(getClass().getResource("legacy-config-with-conflicts"));
-        ProjectConfig config = load(root);
+        ProjectConfig config = load(root).config();
 
         assertThat(config.maven().getDependencies(), containsInAnyOrder("dep1", "dep2"));
         assertThat(config.maven().getRepositories().stream()
@@ -72,7 +72,7 @@ public class ProjectConfigTest {
     @Test
     public void mergesBuildExts() {
         Path root = toPath(getClass().getResource("build-exts"));
-        ProjectConfig config = load(root);
+        ProjectConfig config = load(root).config();
 
         assertThat(config.imports(), containsInAnyOrder(containsString("main.smithy"), containsString("other.smithy")));
     }
@@ -86,14 +86,16 @@ public class ProjectConfigTest {
                 }
                 """);
         var eventPosition = text.positions()[0];
-        var config = load(Path.of("test"), BuildFileType.SMITHY_BUILD, text.text());
+        Path root = Path.of("test");
+        var buildFiles = createBuildFiles(root, BuildFileType.SMITHY_BUILD, text.text());
+        var result = load(root, buildFiles);
 
-        var buildFile = config.buildFiles().getByType(BuildFileType.SMITHY_BUILD);
+        var buildFile = buildFiles.getByType(BuildFileType.SMITHY_BUILD);
         assertThat(buildFile, notNullValue());
-        assertThat(config.events(), containsInAnyOrder(
+        assertThat(result.events(), containsInAnyOrder(
                 eventWithSourceLocation(equalTo(toSourceLocation(buildFile.path(), eventPosition)))
         ));
-        assertThat(config.sources(), empty());
+        assertThat(result.config().sources(), empty());
     }
 
     @Test
@@ -107,14 +109,16 @@ public class ProjectConfigTest {
                 }
                 """);
         var eventPosition = text.positions()[0];
-        var config = load(Path.of("test"), BuildFileType.SMITHY_PROJECT, text.text());
+        Path root = Path.of("test");
+        var buildFiles = createBuildFiles(root, BuildFileType.SMITHY_PROJECT, text.text());
+        var result = load(root, buildFiles);
 
-        var buildFile = config.buildFiles().getByType(BuildFileType.SMITHY_PROJECT);
+        var buildFile = buildFiles.getByType(BuildFileType.SMITHY_PROJECT);
         assertThat(buildFile, notNullValue());
-        assertThat(config.events(), containsInAnyOrder(
+        assertThat(result.events(), containsInAnyOrder(
                 eventWithSourceLocation(equalTo(toSourceLocation(buildFile.path(), eventPosition)))
         ));
-        assertThat(config.sources(), empty());
+        assertThat(result.config().sources(), empty());
     }
 
     @Test
@@ -135,15 +139,17 @@ public class ProjectConfigTest {
                 }
                 """);
         var eventPosition = text.positions()[0];
-        var config = load(Path.of("test"), BuildFileType.SMITHY_BUILD, text.text());
+        Path root = Path.of("test");
+        var buildFiles = createBuildFiles(root, BuildFileType.SMITHY_BUILD, text.text());
+        var result = load(root, buildFiles);
 
-        var buildFile = config.buildFiles().getByType(BuildFileType.SMITHY_BUILD);
+        var buildFile = buildFiles.getByType(BuildFileType.SMITHY_BUILD);
         assertThat(buildFile, notNullValue());
-        assertThat(config.events(), containsInAnyOrder(allOf(
+        assertThat(result.events(), containsInAnyOrder(allOf(
                 eventWithMessage(containsString("httpCredentials")),
                 eventWithSourceLocation(equalTo(toSourceLocation(buildFile.path(), eventPosition)))
         )));
-        assertThat(config.sources(), empty());
+        assertThat(result.config().sources(), empty());
     }
 
     @Test
@@ -164,11 +170,12 @@ public class ProjectConfigTest {
         var notFoundImportPosition = text.positions()[1];
         var notFoundDepPosition = text.positions()[2];
         var root = Path.of("test");
-        var config = load(root, BuildFileType.SMITHY_PROJECT, text.text());
+        var buildFiles = createBuildFiles(root, BuildFileType.SMITHY_PROJECT, text.text());
+        var result = load(root, buildFiles);
 
-        var buildFile = config.buildFiles().getByType(BuildFileType.SMITHY_PROJECT);
+        var buildFile = buildFiles.getByType(BuildFileType.SMITHY_PROJECT);
         assertThat(buildFile, notNullValue());
-        assertThat(config.events(), containsInAnyOrder(
+        assertThat(result.events(), containsInAnyOrder(
                 allOf(
                         eventWithId(equalTo("FileNotFound")),
                         eventWithSourceLocation(equalTo(toSourceLocation(buildFile.path(), notFoundSourcePosition)))
@@ -182,9 +189,9 @@ public class ProjectConfigTest {
                         eventWithSourceLocation(equalTo(toSourceLocation(buildFile.path(), notFoundDepPosition)))
                 )
         ));
-        assertThat(config.sources(), containsInAnyOrder(equalTo("foo")));
-        assertThat(config.imports(), containsInAnyOrder(equalTo("bar")));
-        assertThat(config.projectDependencies().getFirst().path(), equalTo("baz"));
+        assertThat(result.config().sources(), containsInAnyOrder(equalTo("foo")));
+        assertThat(result.config().imports(), containsInAnyOrder(equalTo("bar")));
+        assertThat(result.config().projectDependencies().getFirst().path(), equalTo("baz"));
     }
 
     @Test
@@ -221,11 +228,11 @@ public class ProjectConfigTest {
             }
         };
         var buildFiles = createBuildFiles(root, BuildFileType.SMITHY_BUILD, text.text());
-        var config = new ProjectConfigLoader(root, buildFiles, resolverFactory).load();
+        var result = new ProjectConfigLoader(root, buildFiles, resolverFactory).load();
 
-        var buildFile = config.buildFiles().getByType(BuildFileType.SMITHY_BUILD);
+        var buildFile = buildFiles.getByType(BuildFileType.SMITHY_BUILD);
         assertThat(buildFile, notNullValue());
-        assertThat(config.events(), containsInAnyOrder(
+        assertThat(result.events(), containsInAnyOrder(
                 allOf(
                         eventWithId(equalTo("DependencyResolver")),
                         eventWithMessage(allOf(
@@ -258,13 +265,12 @@ public class ProjectConfigTest {
         return BuildFiles.of(List.of(buildFile));
     }
 
-    private static ProjectConfig load(Path root, BuildFileType type, String content) {
-        var buildFiles = createBuildFiles(root, type, content);
+    private static ProjectConfigLoader.Result load(Path root, BuildFiles buildFiles) {
         var loader = new ProjectConfigLoader(root, buildFiles, NoOpResolver::new);
         return loader.load();
     }
 
-    private static ProjectConfig load(Path root) {
+    private static ProjectConfigLoader.Result load(Path root) {
         var buildFiles = BuildFiles.load(root, new ServerState());
         var loader = new ProjectConfigLoader(root, buildFiles, NoOpResolver::new);
         return loader.load();

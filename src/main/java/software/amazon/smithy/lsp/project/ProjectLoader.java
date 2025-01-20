@@ -57,11 +57,13 @@ public final class ProjectLoader {
         return new Project(
                 path,
                 config,
+                BuildFiles.empty(),
                 result.smithyFiles(),
                 result.assemblerFactory(),
                 Project.Type.DETACHED,
                 result.modelResult(),
-                result.rebuildIndex()
+                result.rebuildIndex(),
+                List.of()
         );
     }
 
@@ -87,17 +89,19 @@ public final class ProjectLoader {
             return Project.empty(root);
         }
 
-        ProjectConfig config = new ProjectConfigLoader(root, buildFiles).load();
-        LoadModelResult result = doLoad(managedFiles, config);
+        ProjectConfigLoader.Result configResult = new ProjectConfigLoader(root, buildFiles).load();
+        LoadModelResult result = doLoad(managedFiles, configResult.config());
 
         return new Project(
                 root,
-                config,
+                configResult.config(),
+                buildFiles,
                 result.smithyFiles(),
                 result.assemblerFactory(),
                 Project.Type.NORMAL,
                 result.modelResult(),
-                result.rebuildIndex()
+                result.rebuildIndex(),
+                configResult.events()
         );
     }
 

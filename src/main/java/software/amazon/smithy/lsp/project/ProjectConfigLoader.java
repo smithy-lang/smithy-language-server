@@ -46,48 +46,6 @@ import software.amazon.smithy.model.validation.ValidationEvent;
  * Loads and validates {@link ProjectConfig}s from {@link BuildFiles}.
  */
 final class ProjectConfigLoader {
-    private interface BuildFileValidator<T> {
-        T validate(BuildFile source, Node node, Consumer<ValidationEvent> eventConsumer);
-    }
-
-    private record SmithyBuildJsonValidator() implements BuildFileValidator<SmithyBuildConfig> {
-        @Override
-        public SmithyBuildConfig validate(BuildFile source, Node node, Consumer<ValidationEvent> eventConsumer) {
-            try {
-                return SmithyBuildConfig.fromNode(node);
-            } catch (Exception e) {
-                eventConsumer.accept(toEvent(e, source));
-            }
-            return null;
-        }
-    }
-
-    private record SmithyBuildExtValidator() implements BuildFileValidator<SmithyBuildExtensions> {
-        @Override
-        public SmithyBuildExtensions validate(BuildFile source, Node node, Consumer<ValidationEvent> eventConsumer) {
-            try {
-                var config = NODE_MAPPER.deserialize(node, SmithyBuildExtensions.class);
-                config.mergeMavenFromSmithyBuildConfig(SmithyBuildConfig.fromNode(node));
-                return config;
-            } catch (Exception e) {
-                eventConsumer.accept(toEvent(e, source));
-            }
-            return null;
-        }
-    }
-
-    private record SmithyProjectJsonValidator() implements BuildFileValidator<SmithyProjectJson> {
-        @Override
-        public SmithyProjectJson validate(BuildFile source, Node node, Consumer<ValidationEvent> eventConsumer) {
-            try {
-                return SmithyProjectJson.fromNode(node);
-            } catch (Exception e) {
-                eventConsumer.accept(toEvent(e, source));
-            }
-            return null;
-        }
-    }
-
     private static final NodeMapper NODE_MAPPER = new NodeMapper();
     private static final BuildFileType[] EXTS = {BuildFileType.SMITHY_BUILD_EXT_0, BuildFileType.SMITHY_BUILD_EXT_1};
     // Taken from smithy-cli ConfigurationUtils
@@ -113,59 +71,107 @@ final class ProjectConfigLoader {
         this(root, buildFiles, DEFAULT_RESOLVER_FACTORY);
     }
 
+    private interface BuildFileLoader<T> {
+        T validate(BuildFile source, Node node, Consumer<ValidationEvent> eventConsumer);
+    }
+
+    private record SmithyBuildJsonLoader() implements BuildFileLoader<SmithyBuildConfig> {
+        @Override
+        public SmithyBuildConfig validate(BuildFile source, Node node, Consumer<ValidationEvent> eventConsumer) {
+            try {
+                return SmithyBuildConfig.fromNode(node);
+            } catch (Exception e) {
+                eventConsumer.accept(toEvent(e, source));
+            }
+            return null;
+        }
+    }
+
+    private record SmithyBuildExtLoader() implements BuildFileLoader<SmithyBuildExtensions> {
+        @Override
+        public SmithyBuildExtensions validate(BuildFile source, Node node, Consumer<ValidationEvent> eventConsumer) {
+            try {
+                var config = NODE_MAPPER.deserialize(node, SmithyBuildExtensions.class);
+                config.mergeMavenFromSmithyBuildConfig(SmithyBuildConfig.fromNode(node));
+                return config;
+            } catch (Exception e) {
+                eventConsumer.accept(toEvent(e, source));
+            }
+            return null;
+        }
+    }
+
+    private record SmithyProjectJsonLoader() implements BuildFileLoader<SmithyProjectJson> {
+        @Override
+        public SmithyProjectJson validate(BuildFile source, Node node, Consumer<ValidationEvent> eventConsumer) {
+            try {
+                return SmithyProjectJson.fromNode(node);
+            } catch (Exception e) {
+                eventConsumer.accept(toEvent(e, source));
+            }
+            return null;
+        }
+    }
+
     static List<ValidationEvent> validateBuildFiles(BuildFiles buildFiles) {
         List<ValidationEvent> events = new ArrayList<>();
         for (BuildFile buildFile : buildFiles) {
-            BuildFileValidator<?> validator = switch (buildFile.type()) {
-                case SMITHY_BUILD -> new SmithyBuildJsonValidator();
-                case SMITHY_BUILD_EXT_0, SMITHY_BUILD_EXT_1 -> new SmithyBuildExtValidator();
-                case SMITHY_PROJECT -> new SmithyProjectJsonValidator();
+            BuildFileLoader<?> loader = switch (buildFile.type()) {
+                case SMITHY_BUILD -> new SmithyBuildJsonLoader();
+                case SMITHY_BUILD_EXT_0, SMITHY_BUILD_EXT_1 -> new SmithyBuildExtLoader();
+                case SMITHY_PROJECT -> new SmithyProjectJsonLoader();
             };
-            loadFile(buildFile, validator, events::add, (ignored) -> {
+
+            loadFile(buildFile, loader, events::add, (ignored) -> {
             });
         }
         return events;
     }
 
-    ProjectConfig load() {
-        SmithyBuildConfig smithyBuildConfig = loadFile(BuildFileType.SMITHY_BUILD, new SmithyBuildJsonValidator());
+    record Result(ProjectConfig config, List<ValidationEvent> events) {}
 
-        SmithyBuildExtensions.Builder extBuilder = null;
-        for (BuildFileType extType : EXTS) {
-            SmithyBuildExtensions ext = loadFile(extType, new SmithyBuildExtValidator());
-            if (ext != null) {
-                if (extBuilder == null) {
-                    extBuilder = SmithyBuildExtensions.builder();
-                }
-                extBuilder.merge(ext);
+    Result load() {
+        SmithyBuildConfig smithyBuildConfig = loadFile(BuildFileType.SMITHY_BUILD, new SmithyBuildJsonLoader());
+        SmithyBuildExtensions.Builder extBuilder = loadExts();
+        SmithyBuildConfig merged = mergeSmithyBuildConfig(smithyBuildConfig, extBuilder);
+        SmithyProjectJson smithyProjectJson = loadFile(BuildFileType.SMITHY_PROJECT, new SmithyProjectJsonLoader());
+
+        List<String> sources = new ArrayList<>();
+        List<String> imports = new ArrayList<>();
+        List<SmithyProjectJson.ProjectDependency> projectDependencies = new ArrayList<>();
+        MavenConfig mavenConfig = null;
+
+        if (merged != null) {
+            sources.addAll(merged.getSources());
+            imports.addAll(merged.getImports());
+            var mavenOpt = merged.getMaven();
+            if (mavenOpt.isPresent()) {
+                mavenConfig = mavenOpt.get();
             }
         }
 
-        SmithyBuildConfig merged = mergeSmithyBuildConfig(smithyBuildConfig, extBuilder);
-        SmithyProjectJson smithyProjectJson = loadFile(BuildFileType.SMITHY_PROJECT, new SmithyProjectJsonValidator());
+        if (smithyProjectJson != null) {
+            sources.addAll(smithyProjectJson.sources());
+            imports.addAll(smithyProjectJson.imports());
+            projectDependencies.addAll(smithyProjectJson.dependencies());
+        }
 
-        ProjectConfig partial = createConfig(merged, smithyProjectJson);
-        var resolveResult = resolve(partial);
+        ProjectConfig resolved = resolve(sources, imports, mavenConfig, projectDependencies);
 
-        return new ProjectConfig(
-                partial,
-                resolveResult.modelPaths(),
-                resolveResult.resolvedDependencies(),
-                resolveResult.events()
-        );
+        return new Result(resolved, events);
     }
 
-    private <T> T loadFile(BuildFileType type, BuildFileValidator<T> validator) {
+    private <T> T loadFile(BuildFileType type, BuildFileLoader<T> loader) {
         var buildFile = buildFiles.getByType(type);
         if (buildFile != null) {
-            return loadFile(buildFile, validator, events::add, (node) -> smithyNodes.put(type, node));
+            return loadFile(buildFile, loader, events::add, (node) -> smithyNodes.put(type, node));
         }
         return null;
     }
 
     private static <T> T loadFile(
             BuildFile buildFile,
-            BuildFileValidator<T> validator,
+            BuildFileLoader<T> loader,
             Consumer<ValidationEvent> eventConsumer,
             Consumer<Node> nodeConsumer
     ) {
@@ -174,9 +180,23 @@ final class ProjectConfigLoader {
         var smithyNode = nodeResult.getResult().orElse(null);
         if (smithyNode != null) {
             nodeConsumer.accept(smithyNode);
-            return validator.validate(buildFile, smithyNode, eventConsumer);
+            return loader.validate(buildFile, smithyNode, eventConsumer);
         }
         return null;
+    }
+
+    private SmithyBuildExtensions.Builder loadExts() {
+        SmithyBuildExtensions.Builder extBuilder = null;
+        for (BuildFileType extType : EXTS) {
+            SmithyBuildExtensions ext = loadFile(extType, new SmithyBuildExtLoader());
+            if (ext != null) {
+                if (extBuilder == null) {
+                    extBuilder = SmithyBuildExtensions.builder();
+                }
+                extBuilder.merge(ext);
+            }
+        }
+        return extBuilder;
     }
 
     private SmithyBuildConfig mergeSmithyBuildConfig(
@@ -238,61 +258,42 @@ final class ProjectConfigLoader {
                 .build();
     }
 
-    private ProjectConfig createConfig(SmithyBuildConfig smithyBuildConfig, SmithyProjectJson smithyProjectJson) {
-        // TODO: Make this more efficient with right-sized lists
-        List<String> sources = new ArrayList<>();
-        List<String> imports = new ArrayList<>();
-        List<SmithyProjectJson.ProjectDependency> projectDependencies = new ArrayList<>();
-        MavenConfig mavenConfig = null;
-
-        if (smithyBuildConfig != null) {
-            sources.addAll(smithyBuildConfig.getSources());
-            imports.addAll(smithyBuildConfig.getImports());
-            var mavenOpt = smithyBuildConfig.getMaven();
-            if (mavenOpt.isPresent()) {
-                mavenConfig = mavenOpt.get();
-            }
-        }
-
-        if (smithyProjectJson != null) {
-            sources.addAll(smithyProjectJson.sources());
-            imports.addAll(smithyProjectJson.imports());
-            projectDependencies.addAll(smithyProjectJson.dependencies());
-        }
-
-        return new ProjectConfig(
-                sources,
-                imports,
-                projectDependencies,
-                mavenConfig,
-                buildFiles
-        );
-    }
-
-    private ResolveResult resolve(ProjectConfig config) {
-        Set<Path> mavenDependencies = resolveMaven(config.maven());
-        Set<Path> projectDependencies = resolveProjectDependencies(config.projectDependencies());
+    private ProjectConfig resolve(
+            List<String> sources,
+            List<String> imports,
+            MavenConfig mavenConfig,
+            List<SmithyProjectJson.ProjectDependency> projectDependencies
+    ) {
+        Set<Path> resolvedMaven = resolveMaven(mavenConfig);
+        Set<Path> resolveProjectDependencies = resolveProjectDependencies(projectDependencies);
 
         List<URL> resolvedDependencies = new ArrayList<>();
         try {
-            for (var dep : mavenDependencies) {
+            for (var dep : resolvedMaven) {
                 resolvedDependencies.add(dep.toUri().toURL());
             }
-            for (var dep : projectDependencies) {
+            for (var dep : resolveProjectDependencies) {
                 resolvedDependencies.add(dep.toUri().toURL());
             }
         } catch (MalformedURLException e) {
             throw new RuntimeException(e);
         }
 
-        Set<Path> uniqueModelPaths = collectAllSmithyFilePaths(config.sources(), config.imports());
+        Set<Path> uniqueModelPaths = collectAllSmithyFilePaths(sources, imports);
         List<Path> modelPaths = new ArrayList<>(uniqueModelPaths);
 
-        return new ResolveResult(modelPaths, resolvedDependencies, events);
+        return new ProjectConfig(
+                sources,
+                imports,
+                projectDependencies,
+                mavenConfig,
+                modelPaths,
+                resolvedDependencies
+        );
     }
 
     private Set<Path> resolveMaven(MavenConfig maven) {
-        if (maven.getRepositories().isEmpty() && maven.getDependencies().isEmpty()) {
+        if (maven == null || (maven.getRepositories().isEmpty() && maven.getDependencies().isEmpty())) {
             return Set.of();
         }
 
@@ -337,6 +338,27 @@ final class ProjectConfigLoader {
         }
 
         return dependencyPaths;
+    }
+
+    // Taken from smithy-cli ConfigurationUtils::getConfiguredMavenRepos
+    private static Set<MavenRepository> getConfiguredMavenRepos(MavenConfig config) {
+        Set<MavenRepository> repositories = new LinkedHashSet<>();
+
+        String envRepos = EnvironmentVariable.SMITHY_MAVEN_REPOS.get();
+        if (envRepos != null) {
+            for (String repo : envRepos.split("\\|")) {
+                repositories.add(MavenRepository.builder().url(repo.trim()).build());
+            }
+        }
+
+        Set<MavenRepository> configuredRepos = config.getRepositories();
+
+        if (!configuredRepos.isEmpty()) {
+            repositories.addAll(configuredRepos);
+        } else if (envRepos == null) {
+            repositories.add(CENTRAL.get());
+        }
+        return repositories;
     }
 
     private void handleDependencyResolverExceptions(List<DependencyResolverException> exceptions) {
@@ -411,27 +433,6 @@ final class ProjectConfigLoader {
                 }
             }
         }
-    }
-
-    // Taken from smithy-cli ConfigurationUtils::getConfiguredMavenRepos
-    private static Set<MavenRepository> getConfiguredMavenRepos(MavenConfig config) {
-        Set<MavenRepository> repositories = new LinkedHashSet<>();
-
-        String envRepos = EnvironmentVariable.SMITHY_MAVEN_REPOS.get();
-        if (envRepos != null) {
-            for (String repo : envRepos.split("\\|")) {
-                repositories.add(MavenRepository.builder().url(repo.trim()).build());
-            }
-        }
-
-        Set<MavenRepository> configuredRepos = config.getRepositories();
-
-        if (!configuredRepos.isEmpty()) {
-            repositories.addAll(configuredRepos);
-        } else if (envRepos == null) {
-            repositories.add(CENTRAL.get());
-        }
-        return repositories;
     }
 
     // sources and imports can contain directories or files, relative or absolute.
@@ -548,10 +549,4 @@ final class ProjectConfigLoader {
             accumulator.add(target);
         }
     }
-
-    private record ResolveResult(
-            List<Path> modelPaths,
-            List<URL> resolvedDependencies,
-            List<ValidationEvent> events
-    ) {}
 }

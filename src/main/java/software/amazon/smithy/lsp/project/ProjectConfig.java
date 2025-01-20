@@ -8,9 +8,7 @@ package software.amazon.smithy.lsp.project;
 import java.net.URL;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
 import software.amazon.smithy.build.model.MavenConfig;
-import software.amazon.smithy.model.validation.ValidationEvent;
 
 /**
  * A complete view of all a project's configuration that is needed to load it,
@@ -23,58 +21,39 @@ final class ProjectConfig {
     private final List<String> imports;
     private final List<SmithyProjectJson.ProjectDependency> projectDependencies;
     private final MavenConfig maven;
-    private final BuildFiles buildFiles;
     private final List<Path> modelPaths;
     private final List<URL> resolvedDependencies;
-    private final ReentrantLock eventsLock = new ReentrantLock();
-    private List<ValidationEvent> events;
 
     ProjectConfig(
             List<String> sources,
             List<String> imports,
             List<SmithyProjectJson.ProjectDependency> projectDependencies,
             MavenConfig maven,
-            BuildFiles buildFiles
+            List<Path> modelPaths,
+            List<URL> resolvedDependencies
     ) {
         this.sources = sources;
         this.imports = imports;
         this.projectDependencies = projectDependencies;
         this.maven = maven == null ? DEFAULT_MAVEN : maven;
-        this.buildFiles = buildFiles;
-        this.modelPaths = List.of();
-        this.resolvedDependencies = List.of();
-        this.events = List.of();
-    }
-
-    ProjectConfig(
-            ProjectConfig config,
-            List<Path> modelPaths,
-            List<URL> resolvedDependencies,
-            List<ValidationEvent> events
-    ) {
-        this.sources = config.sources;
-        this.imports = config.imports;
-        this.projectDependencies = config.projectDependencies;
-        this.maven = config.maven;
-        this.buildFiles = config.buildFiles;
         this.modelPaths = modelPaths;
         this.resolvedDependencies = resolvedDependencies;
-        this.events = events;
+    }
+
+    private ProjectConfig() {
+        this(List.of(), List.of(), List.of(), DEFAULT_MAVEN, List.of(), List.of());
+    }
+
+    private ProjectConfig(Path modelPath) {
+        this(List.of(), List.of(), List.of(), DEFAULT_MAVEN, List.of(modelPath), List.of());
     }
 
     static ProjectConfig empty() {
-        return new ProjectConfig(
-                List.of(), List.of(), List.of(), DEFAULT_MAVEN, BuildFiles.empty()
-        );
+        return new ProjectConfig();
     }
 
     static ProjectConfig detachedConfig(Path modelPath) {
-        return new ProjectConfig(
-                empty(),
-                List.of(modelPath),
-                List.of(),
-                List.of()
-        );
+        return new ProjectConfig(modelPath);
     }
 
     List<String> sources() {
@@ -93,35 +72,11 @@ final class ProjectConfig {
         return maven;
     }
 
-    BuildFiles buildFiles() {
-        return buildFiles;
-    }
-
     List<Path> modelPaths() {
         return modelPaths;
     }
 
     List<URL> resolvedDependencies() {
         return resolvedDependencies;
-    }
-
-    List<ValidationEvent> events() {
-        eventsLock.lock();
-        try {
-            return events;
-        } finally {
-            eventsLock.unlock();
-        }
-    }
-
-    void validate() {
-        var updatedEvents = ProjectConfigLoader.validateBuildFiles(buildFiles);
-
-        eventsLock.lock();
-        try {
-            this.events = updatedEvents;
-        } finally {
-            eventsLock.unlock();
-        }
     }
 }

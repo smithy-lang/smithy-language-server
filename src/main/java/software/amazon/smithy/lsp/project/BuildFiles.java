@@ -46,7 +46,7 @@ final class BuildFiles implements Iterable<BuildFile> {
     }
 
     static BuildFiles empty() {
-        return new BuildFiles(new HashMap<>());
+        return new BuildFiles(new HashMap<>(0));
     }
 
     static BuildFiles of(Collection<BuildFile> buildFiles) {

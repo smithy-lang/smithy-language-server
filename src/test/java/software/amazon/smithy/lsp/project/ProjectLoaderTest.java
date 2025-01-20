@@ -156,7 +156,7 @@ public class ProjectLoaderTest {
         Project project = ProjectTest.load(root);
 
         assertHasBuildFile(project, BuildFileType.SMITHY_BUILD);
-        assertThat(project.config().events(), hasItem(eventWithMessage(containsString("version"))));
+        assertThat(project.configEvents(), hasItem(eventWithMessage(containsString("version"))));
         assertThat(project.modelResult().isBroken(), is(false));
     }
 
@@ -166,7 +166,7 @@ public class ProjectLoaderTest {
         Project project = ProjectTest.load(root);
 
         assertHasBuildFile(project, BuildFileType.SMITHY_BUILD);
-        assertThat(project.config().events().isEmpty(), is(false));
+        assertThat(project.configEvents().isEmpty(), is(false));
         assertThat(project.modelResult().isBroken(), is(false));
     }
 
@@ -176,7 +176,7 @@ public class ProjectLoaderTest {
         Project project = ProjectTest.load(root);
 
         assertHasBuildFile(project, BuildFileType.SMITHY_BUILD);
-        assertThat(project.config().events(), hasItem(eventWithId(equalTo("FileNotFound"))));
+        assertThat(project.configEvents(), hasItem(eventWithId(equalTo("FileNotFound"))));
         assertThat(project.modelResult().isBroken(), is(false));
         assertThat(project.getAllSmithyFiles().size(), equalTo(1)); // still have the prelude
     }
@@ -187,7 +187,7 @@ public class ProjectLoaderTest {
         Project project = ProjectTest.load(root);
 
         assertHasBuildFile(project, BuildFileType.SMITHY_BUILD);
-        assertThat(project.config().events(), hasItem(eventWithId(equalTo("DependencyResolver"))));
+        assertThat(project.configEvents(), hasItem(eventWithId(equalTo("DependencyResolver"))));
         assertThat(project.modelResult().isBroken(), is(false));
     }
 
@@ -197,7 +197,7 @@ public class ProjectLoaderTest {
         Project project = ProjectTest.load(root);
 
         assertHasBuildFile(project, BuildFileType.SMITHY_PROJECT);
-        assertThat(project.config().events(), hasItem(eventWithId(equalTo("FileNotFound"))));
+        assertThat(project.configEvents(), hasItem(eventWithId(equalTo("FileNotFound"))));
         assertThat(project.modelResult().isBroken(), is(false));
     }
 

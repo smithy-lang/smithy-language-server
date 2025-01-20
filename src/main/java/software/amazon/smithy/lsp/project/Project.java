@@ -42,28 +42,34 @@ public final class Project {
 
     private final Path root;
     private final ProjectConfig config;
+    private final BuildFiles buildFiles;
     private final Map<String, SmithyFile> smithyFiles;
     private final Supplier<ModelAssembler> assemblerFactory;
     private final Type type;
-    private ValidatedResult<Model> modelResult;
-    private RebuildIndex rebuildIndex;
+    private volatile ValidatedResult<Model> modelResult;
+    private volatile RebuildIndex rebuildIndex;
+    private volatile List<ValidationEvent> configEvents;
 
     Project(
             Path root,
             ProjectConfig config,
+            BuildFiles buildFiles,
             Map<String, SmithyFile> smithyFiles,
             Supplier<ModelAssembler> assemblerFactory,
             Type type,
             ValidatedResult<Model> modelResult,
-            RebuildIndex rebuildIndex
+            RebuildIndex rebuildIndex,
+            List<ValidationEvent> configEvents
     ) {
         this.root = root;
         this.config = config;
+        this.buildFiles = buildFiles;
         this.smithyFiles = smithyFiles;
         this.assemblerFactory = assemblerFactory;
         this.type = type;
         this.modelResult = modelResult;
         this.rebuildIndex = rebuildIndex;
+        this.configEvents = configEvents;
     }
 
     /**
@@ -95,11 +101,13 @@ public final class Project {
     public static Project empty(Path root) {
         return new Project(root,
                 ProjectConfig.empty(),
+                BuildFiles.empty(),
                 new HashMap<>(),
                 Model::assembler,
                 Type.EMPTY,
                 ValidatedResult.empty(),
-                new RebuildIndex());
+                new RebuildIndex(),
+                List.of());
     }
 
     /**
@@ -114,7 +122,7 @@ public final class Project {
     }
 
     public List<ValidationEvent> configEvents() {
-        return config.events();
+        return configEvents;
     }
 
     /**
@@ -178,11 +186,11 @@ public final class Project {
             return smithyFile;
         }
 
-        return config.buildFiles().getByPath(path);
+        return buildFiles.getByPath(path);
     }
 
-    public void validateConfig() {
-        this.config.validate();
+    public synchronized void validateConfig() {
+        this.configEvents = ProjectConfigLoader.validateBuildFiles(buildFiles);
     }
 
     /**
