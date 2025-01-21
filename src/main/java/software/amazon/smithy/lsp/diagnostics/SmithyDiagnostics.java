@@ -166,6 +166,8 @@ public final class SmithyDiagnostics {
         public void addExtraDiagnostics(List<Diagnostic> diagnostics) {
             switch (buildFile.type()) {
                 case SMITHY_BUILD_EXT_0, SMITHY_BUILD_EXT_1 -> diagnostics.add(useSmithyBuild());
+                default -> {
+                }
             }
         }
 

@@ -23,7 +23,7 @@ public sealed interface ProjectFile permits SmithyFile, BuildFile {
     Document document();
 
     /**
-     * Reparse the underlying document
+     * Reparse the underlying document.
      */
     void reparse();
 }
