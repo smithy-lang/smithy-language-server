@@ -11,7 +11,7 @@ import java.util.List;
 
 public enum BuildFileType {
     SMITHY_BUILD("smithy-build.json"),
-    SMITHY_BUILD_EXT_0("build" + File.separator + "smithy-projectDependencies.json"),
+    SMITHY_BUILD_EXT_0("build" + File.separator + "smithy-dependencies.json"),
     SMITHY_BUILD_EXT_1(".smithy.json"),
     SMITHY_PROJECT(".smithy-project.json"),;
 

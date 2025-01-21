@@ -13,7 +13,8 @@ project/project
 .gradle
 
 # Ignore Gradle build output directory
-build
+# Note: Only ignore the top-level build dir, tests use dirs named 'build' which we don't want to ignore
+/build
 
 bin
 

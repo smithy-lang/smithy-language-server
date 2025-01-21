@@ -75,6 +75,7 @@ public class ProjectConfigTest {
         ProjectConfig config = load(root).config();
 
         assertThat(config.imports(), containsInAnyOrder(containsString("main.smithy"), containsString("other.smithy")));
+        assertThat(config.maven().getDependencies(), containsInAnyOrder("foo"));
     }
 
     @Test
