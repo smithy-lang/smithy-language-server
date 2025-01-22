@@ -87,7 +87,7 @@ public class ProjectConfigTest {
                 }
                 """);
         var eventPosition = text.positions()[0];
-        Path root = Path.of("test");
+        var root = Path.of("test");
         var buildFiles = createBuildFiles(root, BuildFileType.SMITHY_BUILD, text.text());
         var result = load(root, buildFiles);
 
@@ -110,7 +110,7 @@ public class ProjectConfigTest {
                 }
                 """);
         var eventPosition = text.positions()[0];
-        Path root = Path.of("test");
+        var root = Path.of("test");
         var buildFiles = createBuildFiles(root, BuildFileType.SMITHY_PROJECT, text.text());
         var result = load(root, buildFiles);
 
@@ -140,7 +140,7 @@ public class ProjectConfigTest {
                 }
                 """);
         var eventPosition = text.positions()[0];
-        Path root = Path.of("test");
+        var root = Path.of("test");
         var buildFiles = createBuildFiles(root, BuildFileType.SMITHY_BUILD, text.text());
         var result = load(root, buildFiles);
 

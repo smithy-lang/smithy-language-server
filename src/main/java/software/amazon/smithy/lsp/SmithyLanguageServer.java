@@ -461,14 +461,14 @@ public class SmithyLanguageServer implements
                 // Report any parse/shape/trait loading errors
                 CompletableFuture<Void> future = CompletableFuture
                         .runAsync(() -> project.updateModelWithoutValidating(uri))
-                        .thenComposeAsync(unused -> sendFileDiagnostics(projectAndFile));
+                        .thenRunAsync(() -> sendFileDiagnostics(projectAndFile));
 
                 state.lifecycleTasks().putTask(uri, future);
             }
             case BuildFile ignored -> {
                 CompletableFuture<Void> future = CompletableFuture
                         .runAsync(project::validateConfig)
-                        .thenComposeAsync(unused -> sendFileDiagnostics(projectAndFile));
+                        .thenRunAsync(() -> sendFileDiagnostics(projectAndFile));
 
                 state.lifecycleTasks().putTask(uri, future);
             }
@@ -521,7 +521,7 @@ public class SmithyLanguageServer implements
         } else {
             CompletableFuture<Void> future = CompletableFuture
                     .runAsync(() -> project.updateAndValidateModel(uri))
-                    .thenCompose(unused -> sendFileDiagnostics(projectAndFile));
+                    .thenRunAsync(() -> sendFileDiagnostics(projectAndFile));
             state.lifecycleTasks().putTask(uri, future);
         }
     }
