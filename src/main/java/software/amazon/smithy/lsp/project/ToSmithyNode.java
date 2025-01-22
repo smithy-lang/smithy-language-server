@@ -22,6 +22,14 @@ import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
+/**
+ * Converts a {@link BuildFile#getParse()} into a Smithy {@link Node},
+ * and turning any parse errors into {@link ValidationEvent}s.
+ *
+ * <p>Since the language server's parser is much more lenient than the regular
+ * {@link Node} parser, the converted {@link Node} will contain only
+ * the parts of the original text that make up valid {@link Node}s.
+ */
 final class ToSmithyNode {
     private final String path;
     private final Document document;

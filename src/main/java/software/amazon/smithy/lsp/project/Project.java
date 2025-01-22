@@ -101,7 +101,7 @@ public final class Project {
     public static Project empty(Path root) {
         return new Project(root,
                 ProjectConfig.empty(),
-                BuildFiles.empty(),
+                BuildFiles.of(List.of()),
                 new HashMap<>(),
                 Model::assembler,
                 Type.EMPTY,

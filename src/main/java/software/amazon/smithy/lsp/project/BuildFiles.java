@@ -16,6 +16,10 @@ import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.utils.IoUtils;
 
+/**
+ * Immutable container for multiple {@link BuildFile}s, with accessors by path
+ * and {@link BuildFileType}.
+ */
 final class BuildFiles implements Iterable<BuildFile> {
     private final Map<String, BuildFile> buildFiles;
 
@@ -43,10 +47,6 @@ final class BuildFiles implements Iterable<BuildFile> {
 
     boolean isEmpty() {
         return buildFiles.isEmpty();
-    }
-
-    static BuildFiles empty() {
-        return new BuildFiles(new HashMap<>(0));
     }
 
     static BuildFiles of(Collection<BuildFile> buildFiles) {

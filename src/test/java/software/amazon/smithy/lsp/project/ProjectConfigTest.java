@@ -229,7 +229,7 @@ public class ProjectConfigTest {
             }
         };
         var buildFiles = createBuildFiles(root, BuildFileType.SMITHY_BUILD, text.text());
-        var result = new ProjectConfigLoader(root, buildFiles, resolverFactory).load();
+        var result = ProjectConfigLoader.load(root, buildFiles, resolverFactory);
 
         var buildFile = buildFiles.getByType(BuildFileType.SMITHY_BUILD);
         assertThat(buildFile, notNullValue());
@@ -267,13 +267,11 @@ public class ProjectConfigTest {
     }
 
     private static ProjectConfigLoader.Result load(Path root, BuildFiles buildFiles) {
-        var loader = new ProjectConfigLoader(root, buildFiles, NoOpResolver::new);
-        return loader.load();
+        return ProjectConfigLoader.load(root, buildFiles, NoOpResolver::new);
     }
 
     private static ProjectConfigLoader.Result load(Path root) {
         var buildFiles = BuildFiles.load(root, new ServerState());
-        var loader = new ProjectConfigLoader(root, buildFiles, NoOpResolver::new);
-        return loader.load();
+        return ProjectConfigLoader.load(root, buildFiles, NoOpResolver::new);
     }
 }

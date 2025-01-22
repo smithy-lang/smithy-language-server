@@ -59,6 +59,9 @@ public final class BuildFile implements ProjectFile {
         }
     }
 
+    /**
+     * @return The type of this build file
+     */
     public BuildFileType type() {
         return type;
     }

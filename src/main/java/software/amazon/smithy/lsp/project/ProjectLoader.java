@@ -57,7 +57,7 @@ public final class ProjectLoader {
         return new Project(
                 path,
                 config,
-                BuildFiles.empty(),
+                BuildFiles.of(List.of()),
                 result.smithyFiles(),
                 result.assemblerFactory(),
                 Project.Type.DETACHED,
@@ -89,7 +89,7 @@ public final class ProjectLoader {
             return Project.empty(root);
         }
 
-        ProjectConfigLoader.Result configResult = new ProjectConfigLoader(root, buildFiles).load();
+        ProjectConfigLoader.Result configResult = ProjectConfigLoader.load(root, buildFiles);
         LoadModelResult result = doLoad(managedFiles, configResult.config());
 
         return new Project(
