@@ -665,11 +665,4 @@ public class SmithyLanguageServer implements
             client.publishDiagnostics(publishDiagnosticsParams);
         });
     }
-
-    private CompletableFuture<Void> sendFileDiagnostics(String uri, List<Diagnostic> diagnostics) {
-        return CompletableFuture.runAsync(() -> {
-            var params = new PublishDiagnosticsParams(uri, diagnostics);
-            client.publishDiagnostics(params);
-        });
-    }
 }

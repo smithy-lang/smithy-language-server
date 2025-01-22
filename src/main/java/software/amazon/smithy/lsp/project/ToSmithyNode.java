@@ -5,12 +5,12 @@
 
 package software.amazon.smithy.lsp.project;
 
-import java.util.ArrayList;
 import java.util.List;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.syntax.Syntax;
 import software.amazon.smithy.model.SourceLocation;
+import software.amazon.smithy.model.loader.ModelSyntaxException;
 import software.amazon.smithy.model.node.ArrayNode;
 import software.amazon.smithy.model.node.BooleanNode;
 import software.amazon.smithy.model.node.Node;
@@ -18,7 +18,6 @@ import software.amazon.smithy.model.node.NullNode;
 import software.amazon.smithy.model.node.NumberNode;
 import software.amazon.smithy.model.node.ObjectNode;
 import software.amazon.smithy.model.node.StringNode;
-import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
 
@@ -33,18 +32,32 @@ import software.amazon.smithy.model.validation.ValidationEvent;
 final class ToSmithyNode {
     private final String path;
     private final Document document;
-    private final List<ValidationEvent> events;
 
     private ToSmithyNode(String path, Document document) {
         this.path = path;
         this.document = document;
-        this.events = new ArrayList<>();
     }
 
     static ValidatedResult<Node> toSmithyNode(BuildFile buildFile) {
         var toSmithyNode = new ToSmithyNode(buildFile.path(), buildFile.document());
+
         var smithyNode = toSmithyNode.toSmithyNode(buildFile.getParse().value());
-        return new ValidatedResult<>(smithyNode, toSmithyNode.events);
+        var events = toSmithyNode.getValidationEvents();
+
+        return new ValidatedResult<>(smithyNode, events);
+    }
+
+    private List<ValidationEvent> getValidationEvents() {
+        // The language server's parser isn't going to produce the same errors
+        // because of its leniency. Reparsing like this does incur a cost, but
+        // I think it's ok for now considering we get the added benefit of
+        // having the same errors Smithy itself would produce.
+        try {
+            Node.parseJsonWithComments(document.copyText(), path);
+            return List.of();
+        } catch (ModelSyntaxException e) {
+            return List.of(ValidationEvent.fromSourceException(e));
+        }
     }
 
     private Node toSmithyNode(Syntax.Node syntaxNode) {
@@ -86,15 +99,6 @@ final class ToSmithyNode {
             }
             case Syntax.Node.Str str -> new StringNode(str.stringValue(), sourceLocation);
             case Syntax.Node.Num num -> new NumberNode(num.value(), sourceLocation);
-            case Syntax.Node.Err err -> {
-                events.add(ValidationEvent.builder()
-                        .id("ParseError")
-                        .severity(Severity.ERROR)
-                        .message(err.message())
-                        .sourceLocation(sourceLocation)
-                        .build());
-                yield null;
-            }
             default -> null;
         };
     }
