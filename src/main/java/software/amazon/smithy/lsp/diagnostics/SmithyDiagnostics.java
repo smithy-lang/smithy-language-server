@@ -15,6 +15,7 @@ import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import software.amazon.smithy.lsp.document.DocumentParser;
+import software.amazon.smithy.lsp.project.BuildFile;
 import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectAndFile;
@@ -32,9 +33,12 @@ public final class SmithyDiagnostics {
     public static final String UPDATE_VERSION = "migrating-idl-1-to-2";
     public static final String DEFINE_VERSION = "define-idl-version";
     public static final String DETACHED_FILE = "detached-file";
+    public static final String USE_SMITHY_BUILD = "use-smithy-build";
 
     private static final DiagnosticCodeDescription UPDATE_VERSION_DESCRIPTION =
             new DiagnosticCodeDescription("https://smithy.io/2.0/guides/migrating-idl-1-to-2.html");
+    private static final DiagnosticCodeDescription USE_SMITHY_BUILD_DESCRIPTION =
+            new DiagnosticCodeDescription("https://smithy.io/2.0/guides/smithy-build-json.html#using-smithy-build-json");
 
     private SmithyDiagnostics() {
     }
@@ -51,82 +55,140 @@ public final class SmithyDiagnostics {
             return List.of();
         }
 
-        if (!(projectAndFile.file() instanceof SmithyFile smithyFile)) {
-            return List.of();
-        }
+        Diagnose diagnose = switch (projectAndFile.file()) {
+            case SmithyFile smithyFile -> new DiagnoseSmithy(smithyFile, projectAndFile.project());
+            case BuildFile buildFile -> new DiagnoseBuild(buildFile, projectAndFile.project());
+        };
 
-        Project project = projectAndFile.project();
         String path = projectAndFile.file().path();
+        EventToDiagnostic eventToDiagnostic = diagnose.getEventToDiagnostic();
 
-        EventToDiagnostic eventToDiagnostic = eventToDiagnostic(smithyFile);
-
-        List<Diagnostic> diagnostics = project.modelResult().getValidationEvents().stream()
+        List<Diagnostic> diagnostics = diagnose.getValidationEvents().stream()
                 .filter(event -> event.getSeverity().compareTo(minimumSeverity) >= 0
                                  && event.getSourceLocation().getFilename().equals(path))
                 .map(eventToDiagnostic::toDiagnostic)
                 .collect(Collectors.toCollection(ArrayList::new));
 
-        Diagnostic versionDiagnostic = versionDiagnostic(smithyFile);
-        if (versionDiagnostic != null) {
-            diagnostics.add(versionDiagnostic);
-        }
-
-        if (projectAndFile.project().type() == Project.Type.DETACHED) {
-            diagnostics.add(detachedDiagnostic(smithyFile));
-        }
+        diagnose.addExtraDiagnostics(diagnostics);
 
         return diagnostics;
     }
 
-    private static Diagnostic versionDiagnostic(SmithyFile smithyFile) {
-        if (!(smithyFile instanceof IdlFile idlFile)) {
-            return null;
+    private sealed interface Diagnose {
+        List<ValidationEvent> getValidationEvents();
+
+        EventToDiagnostic getEventToDiagnostic();
+
+        void addExtraDiagnostics(List<Diagnostic> diagnostics);
+    }
+
+    private record DiagnoseSmithy(SmithyFile smithyFile, Project project) implements Diagnose {
+        @Override
+        public List<ValidationEvent> getValidationEvents() {
+            return project.modelResult().getValidationEvents();
         }
 
-         Syntax.IdlParseResult syntaxInfo = idlFile.getParse();
-        if (syntaxInfo.version().version().startsWith("2")) {
-            return null;
-        } else if (!LspAdapter.isEmpty(syntaxInfo.version().range())) {
-            var diagnostic = createDiagnostic(
-                    syntaxInfo.version().range(), "You can upgrade to idl version 2.", UPDATE_VERSION);
-            diagnostic.setCodeDescription(UPDATE_VERSION_DESCRIPTION);
-            return diagnostic;
-        } else {
-            int end = smithyFile.document().lineEnd(0);
-            Range range = LspAdapter.lineSpan(0, 0, end);
-            return createDiagnostic(range, "You should define a version for your Smithy file", DEFINE_VERSION);
+        @Override
+        public EventToDiagnostic getEventToDiagnostic() {
+            if (!(smithyFile instanceof IdlFile idlFile)) {
+                return new Simple();
+            }
+
+            var idlParse = idlFile.getParse();
+            var view = StatementView.createAtStart(idlParse).orElse(null);
+            if (view == null) {
+                return new Simple();
+            } else {
+                var documentParser = DocumentParser.forStatements(
+                        smithyFile.document(), view.parseResult().statements());
+                return new Idl(view, documentParser);
+            }
+        }
+
+        @Override
+        public void addExtraDiagnostics(List<Diagnostic> diagnostics) {
+            Diagnostic versionDiagnostic = versionDiagnostic(smithyFile);
+            if (versionDiagnostic != null) {
+                diagnostics.add(versionDiagnostic);
+            }
+
+            if (project.type() == Project.Type.DETACHED) {
+                diagnostics.add(detachedDiagnostic(smithyFile));
+            }
+        }
+
+
+        private static Diagnostic versionDiagnostic(SmithyFile smithyFile) {
+            if (!(smithyFile instanceof IdlFile idlFile)) {
+                return null;
+            }
+
+            Syntax.IdlParseResult syntaxInfo = idlFile.getParse();
+            if (syntaxInfo.version().version().startsWith("2")) {
+                return null;
+            } else if (!LspAdapter.isEmpty(syntaxInfo.version().range())) {
+                var diagnostic = createDiagnostic(
+                        syntaxInfo.version().range(), "You can upgrade to idl version 2.", UPDATE_VERSION);
+                diagnostic.setCodeDescription(UPDATE_VERSION_DESCRIPTION);
+                return diagnostic;
+            } else {
+                int end = smithyFile.document().lineEnd(0);
+                Range range = LspAdapter.lineSpan(0, 0, end);
+                return createDiagnostic(range, "You should define a version for your Smithy file", DEFINE_VERSION);
+            }
+        }
+
+        private static Diagnostic detachedDiagnostic(SmithyFile smithyFile) {
+            Range range;
+            if (smithyFile.document() == null) {
+                range = LspAdapter.origin();
+            } else {
+                int end = smithyFile.document().lineEnd(0);
+                range = LspAdapter.lineSpan(0, 0, end);
+            }
+
+            return createDiagnostic(range, "This file isn't attached to a project", DETACHED_FILE);
         }
     }
 
-    private static Diagnostic detachedDiagnostic(SmithyFile smithyFile) {
-        Range range;
-        if (smithyFile.document() == null) {
-            range = LspAdapter.origin();
-        } else {
-            int end = smithyFile.document().lineEnd(0);
-            range = LspAdapter.lineSpan(0, 0, end);
+    private record DiagnoseBuild(BuildFile buildFile, Project project) implements Diagnose {
+        @Override
+        public List<ValidationEvent> getValidationEvents() {
+            return project().configEvents();
         }
 
-        return createDiagnostic(range, "This file isn't attached to a project", DETACHED_FILE);
+        @Override
+        public EventToDiagnostic getEventToDiagnostic() {
+            return new Simple();
+        }
+
+        @Override
+        public void addExtraDiagnostics(List<Diagnostic> diagnostics) {
+            switch (buildFile.type()) {
+                case SMITHY_BUILD_EXT_0, SMITHY_BUILD_EXT_1 -> diagnostics.add(useSmithyBuild());
+                default -> {
+                }
+            }
+        }
+
+        private Diagnostic useSmithyBuild() {
+            Range range = LspAdapter.origin();
+            Diagnostic diagnostic = createDiagnostic(
+                    range,
+                    String.format("""
+                            You should use smithy-build.json as your build configuration file for Smithy.
+                            The %s file is not supported by Smithy, and support from the language server
+                            will be removed in a later version.
+                            """, buildFile.type().filename()),
+                    USE_SMITHY_BUILD
+            );
+            diagnostic.setCodeDescription(USE_SMITHY_BUILD_DESCRIPTION);
+            return diagnostic;
+        }
     }
 
     private static Diagnostic createDiagnostic(Range range, String title, String code) {
         return new Diagnostic(range, title, DiagnosticSeverity.Warning, "smithy-language-server", code);
-    }
-
-    private static EventToDiagnostic eventToDiagnostic(SmithyFile smithyFile) {
-        if (!(smithyFile instanceof IdlFile idlFile)) {
-            return new Simple();
-        }
-
-        var idlParse = idlFile.getParse();
-        var view = StatementView.createAtStart(idlParse).orElse(null);
-        if (view == null) {
-            return new Simple();
-        } else {
-            var documentParser = DocumentParser.forStatements(smithyFile.document(), view.parseResult().statements());
-            return new Idl(view, documentParser);
-        }
     }
 
     private sealed interface EventToDiagnostic {

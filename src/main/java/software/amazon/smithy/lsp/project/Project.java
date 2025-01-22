@@ -30,6 +30,7 @@ import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.ToShapeId;
 import software.amazon.smithy.model.traits.Trait;
 import software.amazon.smithy.model.validation.ValidatedResult;
+import software.amazon.smithy.model.validation.ValidationEvent;
 import software.amazon.smithy.utils.IoUtils;
 
 /**
@@ -41,31 +42,34 @@ public final class Project {
 
     private final Path root;
     private final ProjectConfig config;
-    private final List<Path> dependencies;
+    private final BuildFiles buildFiles;
     private final Map<String, SmithyFile> smithyFiles;
     private final Supplier<ModelAssembler> assemblerFactory;
     private final Type type;
-    private ValidatedResult<Model> modelResult;
-    private RebuildIndex rebuildIndex;
+    private volatile ValidatedResult<Model> modelResult;
+    private volatile RebuildIndex rebuildIndex;
+    private volatile List<ValidationEvent> configEvents;
 
     Project(
             Path root,
             ProjectConfig config,
-            List<Path> dependencies,
+            BuildFiles buildFiles,
             Map<String, SmithyFile> smithyFiles,
             Supplier<ModelAssembler> assemblerFactory,
             Type type,
             ValidatedResult<Model> modelResult,
-            RebuildIndex rebuildIndex
+            RebuildIndex rebuildIndex,
+            List<ValidationEvent> configEvents
     ) {
         this.root = root;
         this.config = config;
-        this.dependencies = dependencies;
+        this.buildFiles = buildFiles;
         this.smithyFiles = smithyFiles;
         this.assemblerFactory = assemblerFactory;
         this.type = type;
         this.modelResult = modelResult;
         this.rebuildIndex = rebuildIndex;
+        this.configEvents = configEvents;
     }
 
     /**
@@ -97,12 +101,13 @@ public final class Project {
     public static Project empty(Path root) {
         return new Project(root,
                 ProjectConfig.empty(),
-                List.of(),
+                BuildFiles.of(List.of()),
                 new HashMap<>(),
                 Model::assembler,
                 Type.EMPTY,
                 ValidatedResult.empty(),
-                new RebuildIndex());
+                new RebuildIndex(),
+                List.of());
     }
 
     /**
@@ -112,8 +117,12 @@ public final class Project {
         return root;
     }
 
-    public ProjectConfig config() {
+    ProjectConfig config() {
         return config;
+    }
+
+    public List<ValidationEvent> configEvents() {
+        return configEvents;
     }
 
     /**
@@ -138,13 +147,6 @@ public final class Project {
                 .map(root::resolve)
                 .map(Path::normalize)
                 .collect(Collectors.toList());
-    }
-
-    /**
-     * @return The paths of all resolved dependencies
-     */
-    public List<Path> dependencies() {
-        return dependencies;
     }
 
     /**
@@ -184,7 +186,11 @@ public final class Project {
             return smithyFile;
         }
 
-        return config.buildFiles().get(path);
+        return buildFiles.getByPath(path);
+    }
+
+    public synchronized void validateConfig() {
+        this.configEvents = ProjectConfigLoader.validateBuildFiles(buildFiles);
     }
 
     /**
@@ -215,6 +221,8 @@ public final class Project {
      */
     public void updateFiles(Set<String> addUris, Set<String> removeUris) {
         updateFiles(addUris, removeUris, Collections.emptySet(), true);
+        // Config has to be re-validated because it may be reporting missing files
+        validateConfig();
     }
 
     /**
@@ -227,7 +235,7 @@ public final class Project {
      * @param changeUris URIs of files that changed
      * @param validate Whether to run model validation.
      */
-    public void updateFiles(Set<String> addUris, Set<String> removeUris, Set<String> changeUris, boolean validate) {
+    private void updateFiles(Set<String> addUris, Set<String> removeUris, Set<String> changeUris, boolean validate) {
         if (modelResult.getResult().isEmpty()) {
             // TODO: If there's no model, we didn't collect the smithy files (so no document), so I'm thinking
             //  maybe we do nothing here. But we could also still update the document, and

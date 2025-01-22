@@ -22,10 +22,20 @@ final class Parser extends SimpleParser {
     final List<Syntax.Err> errors = new ArrayList<>();
     final List<Syntax.Statement> statements = new ArrayList<>();
     private final Document document;
+    private final boolean isJson;
 
-    Parser(Document document) {
+    private Parser(Document document, boolean isJson) {
         super(document.borrowText());
         this.document = document;
+        this.isJson = isJson;
+    }
+
+    static Parser forIdl(Document document) {
+        return new Parser(document, false);
+    }
+
+    static Parser forJson(Document document) {
+        return new Parser(document, true);
     }
 
     Syntax.Node parseNode() {
@@ -221,12 +231,25 @@ final class Parser extends SimpleParser {
                 return obj;
             }
 
+            if (isJson && is(',')) {
+                Syntax.Node.Err err = new Syntax.Node.Err("expected key");
+                setStart(err);
+                skip();
+                setEnd(err);
+                ws();
+                continue;
+            }
+
             Syntax.Err kvpErr = kvp(obj.kvps, '}');
             if (kvpErr != null) {
                 addError(kvpErr);
             }
 
             ws();
+            if (isJson && is(',')) {
+                skip();
+                ws();
+            }
         }
 
         Syntax.Node.Err err = new Syntax.Node.Err("missing }");
@@ -334,6 +357,10 @@ final class Parser extends SimpleParser {
                 addError(e);
             } else {
                 arr.elements.add(elem);
+            }
+            ws();
+            if (is(',')) {
+                skip();
             }
             ws();
         }
@@ -988,7 +1015,8 @@ final class Parser extends SimpleParser {
 
     private boolean isWs() {
         return switch (peek()) {
-            case '\n', '\r', ' ', ',', '\t' -> true;
+            case '\n', '\r', ' ', '\t' -> true;
+            case ',' -> !isJson;
             default -> false;
         };
     }

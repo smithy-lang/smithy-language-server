@@ -11,6 +11,7 @@ import org.hamcrest.CustomTypeSafeMatcher;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.loader.Prelude;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
@@ -68,6 +69,15 @@ public final class SmithyMatchers {
             @Override
             public void describeMismatchSafely(ValidationEvent event, Description description) {
                 description.appendDescriptionOf(message).appendText("was " + event.getMessage());
+            }
+        };
+    }
+
+    public static Matcher<ValidationEvent> eventWithSourceLocation(Matcher<SourceLocation> sourceLocationMatcher) {
+        return new CustomTypeSafeMatcher<>("has source location " + sourceLocationMatcher.toString()) {
+            @Override
+            protected boolean matchesSafely(ValidationEvent item) {
+                return sourceLocationMatcher.matches(item.getSourceLocation());
             }
         };
     }

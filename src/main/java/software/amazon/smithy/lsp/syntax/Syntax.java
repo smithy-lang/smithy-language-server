@@ -105,7 +105,7 @@ public final class Syntax {
      * @return The IDL parse result.
      */
     public static IdlParseResult parseIdl(Document document) {
-        Parser parser = new Parser(document);
+        Parser parser =  Parser.forIdl(document);
         parser.parseIdl();
         List<Statement> statements = parser.statements;
         DocumentParser documentParser = DocumentParser.forStatements(document, statements);
@@ -130,7 +130,7 @@ public final class Syntax {
      * @return The Node parse result.
      */
     public static NodeParseResult parseNode(Document document) {
-        Parser parser = new Parser(document);
+        Parser parser = Parser.forJson(document);
         Node node = parser.parseNode();
         return new NodeParseResult(node, parser.errors);
     }

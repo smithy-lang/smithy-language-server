@@ -163,8 +163,34 @@ public final class LspAdapter {
      */
     public static Location toLocation(FromSourceLocation fromSourceLocation) {
         SourceLocation sourceLocation = fromSourceLocation.getSourceLocation();
-        return new Location(toUri(sourceLocation.getFilename()), point(
-                new Position(sourceLocation.getLine() - 1, sourceLocation.getColumn() - 1)));
+        return new Location(toUri(sourceLocation.getFilename()), point(toPosition(sourceLocation)));
+    }
+
+    /**
+     * Get a {@link SourceLocation} with the given path, at the start of the given
+     * range.
+     *
+     * @param path The path of the source location
+     * @param range The range of the source location
+     * @return The source location
+     */
+    public static SourceLocation toSourceLocation(String path, Range range) {
+        return toSourceLocation(path, range.getStart());
+    }
+
+    /**
+     * Get a {@link SourceLocation} with the given path, at the given position.
+     *
+     * @param path The path of the source location
+     * @param position The position of the source location
+     * @return The source location
+     */
+    public static SourceLocation toSourceLocation(String path, Position position) {
+        return new SourceLocation(
+                path,
+                position.getLine() + 1,
+                position.getCharacter() + 1
+        );
     }
 
     /**
