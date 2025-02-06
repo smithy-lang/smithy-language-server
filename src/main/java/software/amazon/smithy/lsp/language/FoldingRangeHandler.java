@@ -71,7 +71,8 @@ public record FoldingRangeHandler(Document document, DocumentImports documentImp
                 case Syntax.Statement.InlineMemberDef inlineMember ->
                         addFoldingRange(foldingRanges, inlineMember.start(), inlineMember.end());
                 // Skip the statements don't need to be folded.
-                default -> {}
+                default -> {
+                }
             }
         }
         return foldingRanges;
@@ -139,7 +140,8 @@ public record FoldingRangeHandler(Document document, DocumentImports documentImp
                 }
             }
             // Skip the Nodes don't need to be folded
-            default -> {}
+            default -> {
+            }
         }
     }
 }
