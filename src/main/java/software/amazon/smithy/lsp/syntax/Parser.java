@@ -842,7 +842,7 @@ final class Parser extends SimpleParser {
             Syntax.Ident name = ident();
             var enumMemberDef = new Syntax.Statement.EnumMemberDef(parent, name);
             enumMemberDef.start = start;
-            setEnd(enumMemberDef);
+            setEnd(enumMemberDef); // Set the enumMember end right after ident processed for simple enum member.
             addStatement(enumMemberDef);
 
             ws();
@@ -850,7 +850,7 @@ final class Parser extends SimpleParser {
                 skip(); // '='
                 ws();
                 enumMemberDef.value = parseNode();
-                setEnd(enumMemberDef);
+                setEnd(enumMemberDef); // Override the previous enumMember end if assignment exists.
             }
         } else {
             addErr(position(), position(),

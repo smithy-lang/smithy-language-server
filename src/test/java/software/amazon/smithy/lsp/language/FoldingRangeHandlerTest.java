@@ -1,6 +1,8 @@
 package software.amazon.smithy.lsp.language;
 
 
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.lsp.ServerState;
 import software.amazon.smithy.lsp.TestWorkspace;
@@ -9,8 +11,6 @@ import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectLoader;
 
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
@@ -19,9 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static software.amazon.smithy.lsp.document.DocumentTest.safeString;
 
 public class FoldingRangeHandlerTest {
-
-
-
     @Test
     public void foldingRangeForMultipleImports() {
         TextWithPositions model = TextWithPositions.from("""
@@ -64,7 +61,6 @@ public class FoldingRangeHandlerTest {
         assertArrayEquals(new int[]{3, 5}, ranges.getFirst());
     }
 
-
     @Test
     public void foldingRangeForSingleEmptyShape() {
         String model = safeString("""
@@ -100,7 +96,7 @@ public class FoldingRangeHandlerTest {
         String model = safeString("""
                 resource foo {
                     bar:{
-                    
+                
                     }
                 }
                 """);
@@ -157,7 +153,6 @@ public class FoldingRangeHandlerTest {
         assertEquals(ranges.get(0)[1], model.positions()[1].getLine());
     }
 
-
     @Test
     public void foldingRangeForNestedStructures() {
         String model = safeString("""
@@ -190,8 +185,6 @@ public class FoldingRangeHandlerTest {
         assertArrayEquals(new int[]{8, 12}, ranges.get(2));
         assertArrayEquals(new int[]{13, 17}, ranges.get(3));
     }
-
-
 
     @Test
     public void foldingRangeForMultipleAndNestedTraits() {
@@ -340,6 +333,7 @@ public class FoldingRangeHandlerTest {
 
         assertThat(ranges, hasSize(7));
     }
+
     @Test
     public void foldingRangeForMixedStructuresAndTraits() {
         TextWithPositions model = TextWithPositions.from("""
@@ -454,9 +448,7 @@ public class FoldingRangeHandlerTest {
         for (var range : handler.handle()) {
             ranges.add(new int[]{range.getStartLine(), range.getEndLine()});
         }
-        for (var range : ranges) {
-            System.out.println(range[0] + " " + range[1]);
-        }
+
         return ranges;
     }
 }
