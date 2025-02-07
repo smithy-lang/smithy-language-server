@@ -49,6 +49,8 @@ import org.eclipse.lsp4j.DocumentFilter;
 import org.eclipse.lsp4j.DocumentFormattingParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
+import org.eclipse.lsp4j.FoldingRange;
+import org.eclipse.lsp4j.FoldingRangeRequestParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.InitializeParams;
@@ -96,6 +98,7 @@ import software.amazon.smithy.lsp.ext.SmithyProtocolExtensions;
 import software.amazon.smithy.lsp.language.CompletionHandler;
 import software.amazon.smithy.lsp.language.DefinitionHandler;
 import software.amazon.smithy.lsp.language.DocumentSymbolHandler;
+import software.amazon.smithy.lsp.language.FoldingRangeHandler;
 import software.amazon.smithy.lsp.language.HoverHandler;
 import software.amazon.smithy.lsp.project.BuildFile;
 import software.amazon.smithy.lsp.project.IdlFile;
@@ -126,6 +129,7 @@ public class SmithyLanguageServer implements
         capabilities.setHoverProvider(true);
         capabilities.setDocumentFormattingProvider(true);
         capabilities.setDocumentSymbolProvider(true);
+        capabilities.setFoldingRangeProvider(true);
 
         WorkspaceFoldersOptions workspaceFoldersOptions = new WorkspaceFoldersOptions();
         workspaceFoldersOptions.setSupported(true);
@@ -562,6 +566,26 @@ public class SmithyLanguageServer implements
 
         List<Syntax.Statement> statements = idlFile.getParse().statements();
         var handler = new DocumentSymbolHandler(idlFile.document(), statements);
+        return CompletableFuture.supplyAsync(handler::handle);
+    }
+
+    @Override
+    public CompletableFuture<List<FoldingRange>> foldingRange(FoldingRangeRequestParams params) {
+        LOGGER.finest("FoldingRange");
+
+        String uri = params.getTextDocument().getUri();
+        ProjectAndFile projectAndFile = state.findProjectAndFile(uri);
+        if (projectAndFile == null) {
+            client.unknownFileError(uri, "folding range");
+            return completedFuture(Collections.emptyList());
+        }
+
+        if (!(projectAndFile.file() instanceof IdlFile idlFile)) {
+            return completedFuture(List.of());
+        }
+
+        List<Syntax.Statement> statements = idlFile.getParse().statements();
+        var handler = new FoldingRangeHandler(idlFile.document(), idlFile.getParse().imports(), statements);
         return CompletableFuture.supplyAsync(handler::handle);
     }
 

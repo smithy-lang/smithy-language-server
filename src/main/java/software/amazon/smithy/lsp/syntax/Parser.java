@@ -218,6 +218,8 @@ final class Parser extends SimpleParser {
             if (is('}')) {
                 skip();
                 setEnd(obj);
+                obj.kvps.start = obj.start;
+                obj.kvps.end = obj.end;
                 return obj;
             }
 
@@ -228,7 +230,6 @@ final class Parser extends SimpleParser {
 
             ws();
         }
-
         Syntax.Node.Err err = new Syntax.Node.Err("missing }");
         setStart(err);
         setEnd(err);
@@ -308,6 +309,7 @@ final class Parser extends SimpleParser {
             err = e;
         } else if (err == null) {
             kvp.value = value;
+            kvp.end = value.end;
             if (is(',')) {
                 skip();
             }
@@ -813,6 +815,7 @@ final class Parser extends SimpleParser {
             Syntax.Ident name = ident();
             var enumMemberDef = new Syntax.Statement.EnumMemberDef(parent, name);
             enumMemberDef.start = start;
+            setEnd(enumMemberDef); // Set the enumMember end right after ident processed for simple enum member.
             addStatement(enumMemberDef);
 
             ws();
@@ -820,8 +823,8 @@ final class Parser extends SimpleParser {
                 skip(); // '='
                 ws();
                 enumMemberDef.value = parseNode();
+                setEnd(enumMemberDef); // Override the previous enumMember end if assignment exists.
             }
-            setEnd(enumMemberDef);
         } else {
             addErr(position(), position(),
                     "unexpected token " + peekSingleCharForMessage() + " expected trait or member");
