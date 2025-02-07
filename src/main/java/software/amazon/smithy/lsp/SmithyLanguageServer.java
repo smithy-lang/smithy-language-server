@@ -129,6 +129,7 @@ public class SmithyLanguageServer implements
         capabilities.setHoverProvider(true);
         capabilities.setDocumentFormattingProvider(true);
         capabilities.setDocumentSymbolProvider(true);
+        capabilities.setFoldingRangeProvider(true);
 
         WorkspaceFoldersOptions workspaceFoldersOptions = new WorkspaceFoldersOptions();
         workspaceFoldersOptions.setSupported(true);
