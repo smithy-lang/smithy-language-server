@@ -39,7 +39,7 @@ public record FoldingRangeHandler(Document document, DocumentImports documentImp
         }
     }
 
-    private void addFoldingRangeForImports(List<FoldingRange> foldingRanges, DocumentImports documentImports) {
+    private void addFoldingRangeForImports(List<FoldingRange> foldingRanges) {
         Range range = documentImports.importsRange();
         if (range != null && isFoldable(range.getStart().getLine(), range.getEnd().getLine())) {
             foldingRanges.add(new FoldingRange(range.getStart().getLine(), range.getEnd().getLine()));
@@ -49,7 +49,7 @@ public record FoldingRangeHandler(Document document, DocumentImports documentImp
     private List<FoldingRange> generateFoldingRanges() {
         List<FoldingRange> foldingRanges = new ArrayList<>();
 
-        addFoldingRangeForImports(foldingRanges, documentImports);
+        addFoldingRangeForImports(foldingRanges);
 
         ListIterator<Syntax.Statement> iterator = statements.listIterator();
 
@@ -113,13 +113,6 @@ public record FoldingRangeHandler(Document document, DocumentImports documentImp
 
     private void processFoldingRangeForNode(List<FoldingRange> foldingRanges, Syntax.Node node) {
         if (node == null) {
-            return;
-        }
-
-        int startLine = document.lineOfIndex(node.start());
-        int endLine = document.lineOfIndex(node.end());
-
-        if (!isFoldable(startLine, endLine)) {
             return;
         }
 

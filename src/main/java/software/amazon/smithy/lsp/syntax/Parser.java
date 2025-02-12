@@ -165,7 +165,6 @@ final class Parser extends SimpleParser {
                     Syntax.Node.Kvps kvps = new Syntax.Node.Kvps();
                     setStart(kvps);
                     setEnd(kvps);
-                    skip();
                     yield kvps;
                 }
 
