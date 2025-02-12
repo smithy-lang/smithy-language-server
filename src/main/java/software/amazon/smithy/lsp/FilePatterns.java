@@ -12,8 +12,8 @@ import java.nio.file.PathMatcher;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import software.amazon.smithy.lsp.project.BuildFileType;
 import software.amazon.smithy.lsp.project.Project;
-import software.amazon.smithy.lsp.project.ProjectConfigLoader;
 
 /**
  * Utility methods for computing glob patterns that match against Smithy files
@@ -87,7 +87,7 @@ final class FilePatterns {
             rootString += "**" + File.separator;
         }
 
-        return escapeBackslashes(rootString + "{" + String.join(",", ProjectConfigLoader.PROJECT_BUILD_FILES) + "}");
+        return escapeBackslashes(rootString + "{" + String.join(",", BuildFileType.ALL_FILENAMES) + "}");
     }
 
     // When computing the pattern used for telling the client which files to watch, we want

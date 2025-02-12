@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.project.Project;
-import software.amazon.smithy.lsp.project.ProjectLoader;
+import software.amazon.smithy.lsp.project.ProjectTest;
 import software.amazon.smithy.utils.ListUtils;
 
 public class FileWatcherRegistrationsTest {
@@ -42,7 +42,7 @@ public class FileWatcherRegistrationsTest {
                         .build())
                 .build();
 
-        Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
+        Project project = ProjectTest.load(workspace.getRoot());
         List<PathMatcher> matchers = FileWatcherRegistrations.getSmithyFileWatcherRegistrations(List.of(project))
                 .stream()
                 .map(Registration::getRegisterOptions)
