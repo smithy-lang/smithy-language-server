@@ -106,7 +106,7 @@ final class FilePatterns {
         glob += "**";
 
         if (isWatcherPattern) {
-            glob += ".{smithy,json}";
+            glob += "/*.{smithy,json}";
         }
 
         return escapeBackslashes(glob);
