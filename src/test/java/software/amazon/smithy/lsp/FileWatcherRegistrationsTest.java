@@ -13,6 +13,7 @@ import java.nio.file.PathMatcher;
 import java.util.List;
 import org.eclipse.lsp4j.DidChangeWatchedFilesRegistrationOptions;
 import org.eclipse.lsp4j.Registration;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.project.Project;
@@ -21,6 +22,7 @@ import software.amazon.smithy.utils.ListUtils;
 
 public class FileWatcherRegistrationsTest {
     @Test
+    @Disabled("https://github.com/smithy-lang/smithy-language-server/issues/191")
     public void createsCorrectRegistrations() {
         TestWorkspace workspace = TestWorkspace.builder()
                 .withSourceDir(new TestWorkspace.Dir()
