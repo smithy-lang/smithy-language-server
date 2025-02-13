@@ -293,6 +293,7 @@ public class DocumentTest {
         Document leadingAndTrailingWs = makeDocument("\nabc\n");
         Document threeLine = makeDocument("abc\ndef\nhij\n");
 
+        assertThat(empty.lineOfIndex(0), is(-1)); // empty has no lines, so oob
         assertThat(empty.lineOfIndex(1), is(-1)); // oob
         assertThat(single.lineOfIndex(0), is(0)); // start
         assertThat(single.lineOfIndex(2), is(0)); // end
