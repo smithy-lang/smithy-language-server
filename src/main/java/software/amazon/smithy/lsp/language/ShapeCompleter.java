@@ -130,7 +130,7 @@ record ShapeCompleter(IdlPosition idlPosition, Model model, CompleterContext con
             completionItem.setDetail(shape.getType().toString());
 
             var labelDetails = new CompletionItemLabelDetails();
-            labelDetails.setDetail(shape.getId().getNamespace());
+            labelDetails.setDescription(shape.getId().toString());
             completionItem.setLabelDetails(labelDetails);
 
             TextEdit edit = new TextEdit(insertRange, shapeLabel);
