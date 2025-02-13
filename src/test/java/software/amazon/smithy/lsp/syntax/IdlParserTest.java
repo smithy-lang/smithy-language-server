@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import software.amazon.smithy.lsp.TextWithPositions;
 import software.amazon.smithy.lsp.document.Document;
 
 public class IdlParserTest {
@@ -304,6 +305,27 @@ public class IdlParserTest {
                 Syntax.Node.Type.Str));
     }
 
+    @Test
+    public void traitApplicationsDontContainTrailingWhitespace() {
+        var twp = TextWithPositions.from("""
+                %@foo(foo: "")%
+                structure Foo {
+                    foo: Foo
+                }
+                """);
+        Document document = Document.of(twp.text());
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+
+        assertThat(getTypes(parse), contains(
+                Syntax.Statement.Type.TraitApplication,
+                Syntax.Statement.Type.ShapeDef,
+                Syntax.Statement.Type.MemberDef));
+
+        Syntax.Statement traitApplication = parse.statements().get(0);
+        assertThat(document.positionAtIndex(traitApplication.start()), equalTo(twp.positions()[0]));
+        assertThat(document.positionAtIndex(traitApplication.end()), equalTo(twp.positions()[1]));
+    }
+
     @ParameterizedTest
     @MethodSource("brokenProvider")
     public void broken(String desc, String text, List<String> expectedErrorMessages, List<Syntax.Statement.Type> expectedTypes) {
@@ -460,10 +482,14 @@ public class IdlParserTest {
 
     private static void assertTypesEqual(String text, Syntax.Statement.Type... types) {
         Syntax.IdlParseResult parse = Syntax.parseIdl(Document.of(text));
-        List<Syntax.Statement.Type> actualTypes = parse.statements().stream()
+        var actualTypes = getTypes(parse);
+        assertThat(actualTypes, contains(types));
+    }
+
+    private static List<Syntax.Statement.Type> getTypes(Syntax.IdlParseResult parse) {
+        return parse.statements().stream()
                 .map(Syntax.Statement::type)
                 .filter(type -> type != Syntax.Statement.Type.Block)
                 .toList();
-        assertThat(actualTypes, contains(types));
     }
 }

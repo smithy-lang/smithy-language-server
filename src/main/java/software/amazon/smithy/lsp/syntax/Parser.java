@@ -193,7 +193,6 @@ final class Parser extends SimpleParser {
         while (!eof()) {
             if (is(')')) {
                 setEnd(kvps);
-                skip();
                 return kvps;
             }
 
@@ -398,7 +397,6 @@ final class Parser extends SimpleParser {
             }
 
             // Empty string
-            skip();
             int strEnd = position();
             return new Syntax.Node.Str(start, strEnd, "");
         }
