@@ -329,9 +329,6 @@ public class IdlParserTest {
     @ParameterizedTest
     @MethodSource("brokenProvider")
     public void broken(String desc, String text, List<String> expectedErrorMessages, List<Syntax.Statement.Type> expectedTypes) {
-        if (desc.equals("trait missing member value")) {
-            System.out.println();
-        }
         Syntax.IdlParseResult parse = Syntax.parseIdl(Document.of(text));
         List<String> errorMessages = parse.errors().stream().map(Syntax.Err::message).toList();
         List<Syntax.Statement.Type> types = parse.statements().stream()

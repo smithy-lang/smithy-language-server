@@ -101,8 +101,6 @@ public final class ServerState implements ManagedFiles {
             }
         }
 
-        LOGGER.warning(() -> "Tried to unknown file: " + uri);
-
         return null;
     }
 

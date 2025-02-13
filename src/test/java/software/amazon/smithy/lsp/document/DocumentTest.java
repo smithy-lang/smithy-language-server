@@ -255,14 +255,6 @@ public class DocumentTest {
     }
 
     @Test
-    public void foo() {
-        Document a = makeDocument("abc");
-        Document b = makeDocument("def\n");
-
-        System.out.println();
-    }
-
-    @Test
     public void getsNextIndexOf() {
         Document document = makeDocument("abc\ndef");
 
