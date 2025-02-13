@@ -36,6 +36,16 @@ public final class LspMatchers {
         };
     }
 
+    public static Matcher<CompletionItem> hasLabelAndEditText(String label, String editText) {
+        return new CustomTypeSafeMatcher<>("label " + label + " editText " + editText) {
+            @Override
+            protected boolean matchesSafely(CompletionItem item) {
+                return label.equals(item.getLabel())
+                       && editText.trim().equals(item.getTextEdit().getLeft().getNewText().trim());
+            }
+        };
+    }
+
     public static Matcher<TextEdit> makesEditedDocument(Document document, String expected) {
         return new CustomTypeSafeMatcher<>("makes an edited document " + expected) {
             @Override

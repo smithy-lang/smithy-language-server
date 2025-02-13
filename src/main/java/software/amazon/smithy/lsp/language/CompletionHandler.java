@@ -96,7 +96,7 @@ public final class CompletionHandler {
         };
     }
 
-    private static Position getTokenPosition(CompletionParams params) {
+    static Position getTokenPosition(CompletionParams params) {
         Position position = params.getPosition();
         CompletionContext context = params.getContext();
         if (context != null
@@ -107,7 +107,7 @@ public final class CompletionHandler {
         return position;
     }
 
-    private static Range getInsertRange(DocumentId id, Position position) {
+    static Range getInsertRange(DocumentId id, Position position) {
         if (id == null || id.idSlice().isEmpty()) {
             // When we receive the completion request, we're always on the
             // character either after what has just been typed, or we're in

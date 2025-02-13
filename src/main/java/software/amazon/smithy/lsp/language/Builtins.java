@@ -8,6 +8,7 @@ package software.amazon.smithy.lsp.language;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.stream.Collectors;
+import software.amazon.smithy.lsp.project.BuildFileType;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.Shape;
@@ -35,6 +36,7 @@ final class Builtins {
             .addImport(Builtins.class.getResource("control.smithy"))
             .addImport(Builtins.class.getResource("metadata.smithy"))
             .addImport(Builtins.class.getResource("members.smithy"))
+            .addImport(Builtins.class.getResource("build.smithy"))
             .assemble()
             .unwrap();
 
@@ -50,6 +52,10 @@ final class Builtins {
     static final Shape VALIDATORS = MODEL.expectShape(id("BuiltinValidators"));
 
     static final Shape SHAPE_MEMBER_TARGETS = MODEL.expectShape(id("ShapeMemberTargets"));
+
+    static final Shape SMITHY_BUILD_JSON = MODEL.expectShape(id("SmithyBuildJson"));
+
+    static final Shape SMITHY_PROJECT_JSON = MODEL.expectShape(id("SmithyProjectJson"));
 
     static final Map<String, ShapeId> VALIDATOR_CONFIG_MAPPING = VALIDATORS.members().stream()
             .collect(Collectors.toMap(
@@ -102,6 +108,14 @@ final class Builtins {
         return memberTargets.getMember(memberName)
                 .map(memberShape -> MODEL.expectShape(memberShape.getTarget()))
                 .orElse(null);
+    }
+
+    static Shape getBuildFileShape(BuildFileType type) {
+        return switch (type) {
+            case SMITHY_BUILD -> SMITHY_BUILD_JSON;
+            case SMITHY_PROJECT -> SMITHY_PROJECT_JSON;
+            default -> null;
+        };
     }
 
     private static ShapeId id(String name) {

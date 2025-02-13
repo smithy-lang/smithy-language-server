@@ -22,10 +22,16 @@ import software.amazon.smithy.lsp.util.StreamUtils;
  * Maps simple {@link CompletionCandidates} to {@link CompletionItem}s.
  *
  * @param context The context for creating completions.
+ * @param mapper The mapper used to map candidates to completion items.
+ *               Defaults to {@link Mapper}
  *
  * @see ShapeCompleter for what maps {@link CompletionCandidates.Shapes}.
  */
-record SimpleCompleter(CompleterContext context) {
+record SimpleCompleter(CompleterContext context, Mapper mapper) {
+    SimpleCompleter(CompleterContext context) {
+        this(context, new Mapper(context));
+    }
+
     List<CompletionItem> getCompletionItems(CompletionCandidates candidates) {
         Matcher matcher;
         if (context.exclude().isEmpty()) {
@@ -34,12 +40,10 @@ record SimpleCompleter(CompleterContext context) {
             matcher = new ExcludingMatcher(context.matchToken(), context.exclude());
         }
 
-        Mapper mapper = new Mapper(context().insertRange(), context().literalKind());
-
-        return getCompletionItems(candidates, matcher, mapper);
+        return getCompletionItems(candidates, matcher);
     }
 
-    private List<CompletionItem> getCompletionItems(CompletionCandidates candidates, Matcher matcher, Mapper mapper) {
+    private List<CompletionItem> getCompletionItems(CompletionCandidates candidates, Matcher matcher) {
         return switch (candidates) {
             case CompletionCandidates.Constant(var value)
                     when !value.isEmpty() && matcher.testConstant(value) -> List.of(mapper.constant(value));
@@ -64,11 +68,11 @@ record SimpleCompleter(CompleterContext context) {
                     .map(mapper::elided)
                     .toList();
 
-            case CompletionCandidates.Custom custom -> getCompletionItems(customCandidates(custom), matcher, mapper);
+            case CompletionCandidates.Custom custom -> getCompletionItems(customCandidates(custom), matcher);
 
             case CompletionCandidates.And(var one, var two) -> {
-                List<CompletionItem> oneItems = getCompletionItems(one);
-                List<CompletionItem> twoItems = getCompletionItems(two);
+                List<CompletionItem> oneItems = getCompletionItems(one, matcher);
+                List<CompletionItem> twoItems = getCompletionItems(two, matcher);
                 List<CompletionItem> completionItems = new ArrayList<>(oneItems.size() + twoItems.size());
                 completionItems.addAll(oneItems);
                 completionItems.addAll(twoItems);
@@ -157,12 +161,16 @@ record SimpleCompleter(CompleterContext context) {
 
     /**
      * Maps different kinds of completion candidates to {@link CompletionItem}s.
-     *
-     * @param insertRange The range the completion text will occupy.
-     * @param literalKind The completion item kind that will be shown in the
-     *                    client for {@link CompletionCandidates.Literals}.
      */
-    private record Mapper(Range insertRange, CompletionItemKind literalKind) {
+    static class Mapper {
+        private final Range insertRange;
+        private final CompletionItemKind literalKind;
+
+        Mapper(CompleterContext context) {
+            this.insertRange = context.insertRange();
+            this.literalKind = context.literalKind();
+        }
+
         CompletionItem constant(String value) {
             return textEditCompletion(value, CompletionItemKind.Constant);
         }
@@ -184,16 +192,28 @@ record SimpleCompleter(CompleterContext context) {
             return textEditCompletion("$" + memberName, CompletionItemKind.Field);
         }
 
-        private CompletionItem textEditCompletion(String label, CompletionItemKind kind) {
+        protected CompletionItem textEditCompletion(String label, CompletionItemKind kind) {
             return textEditCompletion(label, kind, label);
         }
 
-        private CompletionItem textEditCompletion(String label, CompletionItemKind kind, String insertText) {
+        protected CompletionItem textEditCompletion(String label, CompletionItemKind kind, String insertText) {
             CompletionItem item = new CompletionItem(label);
             item.setKind(kind);
             TextEdit textEdit = new TextEdit(insertRange, insertText);
             item.setTextEdit(Either.forLeft(textEdit));
             return item;
+        }
+    }
+
+    static final class BuildFileMapper extends Mapper {
+        BuildFileMapper(CompleterContext context) {
+            super(context);
+        }
+
+        @Override
+        CompletionItem member(Map.Entry<String, CompletionCandidates.Constant> entry) {
+            String value = "\"" + entry.getKey() + "\": " + entry.getValue().value();
+            return textEditCompletion(entry.getKey(), CompletionItemKind.Field, value);
         }
     }
 }

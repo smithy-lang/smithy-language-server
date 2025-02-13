@@ -16,6 +16,8 @@
 package software.amazon.smithy.lsp;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
+import static java.util.concurrent.CompletableFuture.supplyAsync;
+import static org.eclipse.lsp4j.jsonrpc.CompletableFutures.computeAsync;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -79,7 +81,6 @@ import org.eclipse.lsp4j.WorkDoneProgressEnd;
 import org.eclipse.lsp4j.WorkspaceFolder;
 import org.eclipse.lsp4j.WorkspaceFoldersOptions;
 import org.eclipse.lsp4j.WorkspaceServerCapabilities;
-import org.eclipse.lsp4j.jsonrpc.CompletableFutures;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageClientAware;
@@ -93,6 +94,7 @@ import software.amazon.smithy.lsp.ext.OpenProject;
 import software.amazon.smithy.lsp.ext.SelectorParams;
 import software.amazon.smithy.lsp.ext.ServerStatus;
 import software.amazon.smithy.lsp.ext.SmithyProtocolExtensions;
+import software.amazon.smithy.lsp.language.BuildCompletionHandler;
 import software.amazon.smithy.lsp.language.CompletionHandler;
 import software.amazon.smithy.lsp.language.DefinitionHandler;
 import software.amazon.smithy.lsp.language.DocumentSymbolHandler;
@@ -537,13 +539,18 @@ public class SmithyLanguageServer implements
             return completedFuture(Either.forLeft(Collections.emptyList()));
         }
 
-        if (!(projectAndFile.file() instanceof IdlFile smithyFile)) {
-            return completedFuture(Either.forLeft(List.of()));
-        }
-
         Project project = projectAndFile.project();
-        var handler = new CompletionHandler(project, smithyFile);
-        return CompletableFutures.computeAsync((cc) -> Either.forLeft(handler.handle(params, cc)));
+        return switch (projectAndFile.file()) {
+            case IdlFile idlFile -> {
+                var handler = new CompletionHandler(project, idlFile);
+                yield computeAsync((cc) -> Either.forLeft(handler.handle(params, cc)));
+            }
+            case BuildFile buildFile -> {
+                var handler = new BuildCompletionHandler(project, buildFile);
+                yield supplyAsync(() -> Either.forLeft(handler.handle(params)));
+            }
+            default -> completedFuture(Either.forLeft(List.of()));
+        };
     }
 
     @Override
