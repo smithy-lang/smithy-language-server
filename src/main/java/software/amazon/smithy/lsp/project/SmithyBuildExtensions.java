@@ -159,8 +159,6 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
                                 .map(repo -> MavenRepository.builder().url(repo).build())
                                 .collect(Collectors.toList()))
                         .build();
-                LOGGER.warning("Read deprecated `mavenRepositories` in smithy-build.json. Update smithy-build.json to "
-                    + "{\"maven\": {\"repositories\": [{\"url\": \"repo url\"}]}}");
             }
 
             this.maven = config;
@@ -183,8 +181,6 @@ public final class SmithyBuildExtensions implements ToSmithyBuilder<SmithyBuildE
                 config = config.toBuilder()
                         .dependencies(mavenDependencies)
                         .build();
-                LOGGER.warning("Read deprecated `mavenDependencies` in smithy-build.json. Update smithy-build.json to "
-                        + "{\"maven\": {\"dependencies\": [\"dependencyA\", \"dependencyB\"]}}");
             }
             this.maven = config;
             return this;
