@@ -345,13 +345,15 @@ public final class Project {
             // those traits.
 
             // This shape's dependencies files will be removed and re-loaded
-            this.rebuildIndex.getDependenciesFiles(toShapeId).forEach((depPath) ->
-                    removeFileForReload(assembler, builder, depPath, visited));
+            for (String depPath : this.rebuildIndex.getDependenciesFiles(toShapeId)) {
+                removeFileForReload(assembler, builder, depPath, visited);
+            }
 
             // Traits applied in other files are re-added to the assembler so if/when the shape
             // is reloaded, it will have those traits
-            this.rebuildIndex.getTraitsAppliedInOtherFiles(toShapeId).forEach((trait) ->
-                    assembler.addTrait(toShapeId.toShapeId(), trait));
+            for (Trait trait : this.rebuildIndex.getTraitsAppliedInOtherFiles(toShapeId)) {
+                assembler.addTrait(toShapeId.toShapeId(), trait);
+            }
         }
     }
 
@@ -507,8 +509,9 @@ public final class Project {
                     Node traitNode = traitApplication.toNode();
                     if (traitNode.isArrayNode()) {
                         for (Node element : traitNode.expectArrayNode()) {
-                            String elementSourceFilename = element.getSourceLocation().getFilename();
-                            if (!elementSourceFilename.equals(shapeSourceFilename)) {
+                            SourceLocation elementSourceLocation = element.getSourceLocation();
+                            String elementSourceFilename = elementSourceLocation.getFilename();
+                            if (!isNone(elementSourceLocation) && !elementSourceFilename.equals(shapeSourceFilename)) {
                                 newIndex.filesToDependentFiles
                                         .computeIfAbsent(elementSourceFilename, (f) -> new HashSet<>())
                                         .add(shapeSourceFilename);
@@ -518,8 +521,9 @@ public final class Project {
                             }
                         }
                     } else {
-                        String traitSourceFilename = traitApplication.getSourceLocation().getFilename();
-                        if (!traitSourceFilename.equals(shapeSourceFilename)) {
+                        SourceLocation traitSourceLocation = traitNode.getSourceLocation();
+                        String traitSourceFilename = traitSourceLocation.getFilename();
+                        if (!isNone(traitSourceLocation) && !traitSourceFilename.equals(shapeSourceFilename)) {
                             newIndex.shapesToAppliedTraitsInOtherFiles
                                     .computeIfAbsent(shape.getId(), (i) -> new ArrayList<>())
                                     .add(traitApplication);
@@ -533,6 +537,10 @@ public final class Project {
             }
 
             return newIndex;
+        }
+
+        private static boolean isNone(SourceLocation sourceLocation) {
+            return sourceLocation.equals(SourceLocation.NONE);
         }
     }
 }

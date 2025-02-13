@@ -9,6 +9,7 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.empty;
 import static software.amazon.smithy.lsp.UtilMatchers.anOptionalOf;
 
 import java.net.URISyntaxException;
@@ -16,16 +17,24 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.lsp.ServerState;
+import software.amazon.smithy.lsp.SmithyMatchers;
 import software.amazon.smithy.lsp.TestWorkspace;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
+import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.StringShape;
 import software.amazon.smithy.model.traits.LengthTrait;
 import software.amazon.smithy.model.traits.PatternTrait;
 import software.amazon.smithy.model.traits.TagsTrait;
+import software.amazon.smithy.model.validation.ValidatedResult;
 
 public class ProjectTest {
     @Test
@@ -424,6 +433,56 @@ public class ProjectTest {
         Project project = load(root);
 
         assertThat(project.type(), equalTo(Project.Type.EMPTY));
+    }
+
+    @Test
+    public void changingTraitWithSourceLocationNone() {
+        // Manually construct a Project with a model containing a trait with SourceLocation.NONE,
+        // since this test can't rely on any specific trait always having SourceLocation.NONE, as
+        // it may be fixed upstream.
+        Path root = Path.of("foo").toAbsolutePath();
+        String fooPath = root.resolve("foo.smithy").toString();
+        SmithyFile fooSmithyFile = SmithyFile.create(fooPath, Document.of("""
+                $version: "2"
+                namespace com.foo
+                @length(max: 10)
+                string Foo
+                """));
+        Map<String, SmithyFile> smithyFiles = new HashMap<>();
+        smithyFiles.put(fooPath, fooSmithyFile);
+        Model model = Model.builder()
+                .addShape(StringShape.builder()
+                        .id("com.foo#Foo")
+                        .source(fooPath, 4, 1)
+                        .addTrait(LengthTrait.builder()
+                                .sourceLocation(SourceLocation.NONE)
+                                .min(1L)
+                                .build())
+                        .build())
+                .build();
+        ValidatedResult<Model> modelResult = ValidatedResult.fromValue(model);
+        Project.RebuildIndex rebuildIndex = Project.RebuildIndex.create(modelResult);
+
+        Project project = new Project(
+                root,
+                ProjectConfig.empty(),
+                BuildFiles.of(List.of()),
+                smithyFiles,
+                Model::assembler,
+                Project.Type.DETACHED,
+                modelResult,
+                rebuildIndex,
+                List.of()
+        );
+
+        assertThat(project.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
+        assertThat(project.modelResult().getValidationEvents(), empty());
+
+        String fooUri = LspAdapter.toUri(fooPath);
+        project.updateModelWithoutValidating(fooUri);
+
+        assertThat(project.modelResult(), SmithyMatchers.hasValue(SmithyMatchers.hasShapeWithId("com.foo#Foo")));
+        assertThat(project.modelResult().getValidationEvents(), empty());
     }
 
     public static Project load(Path root) {
