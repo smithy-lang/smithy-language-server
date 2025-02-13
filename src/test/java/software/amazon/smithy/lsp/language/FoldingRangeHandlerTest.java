@@ -10,6 +10,7 @@ import software.amazon.smithy.lsp.TextWithPositions;
 import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectLoader;
+import software.amazon.smithy.lsp.project.ProjectTest;
 
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -438,7 +439,7 @@ public class FoldingRangeHandlerTest {
 
     private static List<int[]> getFoldingRanges(String text) {
         TestWorkspace workspace = TestWorkspace.singleModel(text);
-        Project project = ProjectLoader.load(workspace.getRoot(), new ServerState()).unwrap();
+        Project project = ProjectTest.load(workspace.getRoot());
         String uri = workspace.getUri("main.smithy");
         IdlFile idlFile = (IdlFile) project.getProjectFile(uri);
 
