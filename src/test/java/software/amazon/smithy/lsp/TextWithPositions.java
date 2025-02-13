@@ -38,6 +38,8 @@ public record TextWithPositions(String text, Position... positions) {
     public static TextWithPositions from(String raw) {
         Document document = Document.of(safeString(raw));
         List<Position> positions = new ArrayList<>();
+
+        Position lastPosition = null;
         int i = 0;
         while (true) {
             int next = document.nextIndexOf(POSITION_MARKER, i);
@@ -45,6 +47,12 @@ public record TextWithPositions(String text, Position... positions) {
                 break;
             }
             Position position = document.positionAtIndex(next);
+            if (lastPosition != null && position.getLine() == lastPosition.getLine()) {
+                // If there's two or more markers on the same line, any markers after the
+                // first will be off by one when we do the replacement.
+                position.setCharacter(position.getCharacter() - 1);
+            }
+            lastPosition = position;
             positions.add(position);
             i = next + 1;
         }
