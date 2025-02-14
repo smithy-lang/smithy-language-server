@@ -68,6 +68,37 @@ public final class ProjectLoader {
     }
 
     /**
+     * Loads an unresolved (single config file) {@link Project} with the given file.
+     *
+     * @param path Path of the file to load into a project
+     * @param text Text of the file to load into a project
+     * @return The loaded project
+     */
+    public static Project loadUnresolved(Path path, String text) {
+        Document document = Document.of(text);
+        BuildFiles buildFiles = BuildFiles.of(path, document);
+
+        // An unresolved project is meant to be resolved at a later point, so we don't
+        // even try loading its configuration from the build file.
+        ProjectConfig config = ProjectConfig.empty();
+
+        // We aren't loading any smithy files in this project, so use a no-op ManagedFiles.
+        LoadModelResult result = doLoad((fileUri) -> null, config);
+
+        return new Project(
+                path,
+                config,
+                buildFiles,
+                result.smithyFiles(),
+                result.assemblerFactory(),
+                Project.Type.UNRESOLVED,
+                result.modelResult(),
+                result.rebuildIndex(),
+                List.of()
+        );
+    }
+
+    /**
      * Loads a {@link Project} at the given root path, using any {@code managedDocuments}
      * instead of loading from disk.
      *

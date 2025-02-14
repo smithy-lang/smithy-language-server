@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.eclipse.lsp4j.Position;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.MavenRepository;
 import software.amazon.smithy.cli.dependencies.DependencyResolver;
@@ -32,6 +33,7 @@ import software.amazon.smithy.cli.dependencies.ResolvedArtifact;
 import software.amazon.smithy.lsp.ServerState;
 import software.amazon.smithy.lsp.TextWithPositions;
 import software.amazon.smithy.lsp.document.Document;
+import software.amazon.smithy.lsp.protocol.LspAdapter;
 
 public class ProjectConfigTest {
     @Test
@@ -76,6 +78,21 @@ public class ProjectConfigTest {
 
         assertThat(config.imports(), containsInAnyOrder(containsString("main.smithy"), containsString("other.smithy")));
         assertThat(config.maven().getDependencies(), containsInAnyOrder("foo"));
+    }
+
+    @Test
+    public void handlesEmptyFiles() {
+        var root = Path.of("foo");
+        var buildFiles = createBuildFiles(root, BuildFileType.SMITHY_BUILD, "");
+        var result = load(root, buildFiles);
+
+        var smithyBuild = buildFiles.getByType(BuildFileType.SMITHY_BUILD);
+        assertThat(smithyBuild, notNullValue());
+        assertThat(result.events(), containsInAnyOrder(allOf(
+                eventWithId(equalTo("Model")),
+                eventWithMessage(containsString("Error parsing JSON")),
+                eventWithSourceLocation(equalTo(LspAdapter.toSourceLocation(smithyBuild.path(), new Position(0, 0))))
+        )));
     }
 
     @Test

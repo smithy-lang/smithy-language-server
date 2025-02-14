@@ -118,6 +118,17 @@ public final class ServerState implements ManagedFiles {
         if (projectAndFile != null) {
             projectAndFile.file().document().applyEdit(null, text);
         } else {
+            // A newly created build file or smithy file may be opened before we receive the
+            // `didChangeWatchedFiles` notification, so we either need to load an unresolved
+            // project (build file), or load a detached project (smithy file). When we receive
+            // `didChangeWatchedFiles` we will move the file into a regular project, if applicable.
+            Path path = Path.of(LspAdapter.toPath(uri));
+            if (FilePatterns.GLOBAL_BUILD_FILES_MATCHER.matches(path)) {
+                Project project = ProjectLoader.loadUnresolved(path, text);
+                projects.put(uri, project);
+                return findProjectAndFile(uri);
+            }
+
             createDetachedProject(uri, text);
             projectAndFile = findProjectAndFile(uri); // Note: This will always be present
         }
@@ -129,11 +140,14 @@ public final class ServerState implements ManagedFiles {
         managedUris.remove(uri);
 
         ProjectAndFile projectAndFile = findProjectAndFile(uri);
-        if (projectAndFile != null && projectAndFile.project().type() == Project.Type.DETACHED) {
-            // Only cancel tasks for detached projects, since we're dropping the project
+        if (projectAndFile != null && shouldDropOnClose(projectAndFile.project())) {
             lifecycleTasks.cancelTask(uri);
             projects.remove(uri);
         }
+    }
+
+    private static boolean shouldDropOnClose(Project project) {
+        return project.type() == Project.Type.DETACHED || project.type() == Project.Type.UNRESOLVED;
     }
 
     List<Exception> tryInitProject(Path root) {
@@ -145,9 +159,9 @@ public final class ServerState implements ManagedFiles {
             Project updatedProject = ProjectLoader.load(root, this);
 
             if (updatedProject.type() == Project.Type.EMPTY) {
-                removeProjectAndResolveDetached(projectName);
+                removeProjectAndResolve(projectName);
             } else {
-                resolveDetachedProjects(projects.get(projectName), updatedProject);
+                resolveProjects(projects.get(projectName), updatedProject);
                 projects.put(projectName, updatedProject);
             }
 
@@ -191,7 +205,7 @@ public final class ServerState implements ManagedFiles {
         }
 
         for (String projectName : projectsToRemove) {
-            removeProjectAndResolveDetached(projectName);
+            removeProjectAndResolve(projectName);
         }
     }
 
@@ -230,14 +244,18 @@ public final class ServerState implements ManagedFiles {
         return errors;
     }
 
-    private void removeProjectAndResolveDetached(String projectName) {
+    private void removeProjectAndResolve(String projectName) {
         Project removedProject = projects.remove(projectName);
         if (removedProject != null) {
-            resolveDetachedProjects(removedProject, Project.empty(removedProject.root()));
+            resolveProjects(removedProject, Project.empty(removedProject.root()));
         }
     }
 
-    private void resolveDetachedProjects(Project oldProject, Project updatedProject) {
+    private void resolveProjects(Project oldProject, Project updatedProject) {
+        // There may be unresolved projects that have been resolved by the updated project, so
+        // we need to remove them here.
+        removeDetachedOrUnresolvedProjects(updatedProject.getAllBuildFilePaths());
+
         // This is a project reload, so we need to resolve any added/removed files
         // that need to be moved to or from detachedProjects projects.
         if (oldProject != null) {
@@ -246,10 +264,7 @@ public final class ServerState implements ManagedFiles {
 
             Set<String> addedPaths = new HashSet<>(updatedProjectSmithyPaths);
             addedPaths.removeAll(currentProjectSmithyPaths);
-            for (String addedPath : addedPaths) {
-                String addedUri = LspAdapter.toUri(addedPath);
-                projects.remove(addedUri); // Remove any detached projects
-            }
+            removeDetachedOrUnresolvedProjects(addedPaths);
 
             Set<String> removedPaths = new HashSet<>(currentProjectSmithyPaths);
             removedPaths.removeAll(updatedProjectSmithyPaths);
@@ -261,6 +276,17 @@ public final class ServerState implements ManagedFiles {
                     createDetachedProject(removedUri, removedDocument.copyText());
                 }
             }
+        } else {
+            // This is a new project, so there may be detached projects that are resolved by
+            // this new project.
+            removeDetachedOrUnresolvedProjects(updatedProject.getAllSmithyFilePaths());
+        }
+    }
+
+    private void removeDetachedOrUnresolvedProjects(Set<String> filePaths) {
+        for (String filePath : filePaths) {
+            String uri = LspAdapter.toUri(filePath);
+            projects.remove(uri);
         }
     }
 

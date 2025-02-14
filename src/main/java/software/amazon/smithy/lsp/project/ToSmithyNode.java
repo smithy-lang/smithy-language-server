@@ -6,6 +6,7 @@
 package software.amazon.smithy.lsp.project;
 
 import java.util.List;
+import org.eclipse.lsp4j.Range;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.syntax.Syntax;
@@ -104,6 +105,10 @@ final class ToSmithyNode {
     }
 
     private SourceLocation nodeStartSourceLocation(Syntax.Node node) {
-        return LspAdapter.toSourceLocation(path, document.rangeBetween(node.start(), node.end()));
+        Range range = document.rangeBetween(node.start(), node.end());
+        if (range == null) {
+            range = LspAdapter.origin();
+        }
+        return LspAdapter.toSourceLocation(path, range);
     }
 }
