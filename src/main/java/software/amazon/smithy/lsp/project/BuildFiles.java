@@ -10,7 +10,9 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import software.amazon.smithy.lsp.ManagedFiles;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
@@ -49,12 +51,28 @@ final class BuildFiles implements Iterable<BuildFile> {
         return buildFiles.isEmpty();
     }
 
+    Set<String> getAllPaths() {
+        return buildFiles.keySet();
+    }
+
     static BuildFiles of(Collection<BuildFile> buildFiles) {
         Map<String, BuildFile> buildFileMap = new HashMap<>(buildFiles.size());
         for (BuildFile buildFile : buildFiles) {
             buildFileMap.put(buildFile.path(), buildFile);
         }
         return new BuildFiles(buildFileMap);
+    }
+
+    static BuildFiles of(Path path, Document document) {
+        for (BuildFileType type : BuildFileType.values()) {
+            if (path.endsWith(type.filename())) {
+                String pathString = path.toString();
+                BuildFile buildFile = BuildFile.create(pathString, document, type);
+                return new BuildFiles(Map.of(pathString, buildFile));
+            }
+        }
+
+        return BuildFiles.of(List.of());
     }
 
     static BuildFiles load(Path root, ManagedFiles managedFiles) {

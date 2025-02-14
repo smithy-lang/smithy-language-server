@@ -128,6 +128,16 @@ public final class TestWorkspace {
         return builder.build();
     }
 
+    public static TestWorkspace emptyWithNoConfig(String prefix) {
+        Path root;
+        try {
+            root = Files.createTempDirectory(prefix);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return new TestWorkspace(root, null);
+    }
+
     public static Builder builder() {
         return new Builder();
     }

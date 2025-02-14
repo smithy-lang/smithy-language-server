@@ -1942,6 +1942,285 @@ public class SmithyLanguageServerTest {
         assertThat(options.getOnlyReloadOnSave(), equalTo(true)); // Explicitly set value
     }
 
+    @Test
+    public void openingNewBuildFileInExistingProjectBeforeDidChangeWatchedFiles() {
+        TestWorkspace workspace = TestWorkspace.emptyWithNoConfig("test");
+
+        String fooModel = """
+                        $version: "2"
+                        namespace com.foo
+                        structure Foo {}
+                        """;
+        TestWorkspace workspaceFoo = TestWorkspace.builder()
+                .withRoot(workspace.getRoot())
+                .withPath("foo")
+                .withSourceFile("foo.smithy", fooModel)
+                .build();
+
+        SmithyLanguageServer server = initFromRoot(workspace.getRoot());
+
+        String fooUri = workspaceFoo.getUri("foo.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(fooUri)
+                .text(fooModel)
+                .build());
+
+        String bazModel = """
+                        $version: "2"
+                        namespace com.baz
+                        structure Baz {}
+                        """;
+        workspaceFoo.addModel("baz.smithy", bazModel);
+        String bazUri = workspaceFoo.getUri("baz.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(bazUri)
+                .text(bazModel)
+                .build());
+
+        assertThat(server.getState().workspacePaths(), contains(workspace.getRoot()));
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, bazUri, Project.Type.DETACHED, bazUri);
+
+        String smithyProjectJson = """
+                {
+                    "sources": ["baz.smithy"]
+                }""";
+        workspaceFoo.addModel(".smithy-project.json", smithyProjectJson);
+        String smithyProjectJsonUri = workspaceFoo.getUri(".smithy-project.json");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(smithyProjectJsonUri)
+                .text(smithyProjectJson)
+                .build());
+
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, bazUri, Project.Type.DETACHED, bazUri);
+        assertManagedMatches(server, smithyProjectJsonUri, Project.Type.UNRESOLVED, smithyProjectJsonUri);
+
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(smithyProjectJsonUri, FileChangeType.Created)
+                .build());
+
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, bazUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, smithyProjectJsonUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertThat(server.getState().getAllProjects().size(), is(1));
+    }
+
+    @Test
+    public void openingNewBuildFileInNewProjectBeforeDidChangeWatchedFiles() {
+        TestWorkspace workspace = TestWorkspace.emptyWithNoConfig("test");
+        String fooModel = """
+                        $version: "2"
+                        namespace com.foo
+                        structure Foo {}
+                        """;
+        TestWorkspace workspaceFoo = TestWorkspace.builder()
+                .withRoot(workspace.getRoot())
+                .withPath("foo")
+                .withSourceFile("foo.smithy", fooModel)
+                .build();
+
+        SmithyLanguageServer server = initFromRoot(workspace.getRoot());
+
+        String fooUri = workspaceFoo.getUri("foo.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(fooUri)
+                .text(fooModel)
+                .build());
+
+        String barModel = """
+                $version: "2"
+                namespace com.bar
+                structure Bar {}
+                """;
+        TestWorkspace workspaceBar = TestWorkspace.builder()
+                .withRoot(workspace.getRoot())
+                .withPath("bar")
+                .withSourceFile("bar.smithy", barModel)
+                .build();
+        String barUri = workspaceBar.getUri("bar.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(barUri)
+                .text(barModel)
+                .build());
+
+        assertThat(server.getState().workspacePaths(), contains(workspace.getRoot()));
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.DETACHED, barUri);
+
+        String barSmithyBuildJson = """
+                {
+                    "version": "1",
+                    "sources": ["bar.smithy"]
+                }""";
+        workspaceBar.addModel("smithy-build.json", barSmithyBuildJson);
+        String barSmithyBuildUri = workspaceBar.getUri("smithy-build.json");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(barSmithyBuildUri)
+                .text(barSmithyBuildJson)
+                .build());
+
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.DETACHED, barUri);
+        assertManagedMatches(server, barSmithyBuildUri, Project.Type.UNRESOLVED, barSmithyBuildUri);
+
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(barSmithyBuildUri, FileChangeType.Created)
+                .build());
+
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.NORMAL, workspaceBar.getRoot());
+        assertManagedMatches(server, barSmithyBuildUri, Project.Type.NORMAL, workspaceBar.getRoot());
+    }
+
+    @Test
+    public void openingConfigFileInEmptyWorkspaceBeforeDidChangeWatchedFiles() {
+        String fooModel = """
+                        $version: "2"
+                        namespace com.foo
+                        structure Foo {}
+                        """;
+        TestWorkspace workspaceFoo = TestWorkspace.singleModel(fooModel);
+
+        SmithyLanguageServer server = initFromWorkspace(workspaceFoo);
+
+        TestWorkspace workspaceBar = TestWorkspace.emptyWithNoConfig("bar");
+        server.didChangeWorkspaceFolders(RequestBuilders.didChangeWorkspaceFolders()
+                .added(workspaceBar.getRoot().toUri().toString(), "bar")
+                .build());
+
+        assertThat(server.getState().workspacePaths(), containsInAnyOrder(
+                workspaceFoo.getRoot(),
+                workspaceBar.getRoot()));
+
+        String barModel = """
+                        $version: "2"
+                        namespace com.bar
+                        structure Bar {}
+                        """;
+        workspaceBar.addModel("bar.smithy", barModel);
+        String barUri = workspaceBar.getUri("bar.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(barUri)
+                .text(barModel)
+                .build());
+
+        String fooUri = workspaceFoo.getUri("main.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(fooUri)
+                .text(fooModel)
+                .build());
+
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.DETACHED, barUri);
+
+        String barSmithyBuildJson = """
+                {
+                    "version": "1",
+                    "sources": ["bar.smithy"]
+                }""";
+        workspaceBar.addModel("smithy-build.json", barSmithyBuildJson);
+        String barSmithyBuildUri = workspaceBar.getUri("smithy-build.json");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(barSmithyBuildUri)
+                .text(barSmithyBuildJson)
+                .build());
+
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.DETACHED, barUri);
+        assertManagedMatches(server, barSmithyBuildUri, Project.Type.UNRESOLVED, barSmithyBuildUri);
+
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(barSmithyBuildUri, FileChangeType.Created)
+                .build());
+
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.NORMAL, workspaceBar.getRoot());
+        assertManagedMatches(server, barSmithyBuildUri, Project.Type.NORMAL, workspaceBar.getRoot());
+    }
+
+    @Test
+    public void openingConfigFileInEmptyWorkspaceAfterDidChangeWatchedFiles() {
+        String fooModel = """
+                        $version: "2"
+                        namespace com.foo
+                        structure Foo {}
+                        """;
+        TestWorkspace workspaceFoo = TestWorkspace.singleModel(fooModel);
+
+        SmithyLanguageServer server = initFromWorkspace(workspaceFoo);
+
+        TestWorkspace workspaceBar = TestWorkspace.emptyWithNoConfig("bar");
+        server.didChangeWorkspaceFolders(RequestBuilders.didChangeWorkspaceFolders()
+                .added(workspaceBar.getRoot().toUri().toString(), "bar")
+                .build());
+
+        assertThat(server.getState().workspacePaths(), containsInAnyOrder(
+                workspaceFoo.getRoot(),
+                workspaceBar.getRoot()));
+
+        String barModel = """
+                        $version: "2"
+                        namespace com.bar
+                        structure Bar {}
+                        """;
+        workspaceBar.addModel("bar.smithy", barModel);
+        String barUri = workspaceBar.getUri("bar.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(barUri)
+                .text(barModel)
+                .build());
+
+        String fooUri = workspaceFoo.getUri("main.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(fooUri)
+                .text(fooModel)
+                .build());
+
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.DETACHED, barUri);
+
+        String barSmithyBuildJson = """
+                {
+                    "version": "1",
+                    "sources": ["bar.smithy"]
+                }""";
+        workspaceBar.addModel("smithy-build.json", barSmithyBuildJson);
+        String barSmithyBuildUri = workspaceBar.getUri("smithy-build.json");
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(barSmithyBuildUri, FileChangeType.Created)
+                .build());
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(barSmithyBuildUri)
+                .text(barSmithyBuildJson)
+                .build());
+
+        assertManagedMatches(server, fooUri, Project.Type.NORMAL, workspaceFoo.getRoot());
+        assertManagedMatches(server, barUri, Project.Type.NORMAL, workspaceBar.getRoot());
+        assertManagedMatches(server, barSmithyBuildUri, Project.Type.NORMAL, workspaceBar.getRoot());
+    }
+
+    @Test
+    public void foo() {
+        TestWorkspace workspace = TestWorkspace.emptyWithNoConfig("foo");
+        SmithyLanguageServer server = initFromRoot(workspace.getRoot());
+
+        String fooModel = """
+                $version: "2"
+                namespace com.foo
+                structure Foo {}
+                """;
+        workspace.addModel("foo.smithy", fooModel);
+        String fooUri = workspace.getUri("foo.smithy");
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(fooUri)
+                .text(fooModel)
+                .build());
+
+        assertManagedMatches(server, fooUri, Project.Type.DETACHED, fooUri);
+    }
+
     private void assertManagedMatches(
             SmithyLanguageServer server,
             String uri,

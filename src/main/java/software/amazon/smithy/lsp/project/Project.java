@@ -87,6 +87,16 @@ public final class Project {
         DETACHED,
 
         /**
+         * A project loaded from a single build file.
+         *
+         * <p>This occurs when a newly created build file is opened before we
+         * receive its `didChangeWatchedFiles` notification, which takes care
+         * of both adding new build files to an existing project, and creating
+         * a new project in a new root.
+         */
+        UNRESOLVED,
+
+        /**
          * A project loaded with no source or build configuration files.
          */
         EMPTY;
@@ -154,6 +164,10 @@ public final class Project {
      */
     public Set<String> getAllSmithyFilePaths() {
         return this.smithyFiles.keySet();
+    }
+
+    public Set<String> getAllBuildFilePaths() {
+        return this.buildFiles.getAllPaths();
     }
 
     /**
