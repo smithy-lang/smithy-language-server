@@ -78,7 +78,11 @@ public final class ProjectLoader {
         Document document = Document.of(text);
         BuildFiles buildFiles = BuildFiles.of(path, document);
 
+        // An unresolved project is meant to be resolved at a later point, so we don't
+        // even try loading its configuration from the build file.
         ProjectConfig config = ProjectConfig.empty();
+
+        // We aren't loading any smithy files in this project, so use a no-op ManagedFiles.
         LoadModelResult result = doLoad((fileUri) -> null, config);
 
         return new Project(

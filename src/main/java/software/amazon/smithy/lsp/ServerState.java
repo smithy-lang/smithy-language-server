@@ -254,7 +254,7 @@ public final class ServerState implements ManagedFiles {
     private void resolveProjects(Project oldProject, Project updatedProject) {
         // There may be unresolved projects that have been resolved by the updated project, so
         // we need to remove them here.
-        removeUnresolvedProjects(updatedProject.getAllBuildFilePaths());
+        removeDetachedOrUnresolvedProjects(updatedProject.getAllBuildFilePaths());
 
         // This is a project reload, so we need to resolve any added/removed files
         // that need to be moved to or from detachedProjects projects.
@@ -264,7 +264,7 @@ public final class ServerState implements ManagedFiles {
 
             Set<String> addedPaths = new HashSet<>(updatedProjectSmithyPaths);
             addedPaths.removeAll(currentProjectSmithyPaths);
-            removeDetachedProjects(addedPaths);
+            removeDetachedOrUnresolvedProjects(addedPaths);
 
             Set<String> removedPaths = new HashSet<>(currentProjectSmithyPaths);
             removedPaths.removeAll(updatedProjectSmithyPaths);
@@ -279,20 +279,13 @@ public final class ServerState implements ManagedFiles {
         } else {
             // This is a new project, so there may be detached projects that are resolved by
             // this new project.
-            removeDetachedProjects(updatedProject.getAllSmithyFilePaths());
+            removeDetachedOrUnresolvedProjects(updatedProject.getAllSmithyFilePaths());
         }
     }
 
-    private void removeUnresolvedProjects(Set<String> buildFilePaths) {
-        for (String buildFilePath : buildFilePaths) {
-            String uri = LspAdapter.toUri(buildFilePath);
-            projects.remove(uri);
-        }
-    }
-
-    private void removeDetachedProjects(Set<String> smithyFilePaths) {
-        for (String smithyFilePath : smithyFilePaths) {
-            String uri = LspAdapter.toUri(smithyFilePath);
+    private void removeDetachedOrUnresolvedProjects(Set<String> filePaths) {
+        for (String filePath : filePaths) {
+            String uri = LspAdapter.toUri(filePath);
             projects.remove(uri);
         }
     }
