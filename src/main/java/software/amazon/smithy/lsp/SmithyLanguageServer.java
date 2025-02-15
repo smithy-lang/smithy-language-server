@@ -58,6 +58,8 @@ import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.InitializedParams;
+import org.eclipse.lsp4j.InlayHint;
+import org.eclipse.lsp4j.InlayHintParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
 import org.eclipse.lsp4j.ProgressParams;
@@ -102,6 +104,7 @@ import software.amazon.smithy.lsp.language.DefinitionHandler;
 import software.amazon.smithy.lsp.language.DocumentSymbolHandler;
 import software.amazon.smithy.lsp.language.FoldingRangeHandler;
 import software.amazon.smithy.lsp.language.HoverHandler;
+import software.amazon.smithy.lsp.language.InlayHintHandler;
 import software.amazon.smithy.lsp.project.BuildFile;
 import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
@@ -132,6 +135,7 @@ public class SmithyLanguageServer implements
         capabilities.setDocumentFormattingProvider(true);
         capabilities.setDocumentSymbolProvider(true);
         capabilities.setFoldingRangeProvider(true);
+        capabilities.setInlayHintProvider(true);
 
         WorkspaceFoldersOptions workspaceFoldersOptions = new WorkspaceFoldersOptions();
         workspaceFoldersOptions.setSupported(true);
@@ -602,6 +606,26 @@ public class SmithyLanguageServer implements
 
         List<Syntax.Statement> statements = idlFile.getParse().statements();
         var handler = new FoldingRangeHandler(idlFile.document(), idlFile.getParse().imports(), statements);
+        return CompletableFuture.supplyAsync(handler::handle);
+    }
+
+    @Override
+    public CompletableFuture<List<InlayHint>> inlayHint(InlayHintParams params) {
+        LOGGER.finest("InlayHint");
+
+        String uri = params.getTextDocument().getUri();
+        ProjectAndFile projectAndFile = state.findProjectAndFile(uri);
+        if (projectAndFile == null) {
+            client.unknownFileError(uri, "inlay hint");
+            return completedFuture(Collections.emptyList());
+        }
+
+        if (!(projectAndFile.file() instanceof IdlFile idlFile)) {
+            return completedFuture(List.of());
+        }
+
+        List<Syntax.Statement> statements = idlFile.getParse().statements();
+        var handler = new InlayHintHandler(idlFile.document(), statements, params.getRange());
         return CompletableFuture.supplyAsync(handler::handle);
     }
 
