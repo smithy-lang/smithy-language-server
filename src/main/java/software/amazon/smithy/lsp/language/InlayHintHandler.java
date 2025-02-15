@@ -50,8 +50,7 @@ public record InlayHintHandler(Document document,
                     String suffix = str.stringValue();
                     if (key.equals(OPERATION_INPUT_SUFFIX)) {
                         inputSuffix = suffix;
-                    }
-                    else if (key.equals(OPERATION_OUTPUT_SUFFIX)) {
+                    } else if (key.equals(OPERATION_OUTPUT_SUFFIX)) {
                         outputSuffix = suffix;
                     }
                 }
