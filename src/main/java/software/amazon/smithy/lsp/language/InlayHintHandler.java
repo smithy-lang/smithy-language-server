@@ -47,14 +47,15 @@ public record InlayHintHandler(Document document,
             if (statement instanceof Syntax.Statement.Control control) {
                 if (control.value() instanceof Syntax.Node.Str str) {
                     String key = control.key().stringValue();
+                    String suffix = str.stringValue();
                     switch (key) {
                         case OPERATION_INPUT_SUFFIX ->
-                                inputSuffix = str.stringValue();
+                                inputSuffix = suffix;
 
                         case OPERATION_OUTPUT_SUFFIX ->
-                                outputSuffix = str.stringValue();
+                                outputSuffix = suffix;
 
-                        default ->{
+                        default -> {
                         }
                     }
                 }
@@ -82,8 +83,8 @@ public record InlayHintHandler(Document document,
 
         while (iterator.hasNext()) {
             var statement = iterator.next();
-            if (statement instanceof Syntax.Statement.ShapeDef shapeDef &&
-                    shapeDef.shapeType().stringValue().equals(OPERATION_TYPE)) {
+            if (statement instanceof Syntax.Statement.ShapeDef shapeDef
+                    && shapeDef.shapeType().stringValue().equals(OPERATION_TYPE)) {
                 processBlock(inlayHints,
                         iterator,
                         ioSuffix,
