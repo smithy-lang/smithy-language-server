@@ -48,15 +48,11 @@ public record InlayHintHandler(Document document,
                 if (control.value() instanceof Syntax.Node.Str str) {
                     String key = control.key().stringValue();
                     String suffix = str.stringValue();
-                    switch (key) {
-                        case OPERATION_INPUT_SUFFIX ->
-                                inputSuffix = suffix;
-
-                        case OPERATION_OUTPUT_SUFFIX ->
-                                outputSuffix = suffix;
-
-                        default -> {
-                        }
+                    if (key.equals(OPERATION_INPUT_SUFFIX)) {
+                        inputSuffix = suffix;
+                    }
+                    else if (key.equals(OPERATION_OUTPUT_SUFFIX)) {
+                        outputSuffix = suffix;
                     }
                 }
             } else if (statement instanceof Syntax.Statement.ShapeDef) {
