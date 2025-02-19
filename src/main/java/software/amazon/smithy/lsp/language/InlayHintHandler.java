@@ -75,65 +75,33 @@ public record InlayHintHandler(Document document,
         // Convert the window range into document character index.
         int rangeStartIndex = document.indexOfPosition(hintRange.getStart());
         int rangeEndIndex = document.indexOfPosition(hintRange.getEnd());
-
+        String lastOperationName = "";
         while (iterator.hasNext()) {
             var statement = iterator.next();
             if (statement instanceof Syntax.Statement.ShapeDef shapeDef
                     && shapeDef.shapeType().stringValue().equals(OPERATION_TYPE)) {
-                processBlock(inlayHints,
-                        iterator,
-                        ioSuffix,
-                        shapeDef.shapeName().stringValue(),
-                        rangeStartIndex,
-                        rangeEndIndex);
+                lastOperationName = shapeDef.shapeName().stringValue();
             }
-        }
-        return inlayHints;
-    }
-
-    private void processBlock(List<InlayHint> inlayHints,
-                              ListIterator<Syntax.Statement> iterator,
-                              IOSuffix ioSuffix,
-                              String operationName,
-                              int rangeStartIndex,
-                              int rangeEndIndex) {
-
-        var block = iterator.next();
-
-        if (!coveredByRange(block, rangeStartIndex, rangeEndIndex)) {
-            return;
-        }
-        int blockEnd = block.end();
-        while (iterator.hasNext()) {
-            var statement = iterator.next();
-            // if the current statement is not covered by window range, just skip.
-            if (!coveredByRange(statement, rangeStartIndex, rangeEndIndex)) {
-                continue;
-            }
-
-            if (statement.start() >= blockEnd) {
-                iterator.previous();
-                return;
-            }
-
             if (statement instanceof Syntax.Statement.InlineMemberDef inlineMemberDef) {
-                StringBuilder labelBuilder = new StringBuilder(operationName);
+                if (!coveredByRange(statement, rangeStartIndex, rangeEndIndex)) {
+                    continue;
+                }
+                String inlayHintLabel = "";
                 switch (inlineMemberDef.name().stringValue()) {
                     case INPUT_TYPE ->
-                            labelBuilder.append(ioSuffix.inputSuffix());
-
+                            inlayHintLabel = lastOperationName + ioSuffix.inputSuffix();
                     case OUTPUT_TYPE ->
-                            labelBuilder.append(ioSuffix.outputSuffix());
-
+                            inlayHintLabel = lastOperationName + ioSuffix.outputSuffix();
                     default -> {
+                        continue;
                     }
                 }
-                // The start position is right after the inline def statement
                 Position position = document.positionAtIndex(inlineMemberDef.end());
-                InlayHint inlayHint = new InlayHint(position, Either.forLeft(labelBuilder.toString()));
+                InlayHint inlayHint = new InlayHint(position, Either.forLeft(inlayHintLabel));
                 inlayHints.add(inlayHint);
             }
         }
+        return inlayHints;
     }
 
     private record IOSuffix(String inputSuffix, String outputSuffix) {

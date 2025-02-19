@@ -5,7 +5,9 @@ import java.util.List;
 import org.eclipse.lsp4j.InlayHint;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.services.TextDocumentService;
 import org.junit.jupiter.api.Test;
+import software.amazon.smithy.lsp.LspMatchers;
 import software.amazon.smithy.lsp.ServerState;
 import software.amazon.smithy.lsp.TestWorkspace;
 import software.amazon.smithy.lsp.TextWithPositions;
@@ -16,6 +18,7 @@ import software.amazon.smithy.lsp.project.ProjectTest;
 
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -41,15 +44,16 @@ public class InlayHintHandlerTest {
                 }
                 %
                 """);
-        Position startPosition = new Position(0,0);
-        Position endPosition = new Position(model.positions()[2].getLine(),0);
-        List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         var positions = model.positions();
+        Position startPosition = new Position(0,0);
+        Position endPosition = positions[2];
+        List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(2));
-        assertEquals(hints.get(0).getPosition(), new Position(positions[0].getLine(), positions[0].getCharacter()));
-        assertEquals(hints.get(1).getPosition(), new Position(positions[1].getLine(), positions[1].getCharacter()));
-        assertEquals("GetUserRequest", hints.get(0).getLabel().getLeft());
-        assertEquals("GetUserResponse", hints.get(1).getLabel().getLeft());
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetUserRequest", positions[0]),
+                LspMatchers.inlayHint("GetUserResponse", positions[1])
+        ));
+
     }
 
     @Test
@@ -71,15 +75,15 @@ public class InlayHintHandlerTest {
                 }
                 %
                 """);
-        Position startPosition = new Position(0,0);
-        Position endPosition = new Position(model.positions()[2].getLine(),0);
-        List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         var positions = model.positions();
+        Position startPosition = new Position(0,0);
+        Position endPosition = positions[2];
+        List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(2));
-        assertEquals(hints.get(0).getPosition(), new Position(positions[0].getLine(), positions[0].getCharacter()));
-        assertEquals(hints.get(1).getPosition(), new Position(positions[1].getLine(), positions[1].getCharacter()));
-        assertEquals("GetUserInput", hints.get(0).getLabel().getLeft());
-        assertEquals("GetUserOutput", hints.get(1).getLabel().getLeft());
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetUserInput", positions[0]),
+                LspMatchers.inlayHint("GetUserOutput", positions[1])
+        ));
     }
 
     @Test
@@ -96,13 +100,14 @@ public class InlayHintHandlerTest {
                 }
                 %
                 """);
-        Position startPosition = new Position(0,0);
-        Position endPosition = new Position(model.positions()[1].getLine(),0);
-        List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         var positions = model.positions();
+        Position startPosition = new Position(0,0);
+        Position endPosition = positions[1];
+        List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(1));
-        assertEquals(new Position(positions[0].getLine(), positions[0].getCharacter()), hints.get(0).getPosition());
-        assertEquals("GetUserInput", hints.get(0).getLabel().getLeft());
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetUserInput", positions[0])
+        ));
     }
 
     @Test
@@ -120,13 +125,14 @@ public class InlayHintHandlerTest {
                 }
                 %
                 """);
-        Position startPosition = new Position(0,0);
-        Position endPosition = new Position(model.positions()[1].getLine(),0);
-        List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         var positions = model.positions();
+        Position startPosition = new Position(0,0);
+        Position endPosition = positions[1];
+        List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(1));
-        assertEquals(new Position(positions[0].getLine(), positions[0].getCharacter()), hints.get(0).getPosition());
-        assertEquals("GetUserInput", hints.get(0).getLabel().getLeft());
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetUserInput", positions[0])
+        ));
     }
 
     @Test
@@ -141,8 +147,9 @@ public class InlayHintHandlerTest {
                 }
                 %
                 """);
+        var positions = model.positions();
         Position startPosition = new Position(0,0);
-        Position endPosition = new Position(model.positions()[0].getLine(),0);
+        Position endPosition = positions[0];
         List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(0));
     }
@@ -169,14 +176,14 @@ public class InlayHintHandlerTest {
                 %
                 """);
         var positions = model.positions();
-        Position startPosition = new Position(positions[0].getLine(),0);
-        Position endPosition = new Position(positions[3].getLine(),0);
+        Position startPosition = positions[0];
+        Position endPosition = positions[3];
         List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(2));
-        assertEquals(new Position(positions[1].getLine(), positions[1].getCharacter()), hints.get(0).getPosition());
-        assertEquals("GetUserRequest", hints.get(0).getLabel().getLeft());
-        assertEquals(new Position(positions[2].getLine(), positions[2].getCharacter()), hints.get(1).getPosition());
-        assertEquals("GetUserResponse", hints.get(1).getLabel().getLeft());
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetUserRequest", positions[1]),
+                LspMatchers.inlayHint("GetUserResponse", positions[2])
+        ));
     }
 
     @Test
@@ -200,12 +207,13 @@ public class InlayHintHandlerTest {
                 }
                 """);
         var positions = model.positions();
-        Position startPosition = new Position(positions[0].getLine(),0);
-        Position endPosition = new Position(positions[2].getLine(),0);
+        Position startPosition =positions[0];
+        Position endPosition = positions[2];
         List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(1));
-        assertEquals(new Position(positions[1].getLine(), positions[1].getCharacter()), hints.get(0).getPosition());
-        assertEquals("GetUserRequest", hints.get(0).getLabel().getLeft());
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetUserRequest", positions[1])
+        ));
     }
 
     @Test
@@ -218,7 +226,7 @@ public class InlayHintHandlerTest {
                         userId: String
                     }
                 
-                %    output := {
+                %    output :=% {
                         username: String
                         userId: String
                     }
@@ -226,11 +234,13 @@ public class InlayHintHandlerTest {
                 %
                 """);
         var positions = model.positions();
-        Position startPosition = new Position(positions[0].getLine(),0);
-        Position endPosition = new Position(positions[1].getLine(),0);
+        Position startPosition =positions[0];
+        Position endPosition =positions[1];
         List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(1));
-        assertEquals("GetUserOutput", hints.get(0).getLabel().getLeft());
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetUserOutput", positions[1])
+        ));
     }
 
     @Test
@@ -251,11 +261,13 @@ public class InlayHintHandlerTest {
                 
                 """);
         var positions = model.positions();
-        Position startPosition = new Position(positions[0].getLine(),positions[0].getCharacter());
-        Position endPosition = new Position(positions[1].getLine(),positions[1].getCharacter());
+        Position startPosition = positions[0];
+        Position endPosition = positions[1];
         List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(1));
-        assertEquals("GetUserOutput", hints.get(0).getLabel().getLeft());
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetUserOutput", positions[1])
+        ));
     }
 
     @Test
@@ -264,37 +276,38 @@ public class InlayHintHandlerTest {
                 %$version: "2"
                 
                 operation GetUser {
-                    input := {
+                    input :=% {
                         userId: String
                     }
                 
-                    output := {
+                    output :=% {
                         username: String
                         userId: String
                     }
                 }
                 
                 operation GetAddress {
-                    input := {
+                    input :=% {
                         userId: String
                     }
                 
-                   output := {
+                   output :=% {
                         address: String
                     }
                 }
                 %
                 """);
         var positions = model.positions();
-        Position startPosition = new Position(positions[0].getLine(),positions[0].getCharacter());
-        Position endPosition = new Position(positions[1].getLine(),positions[1].getCharacter());
+        Position startPosition = positions[0];
+        Position endPosition = positions[5];
         List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(4));
-        assertEquals("GetUserInput", hints.get(0).getLabel().getLeft());
-        assertEquals("GetUserOutput", hints.get(1).getLabel().getLeft());
-        assertEquals("GetAddressInput", hints.get(2).getLabel().getLeft());
-        assertEquals("GetAddressOutput", hints.get(3).getLabel().getLeft());
-
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetUserInput", positions[1]),
+                LspMatchers.inlayHint("GetUserOutput", positions[2]),
+                LspMatchers.inlayHint("GetAddressInput", positions[3]),
+                LspMatchers.inlayHint("GetAddressOutput", positions[4])
+        ));
     }
 
     @Test
@@ -317,7 +330,7 @@ public class InlayHintHandlerTest {
                 }
                 
                 %operation GetAddress {
-                    input := %{
+                    input :=% {
                         userId: String
                     }
                 
@@ -328,11 +341,56 @@ public class InlayHintHandlerTest {
                 
                 """);
         var positions = model.positions();
-        Position startPosition = new Position(positions[0].getLine(),positions[0].getCharacter());
-        Position endPosition = new Position(positions[1].getLine(),positions[1].getCharacter());
+        Position startPosition = positions[0];
+        Position endPosition = positions[1];
         List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
         assertThat(hints, hasSize(1));
-        assertEquals("GetAddressInput", hints.get(0).getLabel().getLeft());
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetAddressInput", positions[1])
+        ));
+    }
+
+    @Test
+    public void inlayHintsForInlineOperationWithMixinAndFor() {
+        TextWithPositions model = TextWithPositions.from("""
+                %$version: "2"
+                
+                operation GetUser {
+                    output :=% for foo with [bar] {
+                            @required
+                            check: Boolean
+                        }
+                }
+                %
+                """);
+        var positions = model.positions();
+        Position startPosition = positions[0];
+        Position endPosition = positions[2];
+        List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
+        assertThat(hints, hasSize(1));
+        assertEquals("GetUserOutput", hints.get(0).getLabel().getLeft());
+        assertEquals(positions[1], hints.get(0).getPosition());
+
+    }
+
+    @Test
+    public void inlayHintsForInvalidInlineOperation() {
+        TextWithPositions model = TextWithPositions.from("""
+                %$version: "2"
+                
+                operation GetUser {
+                    output :=% test
+                }
+                %
+                """);
+        var positions = model.positions();
+        Position startPosition = positions[0];
+        Position endPosition = positions[1];
+        List<InlayHint>hints = getInlayHints(model.text(), startPosition, endPosition);
+        assertThat(hints, hasSize(1));
+        assertThat(hints, contains(
+                LspMatchers.inlayHint("GetUserOutput", positions[1])
+        ));
     }
 
     private static List<InlayHint> getInlayHints(String text, Position startPosition, Position endPosition) {
@@ -344,7 +402,6 @@ public class InlayHintHandlerTest {
         var handler = new InlayHintHandler(idlFile.document(),
                 idlFile.getParse().statements(),
                 new Range(startPosition, endPosition));
-        List<InlayHint> hints = handler.handle();
-        return hints;
+        return handler.handle();
     }
 }
