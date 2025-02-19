@@ -86,16 +86,17 @@ public record InlayHintHandler(Document document,
                 if (!coveredByRange(statement, rangeStartIndex, rangeEndIndex)) {
                     continue;
                 }
-                String inlayHintLabel = "";
-                switch (inlineMemberDef.name().stringValue()) {
-                    case INPUT_TYPE ->
-                            inlayHintLabel = lastOperationName + ioSuffix.inputSuffix();
-                    case OUTPUT_TYPE ->
-                            inlayHintLabel = lastOperationName + ioSuffix.outputSuffix();
-                    default -> {
-                        continue;
-                    }
+
+                String inlayHintLabel = switch (inlineMemberDef.name().stringValue()) {
+                    case INPUT_TYPE -> lastOperationName + ioSuffix.inputSuffix();
+                    case OUTPUT_TYPE -> lastOperationName + ioSuffix.outputSuffix();
+                    default -> null;
+                };
+
+                if (inlayHintLabel == null) {
+                    continue;
                 }
+
                 Position position = document.positionAtIndex(inlineMemberDef.end());
                 InlayHint inlayHint = new InlayHint(position, Either.forLeft(inlayHintLabel));
                 inlayHints.add(inlayHint);
