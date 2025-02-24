@@ -81,6 +81,7 @@ public record InlayHintHandler(Document document,
             if (statement instanceof Syntax.Statement.ShapeDef shapeDef
                     && shapeDef.shapeType().stringValue().equals(OPERATION_TYPE)) {
                 lastOperationName = shapeDef.shapeName().stringValue();
+                continue;
             }
             if (statement instanceof Syntax.Statement.InlineMemberDef inlineMemberDef) {
                 if (!coveredByRange(statement, rangeStartIndex, rangeEndIndex)) {
