@@ -38,7 +38,7 @@ public class BuildCompletionHandlerTest {
 
         assertThat(items, containsInAnyOrder(
                 hasLabelAndEditText("version", """
-                        "version": "1"
+                        "version": "1.0"
                         """),
                 hasLabelAndEditText("outputDirectory", """
                         "outputDirectory": ""
@@ -231,7 +231,7 @@ public class BuildCompletionHandlerTest {
 
         assertThat(items, containsInAnyOrder(
                 hasLabelAndEditText("version", """
-                        "version": "1"
+                        "version": "1.0"
                         """)
         ));
     }
@@ -247,7 +247,7 @@ public class BuildCompletionHandlerTest {
 
         assertThat(items, containsInAnyOrder(
                 hasLabelAndEditText("version", """
-                        "version": "1"
+                        "version": "1.0"
                         """)
         ));
     }
@@ -273,8 +273,8 @@ public class BuildCompletionHandlerTest {
         var items = getCompItems(text, BuildFileType.SMITHY_BUILD);
 
         assertThat(items, containsInAnyOrder(
-                hasLabelAndEditText("\"1\"", """
-                        "1"
+                hasLabelAndEditText("\"1.0\"", """
+                        "1.0"
                         """),
                 hasLabelAndEditText("false", "false"),
                 hasLabelAndEditText("true", "true"),
