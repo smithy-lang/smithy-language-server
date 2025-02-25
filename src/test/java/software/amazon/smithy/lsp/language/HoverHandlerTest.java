@@ -42,7 +42,7 @@ public class HoverHandlerTest {
                 """);
         List<String> hovers = getHovers(text, new Position(0, 9));
 
-        assertThat(hovers, contains(containsString("suppressions")));
+        assertThat(hovers, contains(containsString("Suppressions")));
     }
 
     @Test
@@ -145,6 +145,43 @@ public class HoverHandlerTest {
         List<String> hovers = getHovers(text);
 
         assertThat(hovers, contains(containsString("bar: String")));
+    }
+
+    @Test
+    public void keywordHover() {
+        var twp = TextWithPositions.from("""
+                $version: "2"
+                %namespace com.foo
+                
+                %service MyService {}
+                %operation MyOperation {}
+                %resource MyResource {}
+                %list MyList {}
+                %map MyMap {}
+                %structure MyStructure {}
+                %union MyUnion {}
+                %blob MyBlob
+                %timestamp MyTimestamp
+                %document MyDocument
+                %enum MyEnum {}
+                %intEnum MyIntEnum {}
+                """);
+        var hovers = getHovers(twp);
+        assertThat(hovers, contains(
+                containsString("Namespace"),
+                containsString("Service Reference"),
+                containsString("Operation Reference"),
+                containsString("Resource Reference"),
+                containsString("List Reference"),
+                containsString("Map Reference"),
+                containsString("Structure Reference"),
+                containsString("Union Reference"),
+                containsString("binary data"),
+                containsString("Timestamp Reference"),
+                containsString("Document Reference"),
+                containsString("Enum Reference"),
+                containsString("IntEnum Reference")
+        ));
     }
 
     private static List<String> getHovers(TextWithPositions text) {
