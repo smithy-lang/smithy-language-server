@@ -110,6 +110,9 @@ sealed interface IdlPosition {
             case Syntax.Statement.TraitApplication t
                     when t.value() != null && t.value().isIn(documentIndex) -> new IdlPosition.TraitValue(view, t);
 
+            case Syntax.Statement.InlineMemberDef m
+                    when m.name().isIn(documentIndex) -> new IdlPosition.MemberName(view, m.name().stringValue());
+
             case Syntax.Statement.ElidedMemberDef ignored -> new IdlPosition.ElidedMember(view);
 
             case Syntax.Statement.Mixins ignored -> new IdlPosition.Mixin(view);

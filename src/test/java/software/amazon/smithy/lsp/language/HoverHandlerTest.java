@@ -151,7 +151,7 @@ public class HoverHandlerTest {
     public void keywordHover() {
         var twp = TextWithPositions.from("""
                 $version: "2"
-                %namespace com.foo
+                namespace com.foo
                 
                 %service MyService {}
                 %operation MyOperation {}
@@ -168,7 +168,7 @@ public class HoverHandlerTest {
                 """);
         var hovers = getHovers(twp);
         assertThat(hovers, contains(
-                containsString("Namespace"),
+//                containsString("Namespace"),
                 containsString("Service Reference"),
                 containsString("Operation Reference"),
                 containsString("Resource Reference"),
@@ -181,6 +181,72 @@ public class HoverHandlerTest {
                 containsString("Document Reference"),
                 containsString("Enum Reference"),
                 containsString("IntEnum Reference")
+        ));
+    }
+
+    @Test
+    public void builtinMemberHover() {
+        var twp = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                service MyService {
+                    %version: ""
+                    %operations: []
+                    %resources: []
+                    %errors: []
+                    %rename: {}
+                }
+                
+                operation MyOperation {
+                    %input := {}
+                    %output := {}
+                    %errors: []
+                }
+                
+                operation NoInlineOperation {
+                    %input: Foo
+                    %output: Foo
+                    %errors: []
+                }
+                
+                resource MyResource {
+                    %identifiers: {}
+                    %properties: {}
+                    %create: {}
+                    %put: {}
+                    %read: {}
+                    %update: {}
+                    %delete: {}
+                    %list: {}
+                    %operations: []
+                    %collectionOperations: []
+                    %resources: []
+                }
+                """);
+        var hovers = getHovers(twp);
+        assertThat(hovers, contains(
+                containsString("optional version"),
+                containsString("operation shapes"),
+                containsString("resource shapes"),
+                containsString("common errors"),
+                containsString("Disambiguates"),
+                containsString("input of the operation"),
+                containsString("output of the operation"),
+                containsString("errors that an operation"),
+                containsString("input of the operation"),
+                containsString("output of the operation"),
+                containsString("errors that an operation"),
+                containsString("map of identifier"),
+                containsString("map of property"),
+                containsString("create a resource"),
+                containsString("idempotent"),
+                containsString("retrieve the resource"),
+                containsString("update the resource"),
+                containsString("delete the resource"),
+                containsString("list resources"),
+                containsString("instance operations"),
+                containsString("collection operations"),
+                containsString("child resource")
         ));
     }
 

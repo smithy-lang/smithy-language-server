@@ -8,14 +8,11 @@ package software.amazon.smithy.lsp.language;
 import java.util.Optional;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
-import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.Position;
 import software.amazon.smithy.lsp.project.BuildFile;
 import software.amazon.smithy.lsp.syntax.NodeCursor;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.Shape;
-import software.amazon.smithy.model.traits.DocumentationTrait;
-import software.amazon.smithy.model.traits.ExternalDocumentationTrait;
 
 /**
  * Handles hover requests for build files.
@@ -46,7 +43,7 @@ public final class BuildHoverHandler {
         NodeSearch.Result searchResult = NodeSearch.search(cursor, Builtins.MODEL, buildFileShape);
 
         return getMemberShape(searchResult)
-                .map(BuildHoverHandler::withShapeDocs)
+                .map(HoverHandler::withBuiltinShapeDocs)
                 .orElse(null);
     }
 
@@ -60,32 +57,5 @@ public final class BuildHoverHandler {
         }
 
         return Optional.empty();
-    }
-
-    private static Hover withShapeDocs(MemberShape memberShape) {
-        StringBuilder builder = new StringBuilder();
-
-        var docs = memberShape.getTrait(DocumentationTrait.class).orElse(null);
-        var externalDocs = memberShape.getTrait(ExternalDocumentationTrait.class).orElse(null);
-
-        if (docs != null) {
-            builder.append(docs.getValue());
-        }
-
-        if (externalDocs != null) {
-            if (docs != null) {
-                // Add some extra space between regular docs and external
-                builder.append(System.lineSeparator()).append(System.lineSeparator());
-            }
-
-            externalDocs.getUrls()
-                    .forEach((name, url) -> builder.append(String.format("[%s](%s)%n", name, url)));
-        }
-
-        if (builder.isEmpty()) {
-            return null;
-        }
-
-        return new Hover(new MarkupContent("markdown", builder.toString()));
     }
 }
