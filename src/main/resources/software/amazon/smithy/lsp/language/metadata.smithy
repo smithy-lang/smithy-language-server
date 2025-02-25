@@ -28,6 +28,7 @@ list SeverityOverrides {
     member: SeverityOverride
 }
 
+@externalDocumentation("Suppressions Reference": "https://smithy.io/2.0/spec/model-validation.html#suppressions")
 structure Suppression {
     /// The hierarchical validation event ID to suppress.
     id: String
@@ -41,6 +42,7 @@ structure Suppression {
     reason: String
 }
 
+@externalDocumentation("Validators Reference": "https://smithy.io/2.0/spec/model-validation.html#validators")
 structure Validator {
     /// The name of the validator to apply. This name is used in implementations to find and configure
     /// the appropriate validator implementation. Validators only take effect if a Smithy processor
@@ -54,7 +56,6 @@ structure Validator {
     /// IDs that contain dots (.) are hierarchical. For example, the ID "Foo.Bar" contains
     /// the ID "Foo". Event ID hierarchies can be leveraged to group validation events and
     /// allow more granular suppressions.
-    @externalDocumentation("Suppressions Reference": "https://smithy.io/2.0/spec/model-validation.html#suppression-definition")
     id: String
 
     /// Provides a custom message to use when emitting validation events. The special `{super}`
@@ -94,6 +95,7 @@ list AnyNamespaces {
     member: AnyNamespace
 }
 
+@externalDocumentation("Severity Overrides Reference": "https://smithy.io/2.0/spec/model-validation.html#severity-overrides")
 structure SeverityOverride {
     /// The hierarchical validation event ID to elevate.
     id: String
@@ -125,6 +127,7 @@ structure BuiltinValidators {
     UnreferencedShapes: UnreferencedShapesConfig
 }
 
+@externalDocumentation("EmitEachSelector Reference": "https://smithy.io/2.0/spec/model-validation.html#emiteachselector")
 structure EmitEachSelectorConfig {
     /// A valid selector. A validation event is emitted for each shape in the model that matches the selector.
     @required
@@ -139,6 +142,7 @@ structure EmitEachSelectorConfig {
     messageTemplate: String
 }
 
+@externalDocumentation("EmitNoneSelector Reference": "https://smithy.io/2.0/spec/model-validation.html#emitnoneselector")
 structure EmitNoneSelectorConfig {
     /// A valid selector. If no shape in the model is returned by the selector, then a validation event is emitted.
     @required

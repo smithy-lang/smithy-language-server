@@ -7,6 +7,7 @@ package software.amazon.smithy.lsp.language;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -90,6 +91,7 @@ public final class HoverHandler {
                     .orElse(EMPTY);
 
             case IdlPosition.StatementKeyword ignored -> Builtins.SHAPE_MEMBER_TARGETS.getMember(id.copyIdValue())
+                    .or(() -> Builtins.NON_SHAPE_KEYWORDS.getMember(id.copyIdValue()))
                     .map(HoverHandler::withBuiltinShapeDocs)
                     .orElse(EMPTY);
 
@@ -213,28 +215,52 @@ public final class HoverHandler {
     static Hover withBuiltinShapeDocs(Shape shape) {
         StringBuilder builder = new StringBuilder();
 
-        var docs = shape.getTrait(DocumentationTrait.class).orElse(null);
-        var externalDocs = shape.getTrait(ExternalDocumentationTrait.class).orElse(null);
+        var builtinShapeDocs = BuiltinShapeDocs.forShape(shape);
 
-        if (docs != null) {
-            builder.append(docs.getValue());
-        }
+        if (!builtinShapeDocs.shapeDocs.isEmpty()) {
+            builder.append(builtinShapeDocs.shapeDocs);
 
-        if (externalDocs != null) {
-            if (docs != null) {
-                // Add some extra space between regular docs and external
+            if (!builtinShapeDocs.externalDocs.isEmpty()) {
+                // Space out regular docs and external docs so they're easier to read.
                 builder.append(System.lineSeparator()).append(System.lineSeparator());
             }
-
-            externalDocs.getUrls()
-                    .forEach((name, url) -> builder.append(String.format("[%s](%s)%n", name, url)));
         }
+
+        builtinShapeDocs.externalDocs
+                .forEach((url, doc) -> builder.append(String.format("[%s](%s)", url, doc)));
 
         if (builder.isEmpty()) {
             return EMPTY;
         }
 
         return new Hover(new MarkupContent("markdown", builder.toString()));
+    }
+
+    private record BuiltinShapeDocs(String shapeDocs, Map<String, String> externalDocs) {
+        private static BuiltinShapeDocs forShape(Shape shape) {
+            var shapeDocs = shape.getTrait(DocumentationTrait.class)
+                    .map(DocumentationTrait::getValue)
+                    .orElse("");
+
+            Map<String, String> externalDocs = new HashMap<>();
+
+            shape.getTrait(ExternalDocumentationTrait.class)
+                    .map(ExternalDocumentationTrait::getUrls)
+                    .ifPresent(externalDocs::putAll);
+
+            // The builtins model defines some external docs on root shapes, which are meant to be
+            // included in the hover content for all members so we can always provide a link to
+            // Smithy's docs, even if the member itself doesn't have a specific link that would
+            // make sense.
+            shape.asMemberShape()
+                    .map(MemberShape::getContainer)
+                    .flatMap(Builtins.MODEL::getShape)
+                    .flatMap(container -> container.getTrait(ExternalDocumentationTrait.class))
+                    .map(ExternalDocumentationTrait::getUrls)
+                    .ifPresent(externalDocs::putAll);
+
+            return new BuiltinShapeDocs(shapeDocs, externalDocs);
+        }
     }
 
     private static Hover withMarkupContents(String text) {

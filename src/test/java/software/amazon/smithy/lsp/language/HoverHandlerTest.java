@@ -148,7 +148,7 @@ public class HoverHandlerTest {
     }
 
     @Test
-    public void keywordHover() {
+    public void shapeKeywordHover() {
         var twp = TextWithPositions.from("""
                 $version: "2"
                 namespace com.foo
@@ -168,7 +168,6 @@ public class HoverHandlerTest {
                 """);
         var hovers = getHovers(twp);
         assertThat(hovers, contains(
-//                containsString("Namespace"),
                 containsString("Service Reference"),
                 containsString("Operation Reference"),
                 containsString("Resource Reference"),
@@ -247,6 +246,60 @@ public class HoverHandlerTest {
                 containsString("instance operations"),
                 containsString("collection operations"),
                 containsString("child resource")
+        ));
+    }
+
+    @Test
+    public void nonShapeKeywordHover() {
+        var twp = TextWithPositions.from("""
+                $version: "2"
+                
+                %metadata foo = "foo"
+                
+                %namespace com.foo
+                
+                %use com.foo#Foo
+                
+                %apply Foo @bar
+                
+                structure Foo %for Bar {}
+                
+                structure Baz %with [Foo] {}
+                """);
+        var hovers = getHovers(twp);
+
+        assertThat(hovers, contains(
+                containsString("schema-less"),
+                containsString("A namespace is"),
+                containsString("The use section"),
+                containsString("Applies a trait"),
+                containsString("Allows referencing"),
+                containsString("Mixes in")
+        ));
+    }
+
+    @Test
+    public void builtinsHoverIncludeInheritedDocs() {
+        var twp = TextWithPositions.from("""
+                $version: "2"
+                
+                metadata validators = [
+                    {
+                        %name: ""
+                    }
+                ]
+                
+                namespace com.foo
+                
+                operation MyOperation {
+                    %input := {}
+                }
+                """);
+        var hovers = getHovers(twp);
+
+        assertThat(hovers, contains(
+                containsString("Validators Reference"),
+                containsString("Operation Reference")
         ));
     }
 

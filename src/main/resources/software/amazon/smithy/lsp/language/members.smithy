@@ -87,6 +87,7 @@ union ShapeMemberTargets {
     intEnum: Unit
 }
 
+@externalDocumentation("Service Reference": "https://smithy.io/2.0/spec/service-types.html#service")
 structure ServiceShape {
     /// Defines the optional version of the service. The version can be provided in any
     /// format (e.g., 2017-02-11, 2.0, etc).
@@ -143,6 +144,7 @@ map Rename {
     value: String
 }
 
+@externalDocumentation("Operation Reference": "https://smithy.io/2.0/spec/service-types.html#operation")
 structure OperationShape {
     /// The input of the operation defined using a shape ID that MUST target a structure.
     /// - Every operation SHOULD define a dedicated input shape marked with the
@@ -165,6 +167,7 @@ structure OperationShape {
     errors: Errors
 }
 
+@externalDocumentation("Resource Reference": "https://smithy.io/2.0/spec/service-types.html#resource")
 structure ResourceShape {
     /// Defines a map of identifier string names to Shape IDs used to identify the resource.
     /// Each shape ID MUST target a string shape.
@@ -247,11 +250,17 @@ map Properties {
     value: AnyMemberTarget
 }
 
+@externalDocumentation("List Reference": "https://smithy.io/2.0/spec/aggregate-types.html#list")
 structure ListShape {
+    /// The shape of the elements in the list.
     member: AnyMemberTarget
 }
 
+@externalDocumentation("Map Reference": "https://smithy.io/2.0/spec/aggregate-types.html#map")
 structure MapShape {
+    /// The string shape of the keys in the map.
     key: AnyString
+
+    /// The shape of the values in the map.
     value: AnyMemberTarget
 }

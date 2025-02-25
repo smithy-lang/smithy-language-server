@@ -442,6 +442,15 @@ public final class Syntax {
             public Node value() {
                 return value;
             }
+
+            /**
+             * @param pos The character offset in the file to check
+             * @return Whether {@code pos} is within the keyword at the start
+             *  of this statement
+             */
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "metadata".length();
+            }
         }
 
         /**
@@ -456,6 +465,15 @@ public final class Syntax {
 
             public Ident namespace() {
                 return namespace;
+            }
+
+            /**
+             * @param pos The character offset in the file to check
+             * @return Whether {@code pos} is within the keyword at the start
+             *  of this statement
+             */
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "namespace".length();
             }
         }
 
@@ -472,6 +490,15 @@ public final class Syntax {
             public Ident use() {
                 return use;
             }
+
+            /**
+             * @param pos The character offset in the file to check
+             * @return Whether {@code pos} is within the keyword at the start
+             *  of this statement
+             */
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "use".length();
+            }
         }
 
         /**
@@ -487,6 +514,15 @@ public final class Syntax {
 
             public Ident id() {
                 return id;
+            }
+
+            /**
+             * @param pos The character offset in the file to check
+             * @return Whether {@code pos} is within the keyword at the start
+             *  of this statement
+             */
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "apply".length();
             }
         }
 
@@ -525,6 +561,15 @@ public final class Syntax {
             public Ident resource() {
                 return resource;
             }
+
+            /**
+             * @param pos The character offset in the file to check
+             * @return Whether {@code pos} is within the keyword at the start
+             *  of this statement
+             */
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "for".length();
+            }
         }
 
         /**
@@ -537,6 +582,15 @@ public final class Syntax {
 
             public List<Ident> mixins() {
                 return mixins;
+            }
+
+            /**
+             * @param pos The character offset in the file to check
+             * @return Whether {@code pos} is within the keyword at the start
+             *  of this statement
+             */
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "with".length();
             }
         }
 
