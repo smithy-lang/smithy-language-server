@@ -97,6 +97,7 @@ import software.amazon.smithy.lsp.ext.SelectorParams;
 import software.amazon.smithy.lsp.ext.ServerStatus;
 import software.amazon.smithy.lsp.ext.SmithyProtocolExtensions;
 import software.amazon.smithy.lsp.language.BuildCompletionHandler;
+import software.amazon.smithy.lsp.language.BuildHoverHandler;
 import software.amazon.smithy.lsp.language.CompletionHandler;
 import software.amazon.smithy.lsp.language.DefinitionHandler;
 import software.amazon.smithy.lsp.language.DocumentSymbolHandler;
@@ -637,15 +638,20 @@ public class SmithyLanguageServer implements
             return completedFuture(null);
         }
 
-        if (!(projectAndFile.file() instanceof IdlFile smithyFile)) {
-            return completedFuture(null);
-        }
+        return switch (projectAndFile.file()) {
+            case IdlFile idlFile -> {
+                Project project = projectAndFile.project();
 
-        Project project = projectAndFile.project();
-
-        // TODO: Abstract away passing minimum severity
-        var handler = new HoverHandler(project, smithyFile, this.serverOptions.getMinimumSeverity());
-        return CompletableFuture.supplyAsync(() -> handler.handle(params));
+                // TODO: Abstract away passing minimum severity
+                var handler = new HoverHandler(project, idlFile, this.serverOptions.getMinimumSeverity());
+                yield CompletableFuture.supplyAsync(() -> handler.handle(params));
+            }
+            case BuildFile buildFile -> {
+                var handler = new BuildHoverHandler(buildFile);
+                yield CompletableFuture.supplyAsync(() -> handler.handle(params));
+            }
+            default -> completedFuture(null);
+        };
     }
 
     @Override
