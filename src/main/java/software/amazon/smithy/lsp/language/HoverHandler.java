@@ -78,26 +78,26 @@ public final class HoverHandler {
 
         return switch (idlPosition) {
             case IdlPosition.ControlKey ignored -> Builtins.CONTROL.getMember(id.copyIdValueForElidedMember())
-                    .map(HoverHandler::withBuiltinShapeDocs)
+                    .flatMap(HoverHandler::withBuiltinShapeDocs)
                     .orElse(EMPTY);
 
             case IdlPosition.MetadataKey ignored -> Builtins.METADATA.getMember(id.copyIdValue())
-                    .map(HoverHandler::withBuiltinShapeDocs)
+                    .flatMap(HoverHandler::withBuiltinShapeDocs)
                     .orElse(EMPTY);
 
             case IdlPosition.MetadataValue metadataValue -> takeShapeReference(
                             ShapeSearch.searchMetadataValue(metadataValue))
-                    .map(HoverHandler::withBuiltinShapeDocs)
+                    .flatMap(HoverHandler::withBuiltinShapeDocs)
                     .orElse(EMPTY);
 
             case IdlPosition.StatementKeyword ignored -> Builtins.SHAPE_MEMBER_TARGETS.getMember(id.copyIdValue())
                     .or(() -> Builtins.NON_SHAPE_KEYWORDS.getMember(id.copyIdValue()))
-                    .map(HoverHandler::withBuiltinShapeDocs)
+                    .flatMap(HoverHandler::withBuiltinShapeDocs)
                     .orElse(EMPTY);
 
             case IdlPosition.MemberName memberName -> getBuiltinMember(memberName)
-                    .map(HoverHandler::withBuiltinShapeDocs)
-                    // Fall back to user model hover, since we didn't find a matching builtin shape
+                    .flatMap(HoverHandler::withBuiltinShapeDocs)
+                    // Fall back to user model hover, since we didn't find a matching builtin shape with docs
                     .orElseGet(() -> modelSensitiveHover(id, memberName));
 
             case null -> EMPTY;
@@ -212,7 +212,7 @@ public final class HoverHandler {
 
     // Note: This isn't used for user-defined shapes because we include docs
     // in the serialized hover content.
-    static Hover withBuiltinShapeDocs(Shape shape) {
+    static Optional<Hover> withBuiltinShapeDocs(Shape shape) {
         StringBuilder builder = new StringBuilder();
 
         var builtinShapeDocs = BuiltinShapeDocs.forShape(shape);
@@ -227,13 +227,13 @@ public final class HoverHandler {
         }
 
         builtinShapeDocs.externalDocs
-                .forEach((url, doc) -> builder.append(String.format("[%s](%s)", url, doc)));
+                .forEach((url, doc) -> builder.append(String.format("[%s](%s)%n", url, doc)));
 
         if (builder.isEmpty()) {
-            return EMPTY;
+            return Optional.empty();
         }
 
-        return new Hover(new MarkupContent("markdown", builder.toString()));
+        return Optional.of(new Hover(new MarkupContent("markdown", builder.toString())));
     }
 
     private record BuiltinShapeDocs(String shapeDocs, Map<String, String> externalDocs) {
@@ -275,6 +275,10 @@ public final class HoverHandler {
                 .append(System.lineSeparator())
                 .append(System.lineSeparator());
 
+        memberShape.getTrait(DocumentationTrait.class)
+                .map(DocumentationTrait::getValue)
+                .ifPresent(docs -> addMemberDocs(contents, docs));
+
         for (var trait : memberShape.getAllTraits().values()) {
             if (trait.toShapeId().equals(DocumentationTrait.ID)) {
                 continue;
@@ -293,6 +297,17 @@ public final class HoverHandler {
                 .append(memberShape.getTarget().getName())
                 .append(System.lineSeparator());
         return contents.toString();
+    }
+
+    private static void addMemberDocs(StringBuilder builder, String docs) {
+        builder.append("/// ")
+                // Replace newline literals in the doc string with actual newlines, and /// so we can render
+                // an IDL doc comment.
+                .append(docs.replaceAll(
+                                Matcher.quoteReplacement(System.lineSeparator()), System.lineSeparator() + "/// ")
+                        .trim())
+                .append(System.lineSeparator());
+
     }
 
     private static String serializeShape(Model model, Shape shape) {

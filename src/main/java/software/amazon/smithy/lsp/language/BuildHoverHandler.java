@@ -43,7 +43,7 @@ public final class BuildHoverHandler {
         NodeSearch.Result searchResult = NodeSearch.search(cursor, Builtins.MODEL, buildFileShape);
 
         return getMemberShape(searchResult)
-                .map(HoverHandler::withBuiltinShapeDocs)
+                .flatMap(HoverHandler::withBuiltinShapeDocs)
                 .orElse(null);
     }
 

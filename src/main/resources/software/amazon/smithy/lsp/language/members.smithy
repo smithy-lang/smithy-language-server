@@ -250,17 +250,13 @@ map Properties {
     value: AnyMemberTarget
 }
 
-@externalDocumentation("List Reference": "https://smithy.io/2.0/spec/aggregate-types.html#list")
+// Note: No builtin docs for list/map members, because they could clobber user-defined docs.
+//  We could add some logic to merge them, but I don't think it is worth it.
 structure ListShape {
-    /// The shape of the elements in the list.
     member: AnyMemberTarget
 }
 
-@externalDocumentation("Map Reference": "https://smithy.io/2.0/spec/aggregate-types.html#map")
 structure MapShape {
-    /// The string shape of the keys in the map.
     key: AnyString
-
-    /// The shape of the values in the map.
     value: AnyMemberTarget
 }

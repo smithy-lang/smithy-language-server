@@ -303,6 +303,41 @@ public class HoverHandlerTest {
         ));
     }
 
+    @Test
+    public void builtinHoverDoesntClobberUserDocs() {
+        var twp = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                
+                list Foo {
+                    /// One
+                    %member: String
+                }
+                
+                map Bar {
+                    /// Two
+                    %key: String
+                
+                    /// Three
+                    %value: String
+                }
+                
+                structure Baz {
+                    /// Four
+                    /// Five
+                    %baz: String
+                }
+                """);
+        var hovers = getHovers(twp);
+
+        assertThat(hovers, contains(
+                containsString("One"),
+                containsString("Two"),
+                containsString("Three"),
+                containsString("Four")
+        ));
+    }
+
     private static List<String> getHovers(TextWithPositions text) {
         return getHovers(text.text(), text.positions());
     }
