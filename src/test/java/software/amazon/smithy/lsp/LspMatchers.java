@@ -8,6 +8,8 @@ package software.amazon.smithy.lsp;
 import java.util.Collection;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.InlayHint;
+import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
 import org.hamcrest.CustomTypeSafeMatcher;
@@ -128,6 +130,30 @@ public final class LspMatchers {
             @Override
             public void describeMismatchSafely(Diagnostic event, Description description) {
                 description.appendDescriptionOf(message).appendText("was " + event.getMessage());
+            }
+        };
+    }
+
+    public static Matcher<InlayHint> inlayHint(String label, Position position) {
+        return new CustomTypeSafeMatcher<>("Inlay Hint label " + label + " position " +
+                position.getLine() + "," + position.getCharacter()) {
+            @Override
+            protected boolean matchesSafely(InlayHint item) {
+                return item.getLabel().getLeft().equals(label) && position.equals(item.getPosition());
+            }
+            @Override
+            public void describeMismatchSafely(InlayHint item, Description description) {
+                if (!item.getLabel().getLeft().equals(label)) {
+                    description.appendText("Expected inlay hint item with label '"
+                            + label + "' but was '" + item.getLabel().getLeft() + "'");
+                }
+                if (!position.equals(item.getPosition())) {
+                    description.appendText("Expected inlay hint item with position '"
+                            + position.getLine() + "," + position.getCharacter()
+                            + "' but was '" + item.getPosition().getLine()
+                            + "," + item.getPosition().getCharacter()+ "'");
+                }
+
             }
         };
     }
