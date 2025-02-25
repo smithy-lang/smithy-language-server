@@ -33,7 +33,7 @@ structure SmithyBuildJson {
     maven: Maven
 }
 
-@default("1")
+@default("1.0")
 string SmithyBuildVersion
 
 map Projections {
