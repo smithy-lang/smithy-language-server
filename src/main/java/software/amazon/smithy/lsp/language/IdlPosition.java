@@ -70,21 +70,17 @@ sealed interface IdlPosition {
 
     static IdlPosition of(StatementView view) {
         int documentIndex = view.documentIndex();
+
+        if (view.getStatement().isInKeyword(documentIndex)) {
+            return new StatementKeyword(view);
+        }
+
         return switch (view.getStatement()) {
             case Syntax.Statement.Incomplete incomplete
                     when incomplete.ident().isIn(documentIndex) -> new IdlPosition.StatementKeyword(view);
 
-            case Syntax.Statement.ShapeDef shapeDef
-                    when shapeDef.shapeType().isIn(documentIndex) -> new IdlPosition.StatementKeyword(view);
-
-            case Syntax.Statement.Apply apply
-                    when apply.isInKeyword(documentIndex) -> new IdlPosition.StatementKeyword(view);
-
             case Syntax.Statement.Apply apply
                     when apply.id().isIn(documentIndex) -> new IdlPosition.ApplyTarget(view);
-
-            case Syntax.Statement.Metadata m
-                    when m.isInKeyword(documentIndex) -> new IdlPosition.StatementKeyword(view);
 
             case Syntax.Statement.Metadata m
                     when m.key().isIn(documentIndex) -> new IdlPosition.MetadataKey(view);
@@ -99,9 +95,6 @@ sealed interface IdlPosition {
                     when t.id().isEmpty() || t.id().isIn(documentIndex) -> new IdlPosition.TraitId(view);
 
             case Syntax.Statement.Use u
-                    when u.isInKeyword(documentIndex) -> new IdlPosition.StatementKeyword(view);
-
-            case Syntax.Statement.Use u
                     when u.use().isIn(documentIndex) -> new IdlPosition.UseTarget(view);
 
             case Syntax.Statement.MemberDef m
@@ -114,19 +107,10 @@ sealed interface IdlPosition {
                     when m.inValue(documentIndex) -> new IdlPosition.NodeMemberTarget(view, m);
 
             case Syntax.Statement.Namespace n
-                    when n.isInKeyword(documentIndex) -> new IdlPosition.StatementKeyword(view);
-
-            case Syntax.Statement.Namespace n
                     when n.namespace().isIn(documentIndex) -> new IdlPosition.Namespace(view);
 
             case Syntax.Statement.TraitApplication t
                     when t.value() != null && t.value().isIn(documentIndex) -> new IdlPosition.TraitValue(view, t);
-
-            case Syntax.Statement.Mixins m
-                    when m.isInKeyword(documentIndex) -> new IdlPosition.StatementKeyword(view);
-
-            case Syntax.Statement.ForResource f
-                    when f.isInKeyword(documentIndex) -> new IdlPosition.StatementKeyword(view);
 
             case Syntax.Statement.InlineMemberDef m
                     when m.name().isIn(documentIndex) -> new IdlPosition.MemberName(view, m.name().stringValue());
