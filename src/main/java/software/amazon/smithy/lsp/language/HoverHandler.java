@@ -7,6 +7,7 @@ package software.amazon.smithy.lsp.language;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,9 +27,10 @@ import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.SmithyIdlModelSerializer;
+import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.traits.DocumentationTrait;
+import software.amazon.smithy.model.traits.ExternalDocumentationTrait;
 import software.amazon.smithy.model.traits.IdRefTrait;
-import software.amazon.smithy.model.traits.StringTrait;
 import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
@@ -76,17 +78,27 @@ public final class HoverHandler {
 
         return switch (idlPosition) {
             case IdlPosition.ControlKey ignored -> Builtins.CONTROL.getMember(id.copyIdValueForElidedMember())
-                    .map(HoverHandler::withShapeDocs)
+                    .flatMap(HoverHandler::withBuiltinShapeDocs)
                     .orElse(EMPTY);
 
             case IdlPosition.MetadataKey ignored -> Builtins.METADATA.getMember(id.copyIdValue())
-                    .map(HoverHandler::withShapeDocs)
+                    .flatMap(HoverHandler::withBuiltinShapeDocs)
                     .orElse(EMPTY);
 
             case IdlPosition.MetadataValue metadataValue -> takeShapeReference(
                             ShapeSearch.searchMetadataValue(metadataValue))
-                    .map(HoverHandler::withShapeDocs)
+                    .flatMap(HoverHandler::withBuiltinShapeDocs)
                     .orElse(EMPTY);
+
+            case IdlPosition.StatementKeyword ignored -> Builtins.SHAPE_MEMBER_TARGETS.getMember(id.copyIdValue())
+                    .or(() -> Builtins.NON_SHAPE_KEYWORDS.getMember(id.copyIdValue()))
+                    .flatMap(HoverHandler::withBuiltinShapeDocs)
+                    .orElse(EMPTY);
+
+            case IdlPosition.MemberName memberName -> getBuiltinMember(memberName)
+                    .flatMap(HoverHandler::withBuiltinShapeDocs)
+                    // Fall back to user model hover, since we didn't find a matching builtin shape with docs
+                    .orElseGet(() -> modelSensitiveHover(id, memberName));
 
             case null -> EMPTY;
 
@@ -104,6 +116,21 @@ public final class HoverHandler {
 
             default -> Optional.empty();
         };
+    }
+
+    private static Optional<MemberShape> getBuiltinMember(IdlPosition.MemberName memberName) {
+        var shapeDef = memberName.view().nearestShapeDefBefore();
+        if (shapeDef == null) {
+            return Optional.empty();
+        }
+
+        String shapeType = shapeDef.shapeType().stringValue();
+        StructureShape shapeMembersDef = Builtins.getMembersForShapeType(shapeType);
+        if (shapeMembersDef == null) {
+            return Optional.empty();
+        }
+
+        return shapeMembersDef.getMember(memberName.name());
     }
 
     private Hover modelSensitiveHover(DocumentId id, IdlPosition idlPosition) {
@@ -183,11 +210,57 @@ public final class HoverHandler {
         return serialized.toString();
     }
 
-    private static Hover withShapeDocs(Shape shape) {
-        return shape.getTrait(DocumentationTrait.class)
-                .map(StringTrait::getValue)
-                .map(HoverHandler::withMarkupContents)
-                .orElse(EMPTY);
+    // Note: This isn't used for user-defined shapes because we include docs
+    // in the serialized hover content.
+    static Optional<Hover> withBuiltinShapeDocs(Shape shape) {
+        StringBuilder builder = new StringBuilder();
+
+        var builtinShapeDocs = BuiltinShapeDocs.forShape(shape);
+
+        if (!builtinShapeDocs.shapeDocs.isEmpty()) {
+            builder.append(builtinShapeDocs.shapeDocs);
+
+            if (!builtinShapeDocs.externalDocs.isEmpty()) {
+                // Space out regular docs and external docs so they're easier to read.
+                builder.append(System.lineSeparator()).append(System.lineSeparator());
+            }
+        }
+
+        builtinShapeDocs.externalDocs
+                .forEach((url, doc) -> builder.append(String.format("[%s](%s)%n", url, doc)));
+
+        if (builder.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new Hover(new MarkupContent("markdown", builder.toString())));
+    }
+
+    private record BuiltinShapeDocs(String shapeDocs, Map<String, String> externalDocs) {
+        private static BuiltinShapeDocs forShape(Shape shape) {
+            var shapeDocs = shape.getTrait(DocumentationTrait.class)
+                    .map(DocumentationTrait::getValue)
+                    .orElse("");
+
+            Map<String, String> externalDocs = new HashMap<>();
+
+            shape.getTrait(ExternalDocumentationTrait.class)
+                    .map(ExternalDocumentationTrait::getUrls)
+                    .ifPresent(externalDocs::putAll);
+
+            // The builtins model defines some external docs on root shapes, which are meant to be
+            // included in the hover content for all members so we can always provide a link to
+            // Smithy's docs, even if the member itself doesn't have a specific link that would
+            // make sense.
+            shape.asMemberShape()
+                    .map(MemberShape::getContainer)
+                    .flatMap(Builtins.MODEL::getShape)
+                    .flatMap(container -> container.getTrait(ExternalDocumentationTrait.class))
+                    .map(ExternalDocumentationTrait::getUrls)
+                    .ifPresent(externalDocs::putAll);
+
+            return new BuiltinShapeDocs(shapeDocs, externalDocs);
+        }
     }
 
     private static Hover withMarkupContents(String text) {
@@ -201,6 +274,10 @@ public final class HoverHandler {
                 .append(memberShape.getId().getNamespace())
                 .append(System.lineSeparator())
                 .append(System.lineSeparator());
+
+        memberShape.getTrait(DocumentationTrait.class)
+                .map(DocumentationTrait::getValue)
+                .ifPresent(docs -> addMemberDocs(contents, docs));
 
         for (var trait : memberShape.getAllTraits().values()) {
             if (trait.toShapeId().equals(DocumentationTrait.ID)) {
@@ -220,6 +297,17 @@ public final class HoverHandler {
                 .append(memberShape.getTarget().getName())
                 .append(System.lineSeparator());
         return contents.toString();
+    }
+
+    private static void addMemberDocs(StringBuilder builder, String docs) {
+        builder.append("/// ")
+                // Replace newline literals in the doc string with actual newlines, and /// so we can render
+                // an IDL doc comment.
+                .append(docs.replaceAll(
+                                Matcher.quoteReplacement(System.lineSeparator()), System.lineSeparator() + "/// ")
+                        .trim())
+                .append(System.lineSeparator());
+
     }
 
     private static String serializeShape(Model model, Shape shape) {

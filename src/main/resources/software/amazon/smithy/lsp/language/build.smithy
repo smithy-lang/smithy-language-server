@@ -20,6 +20,7 @@ structure ProjectDependency {
     path: String
 }
 
+@externalDocumentation("Smithy Build Reference": "https://smithy.io/2.0/guides/smithy-build-json.html")
 structure SmithyBuildJson {
     /// Defines the version of smithy-build. Set to 1.0.
     @required
@@ -81,6 +82,9 @@ map Projections {
     value: Projection
 }
 
+@externalDocumentation(
+    "Projections Reference": "https://smithy.io/2.0/guides/smithy-build-json.html#projections"
+)
 structure Projection {
     /// Defines the projection as a placeholder that other projections apply. Smithy
     /// will not build artifacts for abstract projections. Abstract projections must
@@ -123,6 +127,9 @@ list Transforms {
     member: Transform
 }
 
+@externalDocumentation(
+    "Transforms Reference": "https://smithy.io/2.0/guides/smithy-build-json.html#transforms"
+)
 structure Transform {
     /// The required name of the transform.
     @required
@@ -135,6 +142,9 @@ structure Transform {
 structure TransformArgs {
 }
 
+@externalDocumentation(
+    "Maven Reference": "https://smithy.io/2.0/guides/smithy-build-json.html#maven-configuration"
+)
 structure Maven {
     /// A list of Maven dependency coordinates in the form of groupId:artifactId:version.
     /// The Smithy CLI will search each registered Maven repository for the dependency.
@@ -143,6 +153,9 @@ structure Maven {
     /// A list of Maven repositories to search for dependencies. If no repositories
     /// are defined and the SMITHY_MAVEN_REPOS environment variable is not defined,
     /// then this value defaults to Maven Central.
+    @externalDocumentation(
+        "Maven Repositories Reference": "https://smithy.io/2.0/guides/smithy-build-json.html#maven-repositories"
+    )
     repositories: MavenRepositories
 }
 
@@ -150,6 +163,9 @@ list MavenRepositories {
     member: MavenRepository
 }
 
+@externalDocumentation(
+    "Maven Repositories Reference": "https://smithy.io/2.0/guides/smithy-build-json.html#maven-repositories"
+)
 structure MavenRepository {
     /// The URL of the repository (for example, https://repo.maven.apache.org/maven2).
     @required

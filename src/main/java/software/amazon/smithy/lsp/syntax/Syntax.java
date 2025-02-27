@@ -367,6 +367,16 @@ public final class Syntax {
             };
         }
 
+        /**
+         * @param pos The character offset in the file to check
+         * @return Whether {@code pos} is within the keyword at the start
+         *  of this statement. Always returns {@code false} if this
+         *  statement doesn't start with a keyword.
+         */
+        public boolean isInKeyword(int pos) {
+            return false;
+        }
+
         public enum Type {
             Incomplete,
             Control,
@@ -442,6 +452,11 @@ public final class Syntax {
             public Node value() {
                 return value;
             }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "metadata".length();
+            }
         }
 
         /**
@@ -456,6 +471,11 @@ public final class Syntax {
 
             public Ident namespace() {
                 return namespace;
+            }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "namespace".length();
             }
         }
 
@@ -472,6 +492,11 @@ public final class Syntax {
             public Ident use() {
                 return use;
             }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "use".length();
+            }
         }
 
         /**
@@ -487,6 +512,11 @@ public final class Syntax {
 
             public Ident id() {
                 return id;
+            }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "apply".length();
             }
         }
 
@@ -509,6 +539,11 @@ public final class Syntax {
             public Ident shapeName() {
                 return shapeName;
             }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return shapeType.isIn(pos);
+            }
         }
 
         /**
@@ -525,6 +560,11 @@ public final class Syntax {
             public Ident resource() {
                 return resource;
             }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "for".length();
+            }
         }
 
         /**
@@ -537,6 +577,11 @@ public final class Syntax {
 
             public List<Ident> mixins() {
                 return mixins;
+            }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "with".length();
             }
         }
 
