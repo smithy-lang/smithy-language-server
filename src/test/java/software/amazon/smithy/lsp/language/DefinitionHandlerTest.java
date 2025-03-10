@@ -313,6 +313,27 @@ public class DefinitionHandlerTest {
     }
 
     @Test
+    public void idRefMemberTraitValue() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                
+                @trait
+                structure foo {
+                    @idRef
+                    id: String
+                }
+                
+                @foo(id: %Bar)
+                string Bar
+                """);
+        GetLocationsResult result = getLocations(text);
+        assertThat(result.locations, hasSize(1));
+        assertThat(result.locations.getFirst().getUri(), endsWith("main.smithy"));
+        assertIsShapeDef(result, result.locations.getFirst(), "string Bar");
+    }
+
+    @Test
     public void absoluteShapeId() {
         TextWithPositions text = TextWithPositions.from("""
                 $version: "2"

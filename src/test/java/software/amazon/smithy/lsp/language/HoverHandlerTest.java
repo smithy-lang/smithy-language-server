@@ -7,6 +7,7 @@ package software.amazon.smithy.lsp.language;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static software.amazon.smithy.lsp.document.DocumentTest.safeString;
 
@@ -335,6 +336,28 @@ public class HoverHandlerTest {
                 containsString("Two"),
                 containsString("Three"),
                 containsString("Four")
+        ));
+    }
+
+    @Test
+    public void idRefMemberTraitValue() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                
+                @trait
+                structure foo {
+                    @idRef
+                    id: String
+                }
+                
+                @foo(id: %Bar)
+                string Bar
+                """);
+        var hovers = getHovers(text);
+
+        assertThat(hovers, containsInAnyOrder(
+                containsString("string Bar")
         ));
     }
 

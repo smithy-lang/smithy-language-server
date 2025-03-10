@@ -30,7 +30,6 @@ import software.amazon.smithy.model.shapes.SmithyIdlModelSerializer;
 import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.traits.DocumentationTrait;
 import software.amazon.smithy.model.traits.ExternalDocumentationTrait;
-import software.amazon.smithy.model.traits.IdRefTrait;
 import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidatedResult;
 import software.amazon.smithy.model.validation.ValidationEvent;
@@ -108,8 +107,8 @@ public final class HoverHandler {
 
     private static Optional<? extends Shape> takeShapeReference(NodeSearch.Result result) {
         return switch (result) {
-            case NodeSearch.Result.TerminalShape(Shape shape, var ignored)
-                    when shape.hasTrait(IdRefTrait.class) -> Optional.of(shape);
+            case NodeSearch.Result.TerminalShape terminalShape
+                    when terminalShape.isIdRef() -> Optional.of(terminalShape.shape());
 
             case NodeSearch.Result.ObjectKey(NodeCursor.Key key, Shape containerShape, var ignored)
                     when !containerShape.isMapShape() -> containerShape.getMember(key.name());

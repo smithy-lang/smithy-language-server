@@ -1075,6 +1075,40 @@ public class CompletionHandlerTest {
         assertThat(item.getAdditionalTextEdits(), nullValue());
     }
 
+    @Test
+    public void completesIdRefs() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                @trait
+                structure myId {
+                    ref: ShapeId
+                }
+                @idRef
+                string ShapeId
+                @myId(ref: %)
+                """);
+        List<String> comps = getCompLabels(text);
+
+        assertThat(comps, hasItems("myId", "ShapeId"));
+    }
+
+    @Test
+    public void completesIdRefsOnMember() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                @trait
+                structure myId {
+                    @idRef
+                    ref: String
+                }
+                @myId(ref: %)
+                """);
+        List<String> comps = getCompLabels(text);
+        assertThat(comps, hasItems("myId", "String"));
+    }
+
     private static List<String> getCompLabels(TextWithPositions textWithPositions) {
         return getCompLabels(textWithPositions.text(), textWithPositions.positions());
     }
