@@ -554,7 +554,7 @@ public final class Project {
         }
 
         private static boolean isNone(SourceLocation sourceLocation) {
-            return sourceLocation.equals(SourceLocation.NONE);
+            return sourceLocation.getFilename().equals(SourceLocation.NONE.getFilename());
         }
     }
 }
