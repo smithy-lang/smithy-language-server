@@ -17,6 +17,7 @@ import software.amazon.smithy.model.shapes.EnumShape;
 import software.amazon.smithy.model.shapes.IntEnumShape;
 import software.amazon.smithy.model.shapes.ListShape;
 import software.amazon.smithy.model.shapes.MapShape;
+import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.traits.DefaultTrait;
 import software.amazon.smithy.model.traits.IdRefTrait;
@@ -83,8 +84,8 @@ sealed interface CompletionCandidates {
      */
     static CompletionCandidates fromSearchResult(NodeSearch.Result result) {
         return switch (result) {
-            case NodeSearch.Result.TerminalShape(Shape shape, var ignored) ->
-                    terminalCandidates(shape);
+            case NodeSearch.Result.TerminalShape(Shape shape, MemberShape targetOf, var ignored) ->
+                    terminalCandidates(shape, targetOf);
 
             case NodeSearch.Result.ObjectKey(var ignored, Shape shape, Model model) ->
                     membersCandidates(model, shape);
@@ -94,7 +95,7 @@ sealed interface CompletionCandidates {
 
             case NodeSearch.Result.ArrayShape(var ignored, ListShape shape, Model model) ->
                     model.getShape(shape.getMember().getTarget())
-                            .map(CompletionCandidates::terminalCandidates)
+                            .map(target -> terminalCandidates(target, shape.getMember()))
                             .orElse(NONE);
 
             default -> NONE;
@@ -134,35 +135,46 @@ sealed interface CompletionCandidates {
         } else if (shape instanceof MapShape mapShape) {
             return model.getShape(mapShape.getKey().getTarget())
                     .flatMap(Shape::asEnumShape)
-                    .map(CompletionCandidates::terminalCandidates)
+                    .map(CompletionCandidates::enumCandidates)
                     .orElse(NONE);
         }
         return NONE;
     }
 
-    private static CompletionCandidates terminalCandidates(Shape shape) {
+    private static CompletionCandidates terminalCandidates(Shape shape, MemberShape targetOf) {
         Builtins.BuiltinShape builtinShape = Builtins.BUILTIN_SHAPES.get(shape.getId());
         if (builtinShape != null) {
             return forBuiltin(builtinShape);
         }
 
+        if (isIdRef(shape, targetOf)) {
+            return Shapes.ANY_SHAPE;
+        }
+
         return switch (shape) {
-            case EnumShape enumShape -> new Labeled(enumShape.getEnumValues()
-                    .entrySet()
-                    .stream()
-                    .collect(Collectors.toMap(Map.Entry::getKey, entry -> "\"" + entry.getValue() + "\"")));
+            case EnumShape enumShape -> enumCandidates(enumShape);
 
             case IntEnumShape intEnumShape -> new Labeled(intEnumShape.getEnumValues()
                     .entrySet()
                     .stream()
                     .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().toString())));
 
-            case Shape s when s.hasTrait(IdRefTrait.class) -> Shapes.ANY_SHAPE;
-
             case Shape s when s.isBooleanShape() -> BOOL;
 
             default -> defaultCandidates(shape);
         };
+    }
+
+    private static CompletionCandidates enumCandidates(EnumShape enumShape) {
+        return new Labeled(enumShape.getEnumValues()
+                .entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> "\"" + entry.getValue() + "\"")));
+    }
+
+    private static boolean isIdRef(Shape shape, MemberShape targetOf) {
+        return shape.hasTrait(IdRefTrait.class)
+                || (targetOf != null && targetOf.hasTrait(IdRefTrait.class));
     }
 
     private static CompletionCandidates forBuiltin(Builtins.BuiltinShape builtinShape) {

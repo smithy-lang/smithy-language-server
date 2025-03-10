@@ -19,7 +19,6 @@ import software.amazon.smithy.model.shapes.ResourceShape;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.ShapeIdSyntaxException;
-import software.amazon.smithy.model.traits.IdRefTrait;
 
 /**
  * Provides methods to search for shapes, using context and syntax specific
@@ -94,25 +93,10 @@ final class ShapeSearch {
      */
     static Optional<? extends Shape> findShapeDefinition(IdlPosition idlPosition, DocumentId id, Model model) {
         return switch (idlPosition) {
-            case IdlPosition.TraitValue traitValue -> {
-                var result = searchTraitValue(traitValue, model);
-                if (result instanceof NodeSearch.Result.TerminalShape(var s, var m) && s.hasTrait(IdRefTrait.class)) {
-                    yield findShape(idlPosition.view().parseResult(), id.copyIdValue(), m);
-                } else if (result instanceof NodeSearch.Result.ObjectKey(var key, var container, var m)
-                           && !container.isMapShape()) {
-                    yield container.getMember(key.name());
-                }
-                yield Optional.empty();
-            }
+            case IdlPosition.TraitValue traitValue -> findShapeDefinitionInTrait(traitValue, id, model);
 
-            case IdlPosition.NodeMemberTarget nodeMemberTarget -> {
-                var result = searchNodeMemberTarget(nodeMemberTarget);
-                if (result instanceof NodeSearch.Result.TerminalShape(Shape shape, var ignored)
-                    && shape.hasTrait(IdRefTrait.class)) {
-                    yield findShape(nodeMemberTarget.view().parseResult(), id.copyIdValue(), model);
-                }
-                yield Optional.empty();
-            }
+            case IdlPosition.NodeMemberTarget nodeMemberTarget ->
+                    findShapeDefinitionInNodeMemberTarget(nodeMemberTarget, id, model);
 
             // Note: This could be made more specific, at least for mixins
             case IdlPosition.ElidedMember elidedMember ->
@@ -132,6 +116,35 @@ final class ShapeSearch {
 
             default -> Optional.empty();
         };
+    }
+
+    private static Optional<? extends Shape> findShapeDefinitionInTrait(
+            IdlPosition.TraitValue traitValue,
+            DocumentId id,
+            Model model
+    ) {
+        var result = searchTraitValue(traitValue, model);
+        return switch (result) {
+            case NodeSearch.Result.TerminalShape terminal when terminal.isIdRef() ->
+                    findShape(traitValue.view().parseResult(), id.copyIdValue(), model);
+
+            case NodeSearch.Result.ObjectKey objectKey when !objectKey.containerShape().isMapShape() ->
+                    objectKey.containerShape().getMember(objectKey.key().name());
+
+            default -> Optional.empty();
+        };
+    }
+
+    private static Optional<? extends Shape> findShapeDefinitionInNodeMemberTarget(
+            IdlPosition.NodeMemberTarget nodeMemberTarget,
+            DocumentId id,
+            Model model
+    ) {
+        var result = searchNodeMemberTarget(nodeMemberTarget);
+        if (result instanceof NodeSearch.Result.TerminalShape terminal && terminal.isIdRef()) {
+            return findShape(nodeMemberTarget.view().parseResult(), id.copyIdValue(), model);
+        }
+        return Optional.empty();
     }
 
     /**
@@ -275,7 +288,7 @@ final class ShapeSearch {
         // TODO: Note that searchTraitValue has to do a similar thing, but parsing
         //  trait values always yields at least an empty Kvps, so it is kind of the same.
         if (nodeMemberTarget.nodeMember().value() == null) {
-            return new NodeSearch.Result.TerminalShape(memberShapeDef, Builtins.MODEL);
+            return new NodeSearch.Result.TerminalShape(memberShapeDef, null, Builtins.MODEL);
         }
 
         NodeCursor cursor = NodeCursor.create(
