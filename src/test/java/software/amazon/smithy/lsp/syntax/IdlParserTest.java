@@ -333,7 +333,6 @@ public class IdlParserTest {
         List<String> errorMessages = parse.errors().stream().map(Syntax.Err::message).toList();
         List<Syntax.Statement.Type> types = parse.statements().stream()
                 .map(Syntax.Statement::type)
-                .filter(type -> type != Syntax.Statement.Type.Block)
                 .toList();
 
         assertThat(desc, errorMessages, equalTo(expectedErrorMessages));
@@ -388,49 +387,75 @@ public class IdlParserTest {
                     "enum missing {",
                     "enum Foo\nBAR}",
                     List.of("expected {"),
-                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.EnumMemberDef)
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Block,
+                            Syntax.Statement.Type.EnumMemberDef)
             ),
             new InvalidSyntaxTestCase(
                     "enum missing }",
                     "enum Foo {BAR",
                     List.of("expected }"),
-                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.EnumMemberDef)
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Block,
+                            Syntax.Statement.Type.EnumMemberDef)
             ),
             new InvalidSyntaxTestCase(
                     "regular shape missing {",
                     "structure Foo\nbar: String}",
                     List.of("expected {"),
-                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.MemberDef)
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Block,
+                            Syntax.Statement.Type.MemberDef)
             ),
             new InvalidSyntaxTestCase(
                     "regular shape missing }",
                     "structure Foo {bar: String",
                     List.of("expected }"),
-                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.MemberDef)
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Block,
+                            Syntax.Statement.Type.MemberDef)
             ),
             new InvalidSyntaxTestCase(
                     "op with inline missing {",
                     "operation Foo\ninput := {}}",
                     List.of("expected {"),
-                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.InlineMemberDef)
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Block,
+                            Syntax.Statement.Type.InlineMemberDef,
+                            Syntax.Statement.Type.Block)
             ),
             new InvalidSyntaxTestCase(
                     "op with inline missing }",
                     "operation Foo{input:={}",
                     List.of("expected }"),
-                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.InlineMemberDef)
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Block,
+                            Syntax.Statement.Type.InlineMemberDef,
+                            Syntax.Statement.Type.Block)
             ),
             new InvalidSyntaxTestCase(
                     "node shape with missing {",
                     "resource Foo\nidentifiers:{}}",
                     List.of("expected {"),
-                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.NodeMemberDef)
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Block,
+                            Syntax.Statement.Type.NodeMemberDef)
             ),
             new InvalidSyntaxTestCase(
                     "node shape with missing }",
                     "service Foo{operations:[]",
                     List.of("expected }"),
-                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.NodeMemberDef)
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Block,
+                            Syntax.Statement.Type.NodeMemberDef)
             ),
             new InvalidSyntaxTestCase(
                     "apply missing @",
@@ -442,7 +467,10 @@ public class IdlParserTest {
                     "apply missing }",
                     "apply Foo {@bar",
                     List.of("expected }"),
-                    List.of(Syntax.Statement.Type.Apply, Syntax.Statement.Type.TraitApplication)
+                    List.of(
+                            Syntax.Statement.Type.Apply,
+                            Syntax.Statement.Type.Block,
+                            Syntax.Statement.Type.TraitApplication)
             ),
             new InvalidSyntaxTestCase(
                     "trait missing member value",
@@ -463,9 +491,44 @@ public class IdlParserTest {
                     List.of("expected identifier"),
                     List.of(
                             Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Block,
                             Syntax.Statement.Type.InlineMemberDef,
                             Syntax.Statement.Type.TraitApplication,
+                            Syntax.Statement.Type.Block,
                             Syntax.Statement.Type.MemberDef)
+            ),
+            new InvalidSyntaxTestCase(
+                    "invalid mixin identifier",
+                    """
+                    structure Foo with [123] {}
+                    """,
+                    List.of("expected identifier"),
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Mixins,
+                            Syntax.Statement.Type.Block)
+            ),
+            new InvalidSyntaxTestCase(
+                    "mixin missing []",
+                    """
+                    structure Foo with abc {}
+                    """,
+                    List.of("expected [", "expected ]"),
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Mixins,
+                            Syntax.Statement.Type.Block)
+            ),
+            new InvalidSyntaxTestCase(
+                    "invalid mixin identifier missing []",
+                    """
+                    structure Foo with 123, abc {}
+                    """,
+                    List.of("expected [", "expected identifier", "expected ]"),
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Mixins,
+                            Syntax.Statement.Type.Block)
             )
     );
 
