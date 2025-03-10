@@ -384,7 +384,6 @@ public final class Syntax {
             Namespace,
             Use,
             Apply,
-            ShapeNode,
             ShapeDef,
             ForResource,
             Mixins,

@@ -470,6 +470,12 @@ final class Parser extends SimpleParser {
         }
     }
 
+    private void skipUntilIdentifierOrBreakpoint() {
+        while (!isIdentStart() && !isStructuralBreakpoint() && !eof()) {
+            skip();
+        }
+    }
+
     private void statement() {
         if (is('@')) {
             traitApplication(null);
@@ -759,19 +765,20 @@ final class Parser extends SimpleParser {
 
             if (!is('[')) {
                 addErr(position(), position(), "expected [");
-
-                // If we're on an identifier, just assume the [ was meant to be there
-                if (!isIdentStart()) {
-                    setEnd(mixins);
-                    addStatement(mixins);
-                    return;
-                }
             } else {
                 skip();
             }
 
             ws();
             while (!isStructuralBreakpoint() && !eof()) {
+                if (!isIdentStart()) {
+                    var errStart = position();
+                    skipUntilIdentifierOrBreakpoint();
+                    var errEnd = position();
+                    addErr(errStart, errEnd, "expected identifier");
+                    continue;
+                }
+
                 mixins.mixins.add(ident());
                 ws();
             }
