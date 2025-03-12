@@ -859,7 +859,7 @@ public class IdlParserTest {
             new InvalidSyntaxTestCase(
                     "enum using invalid value",
                     "enum Foo {?}",
-                    List.of("unexpected token ? expected trait or member"),
+                    List.of("unexpected token ? expected trait or member", "expected member or trait"),
                     List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block)
             ),
             new InvalidSyntaxTestCase(
@@ -900,7 +900,7 @@ public class IdlParserTest {
             new InvalidSyntaxTestCase(
                     "regular shape with invalid member",
                     "structure Foo {?}",
-                    List.of("unexpected token ? expected trait or member"),
+                    List.of("unexpected token ? expected trait or member", "expected member or trait"),
                     List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block)
             ),
             new InvalidSyntaxTestCase(
