@@ -113,12 +113,12 @@ public class IdlParserTest {
         assertTypesEqual(text,
                 Syntax.Statement.Type.ShapeDef,
                 Syntax.Statement.Type.ShapeDef,
-                Syntax.Statement.Type.MemberDef,
+                Syntax.Statement.Type.NodeMemberDef,
                 Syntax.Statement.Type.ShapeDef,
-                Syntax.Statement.Type.MemberDef,
-                Syntax.Statement.Type.MemberDef,
+                Syntax.Statement.Type.NodeMemberDef,
+                Syntax.Statement.Type.NodeMemberDef,
                 Syntax.Statement.Type.ShapeDef,
-                Syntax.Statement.Type.MemberDef,
+                Syntax.Statement.Type.NodeMemberDef,
                 Syntax.Statement.Type.NodeMemberDef);
     }
 
