@@ -55,7 +55,7 @@ final class Parser extends SimpleParser {
                 int start = position();
                 do {
                     skip();
-                } while (!isWs() && !isNodeStructuralBreakpoint() && !eof());
+                } while (!isWs() && !isNodeStructuralBreakpoint() && !eof() && is(','));
                 int end = position();
                 Syntax.Node.Err err = new Syntax.Node.Err("unexpected token " + document.copySpan(start, end));
                 err.start = start;
@@ -306,7 +306,9 @@ final class Parser extends SimpleParser {
             if (err != null) {
                 addError(err);
             }
-
+            if (kvp != null) {
+                setEnd(kvp);
+            }
             return nodeErr("expected value");
         }
 
@@ -815,7 +817,6 @@ final class Parser extends SimpleParser {
                 addErr(position(), position(), "expected :");
                 if (isWs() || is('}')) {
                     setEnd(memberDef);
-                    addStatement(memberDef);
                     return;
                 }
             }
@@ -968,10 +969,6 @@ final class Parser extends SimpleParser {
         } while (isIdentChar());
 
         int end = position();
-        if (start == end) {
-            addErr(start, end, "expected identifier");
-            return Syntax.Ident.EMPTY;
-        }
         return new Syntax.Ident(start, end, document.copySpan(start, end));
     }
 

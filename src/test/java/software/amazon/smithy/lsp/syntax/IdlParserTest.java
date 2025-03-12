@@ -306,6 +306,461 @@ public class IdlParserTest {
     }
 
     @Test
+    public void goodControlWithEmptyString() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                %$operationInputSuffix: ""%
+                %$operationOutputSuffix: "   "%
+               """);
+        Document document = Document.of(text.text());
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        var positions = text.positions();
+        assertThat(statements, hasSize(3));
+
+        assertTypesEqual(text.text(),
+                Syntax.Statement.Type.Control,
+                Syntax.Statement.Type.Control,
+                Syntax.Statement.Type.Control
+                );
+        assertThat(document.copySpan(statements.get(1).start, statements.get(1).end), equalTo(
+                "$operationInputSuffix: \"\"".trim()));
+        assertThat(document.copySpan(statements.get(2).start, statements.get(2).end), equalTo(
+                "$operationOutputSuffix: \"   \"".trim()));
+    }
+
+    @Test
+    public void badControlWithoutColon() {
+        String text = """
+                $version  2
+                """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        assertThat(statements, hasSize(1));
+        assertThat(document.copySpan(statements.get(0).start, statements.get(0).end), equalTo("$version  2"));
+    }
+
+    @Test
+    public void goodTraitWithNodeDef() {
+        String text = """
+               @integration(
+                    requestParameters: {
+                        "param1": "a"
+                    }
+               )
+               """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        var trait = (Syntax.Statement.TraitApplication) statements.get(0);
+        assertThat(document.copySpan(trait.start, trait.end), equalTo(
+                ("""
+                @integration(
+                     requestParameters: {
+                         "param1": "a"
+                     }
+                )
+                """).trim()));
+        var value = (Syntax.Node.Kvps)trait.value();
+        assertThat(document.copySpan(value.start, value.end).trim(), equalTo(
+                    ("""
+               (
+                    requestParameters: {
+                        "param1": "a"
+                    }
+               """).trim()));
+    }
+
+    @Test
+    public void goodTraitWithEmptyDef() {
+        String text ="@integration()";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+
+        var trait = (Syntax.Statement.TraitApplication) parse.statements().get(0);
+        var value = (Syntax.Node.Kvps)trait.value();
+        assertThat(document.copySpan(trait.start, trait.end), equalTo("@integration()"));
+        assertThat(document.copySpan(value.start, value.end), equalTo("("));
+    }
+
+    @Test
+    public void goodTraitWithStringKeyAndKvpsValue() {
+        String text = """
+               @integration(
+                    "foo" :{
+                        "param1": "a"
+                    }
+               )
+               """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var trait = (Syntax.Statement.TraitApplication) parse.statements().get(0);
+        var kvps = (Syntax.Node.Kvps)trait.value();
+        assertThat(parse.statements(), hasSize(1));
+        assertThat(document.copySpan(trait.start, trait.end), equalTo(("""
+               @integration(
+                    "foo" :{
+                        "param1": "a"
+                    }
+               )
+               """).trim()));
+        assertThat(document.copySpan(kvps.start, kvps.end), equalTo(("""
+             (      
+                  "foo" :{
+                      "param1": "a"
+                  }
+              """)));
+    }
+
+    @Test
+    public void goodTraitWithStrOnly() {
+        String text = "@integration(\"foo bar\")";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var trait = (Syntax.Statement.TraitApplication) parse.statements().get(0);
+        var str = (Syntax.Node.Str)trait.value();
+        assertThat(parse.statements(), hasSize(1));
+        assertThat(document.copySpan(trait.start, trait.end), equalTo("@integration(\"foo bar\")"));
+        assertThat(document.copySpan(str.start, str.end), equalTo("(\"foo bar\""));
+    }
+
+    @Test
+    public void goodTraitWithNestedKvps() {
+        String text = """
+               @integration({
+                    "abc": {
+                        "abc": {
+                            "abc": "abc"
+                        },
+                        "def": "def"
+                    }
+               })
+               """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var trait = (Syntax.Statement.TraitApplication) parse.statements().get(0);
+        Syntax.Node.Obj firstObj = (Syntax.Node.Obj)trait.value();
+        Syntax.Node.Kvps firstKvps = firstObj.kvps();
+        assertThat(document.copySpan(firstKvps.start, firstKvps.end), equalTo(("""
+               { 
+                    "abc": {
+                        "abc": {
+                            "abc": "abc"
+                        },
+                        "def": "def"
+                    }
+               }
+                """).trim()));
+        Syntax.Node.Obj secondObj = (Syntax.Node.Obj)firstKvps.kvps().get(0).value();
+        Syntax.Node.Kvps secondKvps = secondObj.kvps();
+        assertThat(document.copySpan(secondKvps.start, secondKvps.end), equalTo(("""
+               {
+                        "abc": {
+                            "abc": "abc"
+                        },
+                        "def": "def"
+                    }
+                """).trim()));
+        Syntax.Node.Obj thirdObj = (Syntax.Node.Obj)secondKvps.kvps().get(0).value();
+        Syntax.Node.Kvps thirdKvps = thirdObj.kvps();
+        assertThat(document.copySpan(thirdKvps.start, thirdKvps.end), equalTo(("""
+               {
+                            "abc": "abc"
+                        }
+                """).trim()));
+    }
+
+    @Test
+    public void goodTraitWithNum() {
+        String text = """
+        @a(1)
+        @b(-2)
+        """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        Syntax.Statement.TraitApplication firstTrait = (Syntax.Statement.TraitApplication) statements.get(0);
+        Syntax.Statement.TraitApplication secondTrait = (Syntax.Statement.TraitApplication) statements.get(1);
+        var firstTraitValue = firstTrait.value();
+        var secondTraitValue = secondTrait.value();
+        assertThat(document.copySpan(firstTrait.start, firstTrait.end),
+                equalTo("@a(1)"));
+        assertThat(document.copySpan(firstTraitValue.start, firstTraitValue.end),
+                equalTo("(1"));
+        assertThat(document.copySpan(secondTrait.start, secondTrait.end),
+                equalTo("@b(-2)"));
+        assertThat(document.copySpan(secondTraitValue.start, secondTraitValue.end),
+                equalTo("(-2"));
+    }
+
+    @Test
+    public void badInlineMemberHitEof() {
+        String text = """
+                operation foo{
+                input:=
+                """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var errors = parse.errors();
+        assertThat(errors.get(0).message(), equalTo("expected {"));
+    }
+
+    @Test
+    public void goodTraitWithIdent() {
+        String text = "@a(b)";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        Syntax.Statement.TraitApplication trait = (Syntax.Statement.TraitApplication) statements.get(0);
+        var traitValue = trait.value();
+        assertThat(document.copySpan(trait.start, trait.end),
+                equalTo("@a(b)"));
+        assertThat(document.copySpan(traitValue.start, traitValue.end),
+                equalTo("(b"));
+    }
+
+    @Test
+    public void goodTraitWithEmptyValue() {
+        String text = "@a()";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        Syntax.Statement.TraitApplication trait = (Syntax.Statement.TraitApplication) statements.get(0);
+        var traitValue = trait.value();
+        assertThat(document.copySpan(trait.start, trait.end),
+                equalTo("@a()"));
+        assertThat(document.copySpan(traitValue.start, traitValue.end),
+                equalTo("("));
+    }
+
+    @Test
+    public void badTraitWithInvalidNode() {
+        String text = "@a(?)";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        Syntax.Statement.TraitApplication trait = (Syntax.Statement.TraitApplication) statements.get(0);
+        Syntax.Node.Err traitValue = (Syntax.Node.Err) trait.value();
+        assertThat(document.copySpan(trait.start, trait.end),
+                equalTo("@a(?)"));
+        assertThat(document.copySpan(traitValue.start, traitValue.end),
+                equalTo("(?"));
+        assertThat((traitValue.message), equalTo("unexpected token ?"));
+    }
+
+    @Test
+    public void badTraitWithInvalidNodeAndUnclosed() {
+        String text = "@a(?";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        Syntax.Statement.TraitApplication trait = (Syntax.Statement.TraitApplication) statements.get(0);
+        Syntax.Node.Err traitValue = (Syntax.Node.Err) trait.value();
+        assertThat(document.copySpan(trait.start, trait.end),
+                equalTo("@a(?"));
+        assertThat(document.copySpan(traitValue.start, traitValue.end),
+                equalTo("(?"));
+        assertThat((traitValue.message), equalTo("unexpected eof"));
+    }
+
+    @Test
+    public void badTraitWithUnclosedTextBlock() {
+        String text = "@a(\"\"\")";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        Syntax.Statement.TraitApplication trait = (Syntax.Statement.TraitApplication)statements.get(0);
+        Syntax.Node value = trait.value();
+        assertThat(value, instanceOf(Syntax.Node.Err.class));
+    }
+
+    @Test
+    public void badTraitWithTextBlockKey() {
+        String text = "@a(\"\"\"b\"\"\":1)";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        Syntax.Statement.TraitApplication trait = (Syntax.Statement.TraitApplication)statements.get(0);
+        Syntax.Node node = trait.value();
+        assertThat(node, instanceOf(Syntax.Node.Kvps.class));
+        Syntax.Node.Kvps kvps = (Syntax.Node.Kvps)node;
+        Syntax.Node.Kvp kvp = kvps.kvps().get(0);
+        assertThat(kvp.key().stringValue(), equalTo("b"));
+    }
+
+    @Test
+    public void badTraitWithNestedUnclosedKvps() {
+        String text = """
+                @test({
+                    key1: {
+                        key2: {
+                            key3: {
+                                key4: {
+                                    key5: {
+               """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        Syntax.Statement.TraitApplication traitApplication = (Syntax.Statement.TraitApplication)statements.get(0);
+        Syntax.Node.Obj obj = (Syntax.Node.Obj) traitApplication.value();
+        for (int i = 1; i <= 5; i++){
+            Syntax.Node.Kvps kvps = obj.kvps();
+            assertThat(kvps.kvps().get(0).key().stringValue(), equalTo("key" + i));
+            obj = (Syntax.Node.Obj) kvps.kvps().get(0).value();
+        }
+    }
+
+    @Test
+    public void badMetadataWithUnclosedArr() {
+        String text = "metadata foo = [a,b,c";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        Syntax.Statement.Metadata metadata = (Syntax.Statement.Metadata ) parse.statements().get(0);
+        assertThat(document.copySpan(metadata.start, metadata.end), equalTo("metadata foo = [a,b,c"));
+        assertThat(document.copySpan(metadata.value.start, metadata.value.end), equalTo("[a,b,c"));
+    }
+
+    @Test
+    public void badMetadataWithoutEqual() {
+        String text = """
+               metadata a 
+               metadata b
+               """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        Syntax.Statement.Metadata metadataOne = (Syntax.Statement.Metadata ) parse.statements().get(0);
+        Syntax.Statement.Metadata metadataTwo = (Syntax.Statement.Metadata) parse.statements().get(1);
+        assertThat(document.copySpan(metadataOne.start, metadataOne.end), equalTo("metadata a"));
+        assertThat(document.copySpan(metadataTwo.start, metadataTwo.end), equalTo("metadata b"));
+    }
+
+    @Test
+    public void goodApplyWithSingularTrait() {
+        String text = "apply foo @examples ";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        Syntax.Statement.Apply apply = (Syntax.Statement.Apply) parse.statements().get(0);
+        Syntax.Statement.TraitApplication trait = (Syntax.Statement.TraitApplication) parse.statements().get(1);
+        assertThat(document.copySpan(apply.start, apply.end), equalTo("apply foo"));
+        assertThat(document.copySpan(trait.start, trait.end), equalTo("@examples"));
+    }
+
+    @Test
+    public void badApplyWithMissingTraitMark() {
+        String text = "apply foo{bar,@buz}";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+
+        Syntax.Statement.Apply apply = (Syntax.Statement.Apply) parse.statements().get(0);
+        Syntax.Statement.TraitApplication trait = (Syntax.Statement.TraitApplication) parse.statements().get(3);
+        assertThat(document.copySpan(apply.start, apply.end), equalTo("apply foo"));
+        assertThat(document.copySpan(trait.start, trait.end), equalTo("@buz"));
+    }
+
+    @Test
+    public void goodEnumShapeDef() {
+        String text = """
+               enum foo {
+               }
+               intEnum bar {
+                    @test
+                    a = 1
+               }
+               """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        assertThat(statements, hasSize(6));
+        assertThat(statements.get(0), instanceOf(Syntax.Statement.ShapeDef.class));
+        assertThat(statements.get(1), instanceOf(Syntax.Statement.Block.class));
+        assertThat(document.copySpan(statements.get(0).start, statements.get(0).end), equalTo("enum foo"));
+        assertThat(document.copySpan(statements.get(2).start, statements.get(2).end), equalTo("intEnum bar"));
+        assertThat(document.copySpan(statements.get(3).start, statements.get(3).end), equalTo("""
+               {
+                    @test
+                    a = 1
+               }"""));
+        assertThat(document.copySpan(statements.get(4).start, statements.get(4).end), equalTo("@test"));
+        assertThat(document.copySpan(statements.get(5).start, statements.get(5).end), equalTo("a = 1"));
+    }
+
+    @Test
+    public void goodStructListMapUnion() {
+        String text = """
+               structure a {
+               }
+               list b {
+               }
+               map c {
+               }
+               union d {
+               }
+               """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        assertThat(statements, hasSize(8));
+        assertThat(document.copySpan(statements.get(0).start, statements.get(0).end), equalTo("structure a"));
+        assertThat(document.copySpan(statements.get(2).start, statements.get(2).end), equalTo("list b"));
+        assertThat(document.copySpan(statements.get(4).start, statements.get(4).end), equalTo("map c"));
+        assertThat(document.copySpan(statements.get(6).start, statements.get(6).end), equalTo("union d"));
+    }
+
+    @Test
+    public void goodResourceService() {
+        String text = """
+               resource a {
+               }
+               service b {
+               }
+               """;
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        assertThat(statements, hasSize(4));
+        assertThat(statements.get(0), instanceOf(Syntax.Statement.ShapeDef.class));
+        assertThat(statements.get(1), instanceOf(Syntax.Statement.Block.class));
+        assertThat(document.copySpan(statements.get(0).start, statements.get(0).end), equalTo("resource a"));
+        assertThat(document.copySpan(statements.get(2).start, statements.get(2).end), equalTo("service b"));
+    }
+
+    @Test
+    public void goodElideMember() {
+        String text = "structure a {foo:$bar}";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        assertThat(statements, hasSize(4));
+        assertThat(statements.get(0), instanceOf(Syntax.Statement.ShapeDef.class));
+        assertThat(statements.get(1), instanceOf(Syntax.Statement.Block.class));
+        assertThat(document.copySpan(statements.get(0).start, statements.get(0).end), equalTo("structure a"));
+        assertThat(document.copySpan(statements.get(2).start, statements.get(2).end), equalTo("foo:"));
+        assertThat(document.copySpan(statements.get(3).start, statements.get(3).end), equalTo("$bar"));
+    }
+
+    @Test
+    public void badTraitWithArrWithoutLeftBrace() {
+        String text = "@test(a,b,c])";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        assertThat(document.copySpan(statements.get(0).start, statements.get(0).end), equalTo("@test(a,"));
+        assertThat(document.copySpan(statements.get(1).start, statements.get(1).end), equalTo("b"));
+        assertThat(document.copySpan(statements.get(2).start, statements.get(2).end), equalTo("c"));
+    }
+
+    @Test
+    public void badStructureWithUseStatement() {
+        String text = "structure a {use abc}";
+        Document document = Document.of(text);
+        Syntax.IdlParseResult parse = Syntax.parseIdl(document);
+        var statements = parse.statements();
+        assertThat(document.copySpan(statements.get(0).start, statements.get(0).end), equalTo("structure a"));
+        assertThat(document.copySpan(statements.get(2).start, statements.get(2).end), equalTo("use abc"));
+    }
+
+    @Test
     public void traitApplicationsDontContainTrailingWhitespace() {
         var twp = TextWithPositions.from("""
                 %@foo(foo: "")%
@@ -402,6 +857,12 @@ public class IdlParserTest {
                             Syntax.Statement.Type.EnumMemberDef)
             ),
             new InvalidSyntaxTestCase(
+                    "enum using invalid value",
+                    "enum Foo {?}",
+                    List.of("unexpected token ? expected trait or member"),
+                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block)
+            ),
+            new InvalidSyntaxTestCase(
                     "regular shape missing {",
                     "structure Foo\nbar: String}",
                     List.of("expected {"),
@@ -418,6 +879,29 @@ public class IdlParserTest {
                             Syntax.Statement.Type.ShapeDef,
                             Syntax.Statement.Type.Block,
                             Syntax.Statement.Type.MemberDef)
+            ),
+            new InvalidSyntaxTestCase(
+                    "regular shape missing :",
+                    "structure Foo {bar String}",
+                    List.of("expected :"),
+                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block, Syntax.Statement.Type.MemberDef)
+            ),
+            new InvalidSyntaxTestCase(
+                    "regular shape missing assignment",
+                    """
+                            structure Foo {
+                                foo
+                                bar
+                            }
+                            """,
+                    List.of("expected :","expected :"),
+                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block, Syntax.Statement.Type.MemberDef, Syntax.Statement.Type.MemberDef)
+            ),
+            new InvalidSyntaxTestCase(
+                    "regular shape with invalid member",
+                    "structure Foo {?}",
+                    List.of("unexpected token ? expected trait or member"),
+                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block)
             ),
             new InvalidSyntaxTestCase(
                     "op with inline missing {",
@@ -458,10 +942,39 @@ public class IdlParserTest {
                             Syntax.Statement.Type.NodeMemberDef)
             ),
             new InvalidSyntaxTestCase(
+                    "node shape with missing :",
+                    "service Foo{operations {}}",
+                    List.of("expected :"),
+                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block, Syntax.Statement.Type.NodeMemberDef)
+            ),
+            new InvalidSyntaxTestCase(
+                    "node shape with missing node",
+                    "service Foo{bar:}",
+                    List.of("expected node"),
+                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block, Syntax.Statement.Type.NodeMemberDef)
+            ),
+            new InvalidSyntaxTestCase(
+                    "node shape missing assignment",
+                            """
+                            service Foo{
+                                a
+                                b
+                            }
+                    """,
+                    List.of("expected :", "expected :"),
+                    List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block, Syntax.Statement.Type.NodeMemberDef, Syntax.Statement.Type.NodeMemberDef)
+            ),
+            new InvalidSyntaxTestCase(
                     "apply missing @",
                     "apply Foo",
                     List.of("expected trait or block"),
                     List.of(Syntax.Statement.Type.Apply)
+            ),
+            new InvalidSyntaxTestCase(
+                    "apply missing trait in block",
+                    "apply Foo {@bar,buz}",
+                    List.of("expected trait", "expected identifier"),
+                    List.of(Syntax.Statement.Type.Apply, Syntax.Statement.Type.Block, Syntax.Statement.Type.TraitApplication, Syntax.Statement.Type.Incomplete)
             ),
             new InvalidSyntaxTestCase(
                     "apply missing }",
@@ -528,6 +1041,54 @@ public class IdlParserTest {
                     List.of(
                             Syntax.Statement.Type.ShapeDef,
                             Syntax.Statement.Type.Mixins,
+                            Syntax.Statement.Type.Block)
+            ),
+            new InvalidSyntaxTestCase(
+                    "operation using member value without :",
+                    """
+                    operation Op {
+                        input
+                        output
+                    }""",
+                    List.of("expected :", "expected :"),
+                    List.of(
+                            Syntax.Statement.Type.ShapeDef,
+                            Syntax.Statement.Type.Block,
+                            Syntax.Statement.Type.MemberDef,
+                            Syntax.Statement.Type.MemberDef)
+            ),
+            new InvalidSyntaxTestCase(
+                    "trait use unexpected key",
+                    """
+                            @integration(String:
+                    """,
+                    List.of("unexpected token "),
+                    List.of(
+                            Syntax.Statement.Type.TraitApplication)
+            ),
+            new InvalidSyntaxTestCase(
+                    "control without value",
+                    """
+                            $version
+                            $operationInputSuffix "Request"
+                            $operationInputSuffix: "Request"
+                    """,
+                    List.of("expected :", "expected :"),
+                    List.of(
+                            Syntax.Statement.Type.Control,
+                            Syntax.Statement.Type.Control,
+                            Syntax.Statement.Type.Control)
+            ),
+            new InvalidSyntaxTestCase(
+                    "metadata without equal",
+                    """
+                            metadata bar
+                            structure foo{}
+                    """,
+                    List.of("expected ="),
+                    List.of(
+                            Syntax.Statement.Type.Metadata,
+                            Syntax.Statement.Type.ShapeDef,
                             Syntax.Statement.Type.Block)
             )
     );
