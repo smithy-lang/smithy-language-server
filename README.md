@@ -4,28 +4,45 @@
 A [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 implementation for the [Smithy IDL](https://smithy.io).
 
-Smithy is a protocol-agnostic interface definition language and set of tools for generating clients, servers, and documentation for any programming language.
-
 ## Features
 The Smithy Language Server provides the following features:
-* Code Completion
-* Code Folding
-* Code Hover Information
-* Code Inlay Hints
-* Code Navigation (Definition / Declaration)
+
+### For Smithy IDL
+* Completion
+* Diagnostics for Model Validation Event
 * Document Symbol Support
-* Document Formatting
+* Formatting
+* Folding
+* Hover Information
+* Inlay Hints
+* Navigation (Definition / Declaration)
+
+### For smithy-build.json
+* Completion
+* Diagnostics for Model Validation Event
+* Hover Information
 
 ## Running the Language Server
 
 ### Visual Studio Code Extension
-For Visual Studio Code users, please install our official Visual Studio Code extension from the marketplace: 
-
+For Visual Studio Code users, please install our official Visual Studio Code extension from the marketplace:
 [Smithy Extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=smithy.smithy-vscode-extension)
 
+Configurations supported from Visual Studio Code:
+
+| Field                  | Description                                                       |  Type   |     Default     |               Options                |
+|------------------------|-------------------------------------------------------------------|:-------:|:---------------:|:------------------------------------:|
+| Max Number Of Problems | Controls the maximum number of problems produced by the server.   | integer |       100       |                 N/A                  |
+| Root Path              | The root path of the Smithy project                               | string  |      null       |         Valid directory path         |
+| Trace:Server           | Traces the communication between VS Code and the language server. | string  |    "verbose"    |     "verbose", "messages", "off"     |
+| Version                | Version of the Smithy Language Server                             | string  | current version | Valid Smithy Language Server version |
+
+
 ### Neovim
-For users who prefer Neovim,  [Neovim lspconfig](https://github.com/neovim/nvim-lspconfig/tree/master) can be used to configure the Smithy Language Server. For detailed instruction, please check 
-the [Manual Setup (Neovim)](#neovim-jdk-21-is-required) section below.
+[nvim-lspconfig](https://github.com/neovim/nvim-lspconfig/tree/master) has a config for Smithy Language Server. 
+See [smithy_ls](https://github.com/neovim/nvim-lspconfig/blob/master/lua/lspconfig/configs/smithy_ls.lua). 
+
+You will need to provide a command to run the language server, see [Manual Setup](#manual-setup).
 
 ### Manual Setup
 You can also run the language server manually.
@@ -35,8 +52,8 @@ You can also run the language server manually.
 2. Unzip the downloaded zip file.
 3. Run the language server by executing the following command:
       ```bash
-      java -jar /path/to/unziped/folder/smithy-language-server-0.x.x.jar [port-number]
-      // Usually the default port-number is set to 0
+      java -jar /path/to/unziped/folder/smithy-language-server-0.x.x.jar [--port-number <port>]
+      // [--port-number] is optional (the default port number is set to 0).
       ```
 
 #### Neovim (JDK 21 is required)
@@ -65,21 +82,10 @@ You can also run the language server manually.
 
 ### Client-Side Configuration
 
-Configurations supported from client:
-
 | Field                       | Description                                                       |  Type   |     Default     |               Options                |
 |-----------------------------|-------------------------------------------------------------------|:-------:|:---------------:|:------------------------------------:|
-| Diagnostics:MinimumSeverity | Sets the minimum severity level for diagnostics.                  | string  |    "WARNING"    | "WARNING", "NOTE", "DANGER", "ERROR" |
-| Only Read On Save           | When enabled, only reloads the model on file save.                | boolean |      false      |             false, true              |
-| 
-Configurations supported from Visual Studio Code:
-
-| Field                  | Description                                                       |  Type   |     Default     |               Options                |
-|------------------------|-------------------------------------------------------------------|:-------:|:---------------:|:------------------------------------:|
-| Max Number Of Problems | Controls the maximum number of problems produced by the server.   | integer |       100       |                 N/A                  |
-| Root Path              | The root path of the Smithy project                               | string  |      null       |         Valid directory path         |
-| Trace:Server           | Traces the communication between VS Code and the language server. | string  |    "verbose"    |     "verbose", "messages", "off"     |
-| Version                | Version of the Smithy Language Server                             | string  | current version | Valid Smithy Language Server version |
+| diagnostics:minimumSeverity | Sets the minimum severity level for diagnostics.                  | string  |    "WARNING"    | "WARNING", "NOTE", "DANGER", "ERROR" |
+ 
 ### Build File Configuration
 
 The Smithy Language Server can recognize two types of : `smithy-build.json` or `.smithy-project.json`. The build files help the server to locate the root path of 
