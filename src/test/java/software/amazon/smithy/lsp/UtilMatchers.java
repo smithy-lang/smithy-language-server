@@ -5,6 +5,8 @@
 
 package software.amazon.smithy.lsp;
 
+import static software.amazon.smithy.lsp.document.DocumentTest.safeString;
+
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.util.Optional;
@@ -72,7 +74,7 @@ public final class UtilMatchers {
         return new CustomTypeSafeMatcher<>(expected) {
             @Override
             protected boolean matchesSafely(String item) {
-                return expected.equals(item);
+                return safeString(expected).equals(item);
             }
 
             @Override
