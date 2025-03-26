@@ -23,29 +23,17 @@ public record DocumentId(Type type, CharBuffer idSlice, Range range) {
      */
     public enum Type {
         /**
-         * Just a shape name, no namespace or member.
+         * A root shape id, i.e. without trailing '$member'. May or may not
+         * have a leading namespace.
          */
-        ID,
+        ROOT,
 
         /**
-         * Same as {@link Type#ID}, but with a namespace.
+         * A shape id with a member, i.e. with trailing '$member'. May or may
+         * not have a leading namespace. May or may not have a root shape name
+         * before the '$member'.
          */
-        ABSOLUTE_ID,
-
-        /**
-         * Just a namespace - will have one or more {@code .}.
-         */
-        NAMESPACE,
-
-        /**
-         * Same as {@link Type#ABSOLUTE_ID}, but with a member - will have a {@code $}.
-         */
-        ABSOLUTE_WITH_MEMBER,
-
-        /**
-         * Same as {@link Type#ID}, but with a member - will have a {@code $}.
-         */
-        RELATIVE_WITH_MEMBER
+        MEMBER
     }
 
     public String copyIdValue() {

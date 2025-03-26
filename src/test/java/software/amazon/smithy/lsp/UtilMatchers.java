@@ -67,4 +67,32 @@ public final class UtilMatchers {
             }
         };
     }
+
+    public static Matcher<String> stringEquals(String expected) {
+        return new CustomTypeSafeMatcher<>(expected) {
+            @Override
+            protected boolean matchesSafely(String item) {
+                return expected.equals(item);
+            }
+
+            @Override
+            protected void describeMismatchSafely(String item, Description mismatchDescription) {
+                mismatchDescription.appendText("was: " + item);
+            }
+        };
+    }
+
+    public static Matcher<Runnable> throwsWithMessage(Matcher<String> message) {
+        return new CustomTypeSafeMatcher<>("Throws " + message) {
+            @Override
+            protected boolean matchesSafely(Runnable item) {
+                try {
+                    item.run();
+                    return false;
+                } catch (Exception e) {
+                    return message.matches(e.getMessage());
+                }
+            }
+        };
+    }
 }

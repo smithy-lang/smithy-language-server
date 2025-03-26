@@ -34,6 +34,15 @@ public record StatementView(Syntax.IdlParseResult parseResult, int statementInde
 
     /**
      * @param parseResult The parse result to create a view of
+     * @param statement The statement to create the view at
+     * @return An optional view of the given statement
+     */
+    public static Optional<StatementView> createAt(Syntax.IdlParseResult parseResult, Syntax.Statement statement) {
+        return createAt(parseResult, statement.start());
+    }
+
+    /**
+     * @param parseResult The parse result to create a view of
      * @param documentIndex The index within the underlying document
      * @return An optional view of the statement the given documentIndex is within
      *  in the given parse result, or empty if the index is not within a statement

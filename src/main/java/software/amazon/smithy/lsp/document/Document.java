@@ -11,6 +11,7 @@ import java.util.List;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
+import software.amazon.smithy.lsp.syntax.Syntax;
 
 /**
  * In-memory representation of a text document, indexed by line, which can
@@ -204,6 +205,35 @@ public final class Document {
     }
 
     /**
+     * @param item The item to get the range of
+     * @return The range of the item
+     */
+    public Range rangeOf(Syntax.Item item) {
+        return rangeBetween(item.start(), item.end());
+    }
+
+    /**
+     * @param token The token to get the range of
+     * @return The range of the token, excluding enclosing ""
+     */
+    public Range rangeOfValue(Syntax.Node.Str token) {
+        int lineStart = indexOfLine(token.line());
+        if (lineStart < 0) {
+            return null;
+        }
+
+        int startChar = token.start() - lineStart;
+        int endChar = token.end() - lineStart;
+
+        if (token.type() == Syntax.Node.Type.Str) {
+            startChar += 1;
+            endChar -= 1;
+        }
+
+        return new Range(new Position(token.line(), startChar), new Position(token.line(), endChar));
+    }
+
+    /**
      * @param line The line to find the end of
      * @return The index of the end of the given line, or {@code -1} if the
      *  line is out of bounds
@@ -306,79 +336,45 @@ public final class Document {
             return null;
         }
 
-        boolean hasHash = false;
-        boolean hasDollar = false;
-        boolean hasDot = false;
+        boolean isMember = false;
         int startIdx = idx;
         while (startIdx >= 0) {
             char c = buffer.charAt(startIdx);
-            if (isIdChar(c)) {
-                switch (c) {
-                    case '#':
-                        hasHash = true;
-                        break;
-                    case '$':
-                        hasDollar = true;
-                        break;
-                    case '.':
-                        hasDot = true;
-                        break;
-                    default:
-                        break;
-                }
-                startIdx -= 1;
-            } else {
+            if (!isIdChar(c)) {
                 break;
             }
+
+            if (c == '$') {
+                isMember = true;
+            }
+
+            startIdx -= 1;
         }
 
         int endIdx = idx;
         while (endIdx < buffer.length()) {
             char c = buffer.charAt(endIdx);
-            if (isIdChar(c)) {
-                switch (c) {
-                    case '#':
-                        hasHash = true;
-                        break;
-                    case '$':
-                        hasDollar = true;
-                        break;
-                    case '.':
-                        hasDot = true;
-                        break;
-                    default:
-                        break;
-                }
-
-                endIdx += 1;
-            } else {
+            if (!isIdChar(c)) {
                 break;
             }
+
+            if (!isMember && c == '$') {
+                break;
+            }
+
+            endIdx += 1;
         }
 
-
-        // TODO: This can be improved to do some extra validation, like if
-        //  there's more than 1 hash or $, its invalid. Additionally, we
-        //  should only give a type of *WITH_MEMBER if the position is on
-        //  the member itself. We will probably need to add some logic or
-        //  keep track of the member itself in order to properly match the
-        //  RELATIVE_WITH_MEMBER type in handlers.
         DocumentId.Type type;
-        if (hasHash && hasDollar) {
-            type = DocumentId.Type.ABSOLUTE_WITH_MEMBER;
-        } else if (hasHash) {
-            type = DocumentId.Type.ABSOLUTE_ID;
-        } else if (hasDollar) {
-            type = DocumentId.Type.RELATIVE_WITH_MEMBER;
-        } else if (hasDot) {
-            type = DocumentId.Type.NAMESPACE;
+        if (isMember) {
+            type = DocumentId.Type.MEMBER;
         } else {
-            type = DocumentId.Type.ID;
+            type = DocumentId.Type.ROOT;
         }
 
-        // We go past the start and end in each loop, so startIdx is before the start character, and endIdx
-        // is after the end character. Since end is exclusive (both for creating the buffer and getting the
-        // range) we can leave it.
+        // Add one since we went past the start when breaking from the loop.
+        // Not necessary for endIdx, because we want it to be one past the last
+        // character.
         int startCharIdx = startIdx + 1;
         CharBuffer wrapped = CharBuffer.wrap(buffer, startCharIdx, endIdx);
         Range range = rangeBetween(startCharIdx, endIdx);

@@ -15,10 +15,12 @@ import software.amazon.smithy.lsp.syntax.StatementView;
 import software.amazon.smithy.lsp.syntax.Syntax;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.Prelude;
+import software.amazon.smithy.model.shapes.MapShape;
 import software.amazon.smithy.model.shapes.ResourceShape;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.ShapeIdSyntaxException;
+import software.amazon.smithy.model.traits.IdRefTrait;
 
 /**
  * Provides methods to search for shapes, using context and syntax specific
@@ -52,12 +54,28 @@ final class ShapeSearch {
                     yield fromCurrent;
                 }
 
-                for (String fileImport : parseResult.imports().imports()) {
-                    Optional<Shape> imported = tryFrom(fileImport)
-                            .filter(importId -> importId.getName().equals(s))
-                            .flatMap(model::getShape);
-                    if (imported.isPresent()) {
-                        yield imported;
+                if (nameOrId.contains("$")) {
+                    // Relative member id, so it could be a member of an imported shape
+                    String[] split = nameOrId.split("\\$");
+                    String containerName = split[0];
+                    String memberName = split[1];
+                    for (String fileImport : parseResult.imports().imports()) {
+                        var imported = tryFrom(fileImport)
+                                .filter(importId -> importId.getName().equals(containerName))
+                                .map(importId -> importId.withMember(memberName))
+                                .flatMap(model::getShape);
+                        if (imported.isPresent()) {
+                            yield imported;
+                        }
+                    }
+                } else {
+                    for (String fileImport : parseResult.imports().imports()) {
+                        Optional<Shape> imported = tryFrom(fileImport)
+                                .filter(importId -> importId.getName().equals(s))
+                                .flatMap(model::getShape);
+                        if (imported.isPresent()) {
+                            yield imported;
+                        }
                     }
                 }
 
@@ -145,6 +163,78 @@ final class ShapeSearch {
             return findShape(nodeMemberTarget.view().parseResult(), id.copyIdValue(), model);
         }
         return Optional.empty();
+    }
+
+    static Optional<Shape> getShapeReference(IdlPosition idlPosition, DocumentId id, Model model) {
+        Optional<Shape> shape = switch (idlPosition) {
+            case IdlPosition.TraitValue traitValue -> traitValueReference(traitValue, id, model);
+
+            case IdlPosition.NodeMemberTarget nodeMemberTarget ->
+                    nodeMemberTargetReference(nodeMemberTarget, id, model);
+
+            case IdlPosition pos when pos.isRootShapeReference() -> {
+                String nameOrId = id.copyIdValue();
+                yield findShape(pos.view().parseResult(), nameOrId, model);
+            }
+
+            default -> Optional.empty();
+        };
+
+        return shape.filter(s -> !s.isMemberShape());
+    }
+
+    private static Optional<Shape> traitValueReference(IdlPosition.TraitValue traitValue, DocumentId id, Model model) {
+        // Find the shape corresponding to the given traitValue position.
+        var searchResult = ShapeSearch.searchTraitValue(traitValue, model);
+
+        // We only care about results that could be shape refs, so trait members
+        // or idRefs.
+        return switch (searchResult) {
+            case NodeSearch.Result.TerminalShape terminal when terminal.isIdRef() -> {
+                String nameOrId = id.copyIdValue();
+                yield findShape(traitValue.view().parseResult(), nameOrId, model);
+            }
+
+            case NodeSearch.Result.ObjectKey objectKey -> {
+                if (objectKey.containerShape() instanceof MapShape mapShape) {
+                    if (mapShape.getKey().getMemberTrait(model, IdRefTrait.class).isPresent()) {
+                        String nameOrId = id.copyIdValue();
+                        yield findShape(traitValue.view().parseResult(), nameOrId, model);
+                    }
+                }
+                yield Optional.empty();
+            }
+
+            default -> Optional.empty();
+        };
+    }
+
+    private static Optional<Shape> nodeMemberTargetReference(
+            IdlPosition.NodeMemberTarget target,
+            DocumentId id,
+            Model model
+    ) {
+        var searchResult = ShapeSearch.searchNodeMemberTarget(target);
+        return switch (searchResult) {
+            // The cursor is on some node value nested within a member of a service, resource, or operation
+            // shape. When this value is supposed to represent a shape id, provide refs for that id.
+            case NodeSearch.Result.TerminalShape terminal when terminal.isIdRef() -> {
+                String nameOrId = id.copyIdValue();
+                yield findShape(target.view().parseResult(), nameOrId, model);
+            }
+
+            // The cursor is on some key of a node nested within a member of a service or resource shape.
+            // We want to provide refs when the key is a service closure shape rename.
+            case NodeSearch.Result.ObjectKey objectKey -> {
+                var containerId = objectKey.containerShape().getId();
+                if (Builtins.SERVICE_RENAME_ID.equals(containerId)) {
+                    yield findShape(target.view().parseResult(), objectKey.key().name(), model);
+                } else {
+                    yield Optional.empty();
+                }
+            }
+            default -> Optional.empty();
+        };
     }
 
     /**

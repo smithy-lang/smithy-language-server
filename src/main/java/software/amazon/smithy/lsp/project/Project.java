@@ -203,6 +203,15 @@ public final class Project {
         return buildFiles.getByPath(path);
     }
 
+    /**
+     * @param shape The shape to get the definition file of
+     * @return The file the shape is defined in, or {@code null} if the file
+     *  isn't in this project
+     */
+    public SmithyFile getDefinitionFile(Shape shape) {
+        return smithyFiles.get(shape.getSourceLocation().getFilename());
+    }
+
     public synchronized void validateConfig() {
         this.configEvents = ProjectConfigLoader.validateBuildFiles(buildFiles);
     }

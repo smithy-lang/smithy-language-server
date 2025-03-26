@@ -293,12 +293,18 @@ public final class Syntax {
          * identifiers, so this class a single subclass {@link Ident}.
          */
         public static sealed class Str extends Node {
+            final int line;
             final String value;
 
-            Str(int start, int end, String value) {
+            Str(int line, int start, int end, String value) {
+                this.line = line;
                 this.start = start;
                 this.end = end;
                 this.value = value;
+            }
+
+            public int line() {
+                return line;
             }
 
             public String stringValue() {
@@ -798,10 +804,10 @@ public final class Syntax {
      * (i.e. `.`, `#`, `$`, `_` digits, alphas).
      */
     public static final class Ident extends Node.Str {
-        static final Ident EMPTY = new Ident(-1, -1, "");
+        static final Ident EMPTY = new Ident(-1, -1, -1, "");
 
-        Ident(int start, int end, String value) {
-            super(start, end, value);
+        Ident(int line, int start, int end, String value) {
+            super(line, start, end, value);
         }
 
         public boolean isEmpty() {
