@@ -29,11 +29,11 @@ import software.amazon.smithy.model.shapes.ShapeId;
  */
 sealed interface DynamicMemberTarget {
     /**
-     * @param cursor The cursor being used to traverse the model.
+     * @param parent The parent node containing the member.
      * @param model The model being traversed.
      * @return The target of the member shape at the cursor's current position.
      */
-    Shape getTarget(NodeCursor cursor, Model model);
+    Shape getTarget(Syntax.Node parent, Model model);
 
     static Map<ShapeId, DynamicMemberTarget> forTrait(Shape traitShape, IdlPosition.TraitValue traitValue) {
         Syntax.IdlParseResult syntaxInfo = traitValue.view().parseResult();
@@ -84,7 +84,7 @@ sealed interface DynamicMemberTarget {
      */
     record OperationInput(IdlPosition.TraitValue traitValue) implements DynamicMemberTarget {
         @Override
-        public Shape getTarget(NodeCursor cursor, Model model) {
+        public Shape getTarget(Syntax.Node parent, Model model) {
             return ShapeSearch.findTraitTarget(traitValue, model)
                     .flatMap(Shape::asOperationShape)
                     .flatMap(operationShape -> model.getShape(operationShape.getInputShape()))
@@ -100,7 +100,7 @@ sealed interface DynamicMemberTarget {
      */
     record OperationOutput(IdlPosition.TraitValue traitValue) implements DynamicMemberTarget {
         @Override
-        public Shape getTarget(NodeCursor cursor, Model model) {
+        public Shape getTarget(Syntax.Node parent, Model model) {
             return ShapeSearch.findTraitTarget(traitValue, model)
                     .flatMap(Shape::asOperationShape)
                     .flatMap(operationShape -> model.getShape(operationShape.getOutputShape()))
@@ -117,8 +117,8 @@ sealed interface DynamicMemberTarget {
      */
     record ShapeIdDependent(String memberName, Syntax.IdlParseResult parseResult) implements DynamicMemberTarget {
         @Override
-        public Shape getTarget(NodeCursor cursor, Model model) {
-            Syntax.Node.Kvp matchingKvp = findMatchingKvp(memberName, cursor);
+        public Shape getTarget(Syntax.Node parent, Model model) {
+            Syntax.Node.Kvp matchingKvp = findMatchingKvp(memberName, parent);
             if (matchingKvp != null && matchingKvp.value() instanceof Syntax.Node.Str str) {
                 String id = str.stringValue();
                 return ShapeSearch.findShape(parseResult, id, model).orElse(null);
@@ -138,8 +138,8 @@ sealed interface DynamicMemberTarget {
      */
     record MappedDependent(String memberName, Map<String, ShapeId> mapping) implements DynamicMemberTarget {
         @Override
-        public Shape getTarget(NodeCursor cursor, Model model) {
-            Syntax.Node.Kvp matchingKvp = findMatchingKvp(memberName, cursor);
+        public Shape getTarget(Syntax.Node parent, Model model) {
+            Syntax.Node.Kvp matchingKvp = findMatchingKvp(memberName, parent);
             if (matchingKvp != null && matchingKvp.value() instanceof Syntax.Node.Str str) {
                 String value = str.stringValue();
                 ShapeId targetId = mapping.get(value);
@@ -155,15 +155,10 @@ sealed interface DynamicMemberTarget {
     // comparison to parsing or NodeCursor construction, which are optimized for
     // speed and memory usage (instead of key lookup), and the number of keys
     // is assumed to be low in most cases.
-    private static Syntax.Node.Kvp findMatchingKvp(String keyName, NodeCursor cursor) {
+    private static Syntax.Node.Kvp findMatchingKvp(String keyName, Syntax.Node parent) {
         // This will be called after skipping a ValueForKey, so that will be previous
-        if (!cursor.hasPrevious()) {
-            // TODO: Log
-            return null;
-        }
-        NodeCursor.Edge edge = cursor.previous();
-        if (edge instanceof NodeCursor.ValueForKey(var ignored, Syntax.Node.Kvps parent)) {
-            for (Syntax.Node.Kvp kvp : parent.kvps()) {
+        if (parent instanceof Syntax.Node.Kvps kvps) {
+            for (Syntax.Node.Kvp kvp : kvps.kvps()) {
                 String key = kvp.key().stringValue();
                 if (!keyName.equals(key)) {
                     continue;

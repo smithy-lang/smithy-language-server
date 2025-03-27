@@ -10,14 +10,12 @@ import java.util.List;
 
 /**
  * A moveable index into a path from the root of a {@link Syntax.Node} to a
- * position somewhere within that node. The path supports iteration both
- * forward and backward, as well as storing a 'checkpoint' along the path
- * that can be returned to at a later point.
+ * position somewhere within that node. The path supports iteration forward
+ * only.
  */
 public final class NodeCursor {
     private final List<Edge> edges;
     private int pos = 0;
-    private int checkpoint = 0;
 
     NodeCursor(List<Edge> edges) {
         this.edges = edges;
@@ -118,42 +116,10 @@ public final class NodeCursor {
     }
 
     /**
-     * @return Whether the cursor is not at the start of the path. A return value
-     *  of {@code true} means {@link #previous()} may be called safely.
-     */
-    public boolean hasPrevious() {
-        return edges.size() - pos >= 0;
-    }
-
-    /**
-     * @return The previous edge along the path. Also moves the cursor backward.
-     */
-    public Edge previous() {
-        pos--;
-        return edges.get(pos);
-    }
-
-    /**
      * @return Whether the path consists of a single, terminal, node.
      */
     public boolean isTerminal() {
         return edges.size() == 1 && edges.getFirst() instanceof Terminal;
-    }
-
-    /**
-     * Store the current cursor position to be returned to later. Subsequent
-     * calls overwrite the checkpoint.
-     */
-    public void setCheckpoint() {
-        this.checkpoint = pos;
-    }
-
-    /**
-     * Return to a previously set checkpoint. Subsequent calls continue to
-     * the same checkpoint, unless overwritten.
-     */
-    public void returnToCheckpoint() {
-        this.pos = checkpoint;
     }
 
     @Override
