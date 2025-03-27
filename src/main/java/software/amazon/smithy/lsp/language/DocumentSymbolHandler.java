@@ -73,40 +73,35 @@ public record DocumentSymbolHandler(Document document, List<Syntax.Statement> st
             }
         }
 
+        List<DocumentSymbol> children = childrenSymbols(listIterator, lastMemberIndex);
+        if (!children.isEmpty()) {
+            parent.setChildren(children);
+        }
+    }
+
+    private List<DocumentSymbol> childrenSymbols(ListIterator<Syntax.Statement> listIterator, int lastChildIndex) {
         List<DocumentSymbol> children = new ArrayList<>();
 
-        while (listIterator.nextIndex() <= lastMemberIndex) {
+        while (listIterator.nextIndex() <= lastChildIndex) {
             var statement = listIterator.next();
 
             switch (statement) {
-                case Syntax.Statement.MemberDef memberDef -> {
-                    children.add(memberDefSymbol(memberDef));
-                }
+                case Syntax.Statement.MemberDef def -> children.add(memberDefSymbol(def));
 
-                case Syntax.Statement.EnumMemberDef enumMemberDef -> {
-                    children.add(enumMemberDefSymbol(enumMemberDef));
-                }
+                case Syntax.Statement.EnumMemberDef def -> children.add(enumMemberDefSymbol(def));
 
-                case Syntax.Statement.ElidedMemberDef elidedMemberDef -> {
-                    children.add(elidedMemberDefSymbol(elidedMemberDef));
-                }
+                case Syntax.Statement.ElidedMemberDef def -> children.add(elidedMemberDefSymbol(def));
 
-                case Syntax.Statement.NodeMemberDef nodeMemberDef -> {
-                    children.add(nodeMemberDefSymbol(nodeMemberDef));
-                }
+                case Syntax.Statement.NodeMemberDef def -> children.add(nodeMemberDefSymbol(def));
 
-                case Syntax.Statement.InlineMemberDef inlineMemberDef -> {
-                    children.add(inlineMemberSymbol(listIterator, inlineMemberDef));
-                }
+                case Syntax.Statement.InlineMemberDef def -> children.add(inlineMemberSymbol(listIterator, def));
 
                 default -> {
                 }
             }
         }
 
-        if (!children.isEmpty()) {
-            parent.setChildren(children);
-        }
+        return children;
     }
 
     private DocumentSymbol namespaceSymbol(Syntax.Statement.Namespace namespace) {
