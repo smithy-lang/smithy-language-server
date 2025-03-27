@@ -5,8 +5,6 @@
 
 package software.amazon.smithy.lsp.language;
 
-import static software.amazon.smithy.lsp.protocol.LspAdapter.identRange;
-
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -112,25 +110,20 @@ public record DocumentSymbolHandler(Document document, List<Syntax.Statement> st
     }
 
     private DocumentSymbol namespaceSymbol(Syntax.Statement.Namespace namespace) {
-        var range = document.rangeBetween(namespace.start(), namespace.end());
-        var selectionRange = identRange(namespace.namespace(), document);
         return new DocumentSymbol(
                 namespace.namespace().stringValue(),
                 SymbolKind.Namespace,
-                range,
-                selectionRange
+                document.rangeOf(namespace),
+                document.rangeOfValue(namespace.namespace())
         );
     }
 
     private DocumentSymbol rootSymbol(Syntax.Statement.ShapeDef shapeDef) {
-        var symbolKind = getSymbolKind(shapeDef);
-        var range = document.rangeBetween(shapeDef.start(), shapeDef.end());
-        var selectionRange = identRange(shapeDef.shapeName(), document);
         return new DocumentSymbol(
                 shapeDef.shapeName().stringValue(),
-                symbolKind,
-                range,
-                selectionRange
+                getSymbolKind(shapeDef),
+                document.rangeOf(shapeDef),
+                document.rangeOfValue(shapeDef.shapeName())
         );
     }
 
@@ -142,8 +135,6 @@ public record DocumentSymbolHandler(Document document, List<Syntax.Statement> st
     }
 
     private DocumentSymbol memberDefSymbol(Syntax.Statement.MemberDef memberDef) {
-        var range = document.rangeBetween(memberDef.start(), memberDef.end());
-        var selectionRange = identRange(memberDef.name(), document);
         var detail = memberDef.target() == null
                 ? null
                 : memberDef.target().stringValue();
@@ -151,25 +142,23 @@ public record DocumentSymbolHandler(Document document, List<Syntax.Statement> st
         return new DocumentSymbol(
                 memberDef.name().stringValue(),
                 SymbolKind.Field,
-                range,
-                selectionRange,
+                document.rangeOf(memberDef),
+                document.rangeOfValue(memberDef.name()),
                 detail
         );
     }
 
     private DocumentSymbol enumMemberDefSymbol(Syntax.Statement.EnumMemberDef enumMemberDef) {
-        var range = document.rangeBetween(enumMemberDef.start(), enumMemberDef.end());
-        var selectionRange = identRange(enumMemberDef.name(), document);
         return new DocumentSymbol(
                 enumMemberDef.name().stringValue(),
                 SymbolKind.EnumMember,
-                range,
-                selectionRange
+                document.rangeOf(enumMemberDef),
+                document.rangeOfValue(enumMemberDef.name())
         );
     }
 
     private DocumentSymbol elidedMemberDefSymbol(Syntax.Statement.ElidedMemberDef elidedMemberDef) {
-        var range = document.rangeBetween(elidedMemberDef.start(), elidedMemberDef.end());
+        var range = document.rangeOf(elidedMemberDef);
         return new DocumentSymbol(
                 "$" + elidedMemberDef.name().stringValue(),
                 SymbolKind.Field,
@@ -179,18 +168,16 @@ public record DocumentSymbolHandler(Document document, List<Syntax.Statement> st
     }
 
     private DocumentSymbol nodeMemberDefSymbol(Syntax.Statement.NodeMemberDef nodeMemberDef) {
-        var range = document.rangeBetween(nodeMemberDef.start(), nodeMemberDef.end());
-        var selectionRange = identRange(nodeMemberDef.name(), document);
-        String detail = null;
-        if (nodeMemberDef.value() instanceof Syntax.Ident ident) {
-            detail = ident.stringValue();
-        }
+        String detail = switch (nodeMemberDef.value()) {
+            case Syntax.Ident ident -> ident.stringValue();
+            case null, default -> null;
+        };
 
         return new DocumentSymbol(
                 nodeMemberDef.name().stringValue(),
                 SymbolKind.Property,
-                range,
-                selectionRange,
+                document.rangeOf(nodeMemberDef),
+                document.rangeOfValue(nodeMemberDef.name()),
                 detail
         );
     }
@@ -199,13 +186,11 @@ public record DocumentSymbolHandler(Document document, List<Syntax.Statement> st
             ListIterator<Syntax.Statement> listIterator,
             Syntax.Statement.InlineMemberDef inlineMemberDef
     ) {
-        var range = document.rangeBetween(inlineMemberDef.start(), inlineMemberDef.end());
-        var selectionRange = identRange(inlineMemberDef.name(), document);
         var inlineSymbol = new DocumentSymbol(
                 inlineMemberDef.name().stringValue(),
                 SymbolKind.Property,
-                range,
-                selectionRange
+                document.rangeOf(inlineMemberDef),
+                document.rangeOfValue(inlineMemberDef.name())
         );
 
         addMemberSymbols(listIterator, inlineSymbol);
