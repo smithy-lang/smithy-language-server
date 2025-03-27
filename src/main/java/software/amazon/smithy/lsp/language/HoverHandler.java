@@ -8,7 +8,6 @@ package software.amazon.smithy.lsp.language;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -30,9 +29,7 @@ import software.amazon.smithy.model.shapes.SmithyIdlModelSerializer;
 import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.traits.DocumentationTrait;
 import software.amazon.smithy.model.traits.ExternalDocumentationTrait;
-import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidatedResult;
-import software.amazon.smithy.model.validation.ValidationEvent;
 
 /**
  * Handles hover requests for the Smithy IDL.
@@ -45,17 +42,14 @@ public final class HoverHandler {
 
     private final Project project;
     private final IdlFile smithyFile;
-    private final Severity minimumSeverity;
 
     /**
      * @param project Project the hover is in
      * @param smithyFile Smithy file the hover is in
-     * @param minimumSeverity Minimum severity of validation events to show
      */
-    public HoverHandler(Project project, IdlFile smithyFile, Severity minimumSeverity) {
+    public HoverHandler(Project project, IdlFile smithyFile) {
         this.project = project;
         this.smithyFile = smithyFile;
-        this.minimumSeverity = minimumSeverity;
     }
 
     /**
@@ -152,10 +146,10 @@ public final class HoverHandler {
             return EMPTY;
         }
 
-        return withShapeAndValidationEvents(matchingShape.get(), model, validatedModel.getValidationEvents());
+        return withShape(matchingShape.get(), model);
     }
 
-    private Hover withShapeAndValidationEvents(Shape shape, Model model, List<ValidationEvent> events) {
+    private Hover withShape(Shape shape, Model model) {
         String serializedShape = switch (shape) {
             case MemberShape memberShape -> serializeMember(memberShape);
             default -> serializeShape(model, shape);
@@ -165,14 +159,11 @@ public final class HoverHandler {
             return EMPTY;
         }
 
-        String serializedValidationEvents = serializeValidationEvents(events, shape);
-
         String hoverContent = String.format("""
-                %s
                 ```smithy
                 %s
                 ```
-                """, serializedValidationEvents, serializedShape);
+                """, serializedShape);
 
         // TODO: Add docs to a separate section of the hover content
         // if (shapeToSerialize.hasTrait(DocumentationTrait.class)) {
@@ -181,32 +172,6 @@ public final class HoverHandler {
         // }
 
         return withMarkupContents(hoverContent);
-    }
-
-    private String serializeValidationEvents(List<ValidationEvent> events, Shape shape) {
-        StringBuilder serialized = new StringBuilder();
-        List<ValidationEvent> applicableEvents = events.stream()
-                .filter(event -> event.getShapeId().isPresent())
-                .filter(event -> event.getShapeId().get().equals(shape.getId()))
-                .filter(event -> event.getSeverity().compareTo(minimumSeverity) >= 0)
-                .toList();
-
-        if (!applicableEvents.isEmpty()) {
-            for (ValidationEvent event : applicableEvents) {
-                serialized.append("**")
-                        .append(event.getSeverity())
-                        .append("**")
-                        .append(": ")
-                        .append(event.getMessage());
-            }
-            serialized.append(System.lineSeparator())
-                    .append(System.lineSeparator())
-                    .append("---")
-                    .append(System.lineSeparator())
-                    .append(System.lineSeparator());
-        }
-
-        return serialized.toString();
     }
 
     // Note: This isn't used for user-defined shapes because we include docs
