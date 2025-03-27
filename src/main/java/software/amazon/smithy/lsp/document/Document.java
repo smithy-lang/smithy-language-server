@@ -217,7 +217,7 @@ public final class Document {
      * @return The range of the token, excluding enclosing ""
      */
     public Range rangeOfValue(Syntax.Node.Str token) {
-        int lineStart = indexOfLine(token.line());
+        int lineStart = indexOfLine(token.lineNumber());
         if (lineStart < 0) {
             return null;
         }
@@ -230,7 +230,7 @@ public final class Document {
             endChar -= 1;
         }
 
-        return new Range(new Position(token.line(), startChar), new Position(token.line(), endChar));
+        return new Range(new Position(token.lineNumber(), startChar), new Position(token.lineNumber(), endChar));
     }
 
     /**

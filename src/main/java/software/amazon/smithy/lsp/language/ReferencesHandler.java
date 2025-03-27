@@ -73,14 +73,14 @@ public record ReferencesHandler(Project project, IdlFile idlFile) {
         private static ResponseErrorException notSupported() {
             var error = new ResponseError();
             error.setCode(ResponseErrorCode.RequestFailed);
-            error.setMessage("Not supported here.");
+            error.setMessage("Finding references not supported here.");
             return new ResponseErrorException(error);
         }
 
         private static ResponseErrorException noModel() {
             var error = new ResponseError();
             error.setCode(ResponseErrorCode.RequestFailed);
-            error.setMessage("Model is too broken.");
+            error.setMessage("Model is too broken to find references.");
             return new ResponseErrorException(error);
         }
     }

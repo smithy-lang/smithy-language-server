@@ -292,7 +292,7 @@ public class ReferencesHandlerTest {
 
         for (var position : twp.positions()) {
             assertThat(() -> ReferencesHandler.Config.create(project, idlFile, position),
-                    throwsWithMessage(containsString("Not supported")));
+                    throwsWithMessage(containsString("not supported")));
         }
     }
 

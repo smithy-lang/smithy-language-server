@@ -106,13 +106,12 @@ public record RenameHandler(Project project, IdlFile idlFile) {
                 return;
             }
 
-            var conflictingShape = ShapeSearch.findShape(sourceFile.getParse(), conflictingId, config.model())
-                    .orElse(null);
-            if (conflictingShape == null) {
+            var conflictingShape = ShapeSearch.findShape(sourceFile.getParse(), conflictingId, config.model());
+            if (conflictingShape.isEmpty()) {
                 return;
             }
 
-            var references = References.findReferences(config.model(), conflictingShape, sourceFile);
+            var references = References.findReferences(config.model(), conflictingShape.get(), sourceFile);
             for (var fileReferences : references.fileReferences()) {
                 addConflictRenames(fileReferences, conflictingId);
             }
