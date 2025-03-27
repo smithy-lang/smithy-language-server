@@ -642,21 +642,12 @@ final class Parser extends SimpleParser {
 
             ws();
 
-            if (isIdentStart()) {
-                var opMemberDef = new Syntax.Statement.MemberDef(parent, memberName);
-                opMemberDef.start = opMemberStart;
-                opMemberDef.colonPos = colonPos;
-                opMemberDef.target = ident();
-                setEnd(opMemberDef);
-                addStatement(opMemberDef);
-            } else {
-                var nodeMemberDef = new Syntax.Statement.NodeMemberDef(parent, memberName);
-                nodeMemberDef.start = opMemberStart;
-                nodeMemberDef.colonPos = colonPos;
-                nodeMemberDef.value = parseNode();
-                setEnd(nodeMemberDef);
-                addStatement(nodeMemberDef);
-            }
+            var nodeMemberDef = new Syntax.Statement.NodeMemberDef(parent, memberName);
+            nodeMemberDef.start = opMemberStart;
+            nodeMemberDef.colonPos = colonPos;
+            nodeMemberDef.value = parseNode();
+            setEnd(nodeMemberDef);
+            addStatement(nodeMemberDef);
 
             ws();
         }
