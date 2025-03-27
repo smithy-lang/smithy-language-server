@@ -62,11 +62,17 @@ import org.eclipse.lsp4j.InlayHint;
 import org.eclipse.lsp4j.InlayHintParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
+import org.eclipse.lsp4j.PrepareRenameDefaultBehavior;
+import org.eclipse.lsp4j.PrepareRenameParams;
+import org.eclipse.lsp4j.PrepareRenameResult;
 import org.eclipse.lsp4j.ProgressParams;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.ReferenceParams;
 import org.eclipse.lsp4j.Registration;
 import org.eclipse.lsp4j.RegistrationParams;
+import org.eclipse.lsp4j.RenameOptions;
+import org.eclipse.lsp4j.RenameParams;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.SetTraceParams;
 import org.eclipse.lsp4j.SymbolInformation;
@@ -82,10 +88,12 @@ import org.eclipse.lsp4j.UnregistrationParams;
 import org.eclipse.lsp4j.WorkDoneProgressBegin;
 import org.eclipse.lsp4j.WorkDoneProgressCancelParams;
 import org.eclipse.lsp4j.WorkDoneProgressEnd;
+import org.eclipse.lsp4j.WorkspaceEdit;
 import org.eclipse.lsp4j.WorkspaceFolder;
 import org.eclipse.lsp4j.WorkspaceFoldersOptions;
 import org.eclipse.lsp4j.WorkspaceServerCapabilities;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.eclipse.lsp4j.jsonrpc.messages.Either3;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageClientAware;
 import org.eclipse.lsp4j.services.LanguageServer;
@@ -106,6 +114,8 @@ import software.amazon.smithy.lsp.language.DocumentSymbolHandler;
 import software.amazon.smithy.lsp.language.FoldingRangeHandler;
 import software.amazon.smithy.lsp.language.HoverHandler;
 import software.amazon.smithy.lsp.language.InlayHintHandler;
+import software.amazon.smithy.lsp.language.ReferencesHandler;
+import software.amazon.smithy.lsp.language.RenameHandler;
 import software.amazon.smithy.lsp.project.BuildFile;
 import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
@@ -137,6 +147,8 @@ public class SmithyLanguageServer implements
         capabilities.setDocumentSymbolProvider(true);
         capabilities.setFoldingRangeProvider(true);
         capabilities.setInlayHintProvider(true);
+        capabilities.setReferencesProvider(true);
+        capabilities.setRenameProvider(new RenameOptions(true));
 
         WorkspaceFoldersOptions workspaceFoldersOptions = new WorkspaceFoldersOptions();
         workspaceFoldersOptions.setSupported(true);
@@ -710,6 +722,61 @@ public class SmithyLanguageServer implements
         Range range = document.fullRange();
         TextEdit edit = new TextEdit(range, formatted);
         return completedFuture(Collections.singletonList(edit));
+    }
+
+    @Override
+    public CompletableFuture<List<? extends Location>> references(ReferenceParams params) {
+        LOGGER.finest("References");
+        String uri = params.getTextDocument().getUri();
+        ProjectAndFile projectAndFile = state.findProjectAndFile(uri);
+        if (projectAndFile == null) {
+            client.unknownFileError(uri, "references");
+            return completedFuture(null);
+        }
+
+        if (!(projectAndFile.file() instanceof IdlFile idlFile)) {
+            return completedFuture(null);
+        }
+
+        var handler = new ReferencesHandler(projectAndFile.project(), idlFile);
+        return supplyAsync(() -> handler.handle(params));
+    }
+
+    @Override
+    public CompletableFuture<WorkspaceEdit> rename(RenameParams params) {
+        LOGGER.finest("Rename");
+        String uri = params.getTextDocument().getUri();
+        ProjectAndFile projectAndFile = state.findProjectAndFile(uri);
+        if (projectAndFile == null) {
+            client.unknownFileError(uri, "rename");
+            return completedFuture(null);
+        }
+
+        if (!(projectAndFile.file() instanceof IdlFile idlFile)) {
+            return completedFuture(null);
+        }
+
+        var handler = new RenameHandler(projectAndFile.project(), idlFile);
+        return supplyAsync(() -> handler.handle(params));
+    }
+
+    @Override
+    public CompletableFuture<Either3<Range, PrepareRenameResult, PrepareRenameDefaultBehavior>>
+    prepareRename(PrepareRenameParams params) {
+        LOGGER.finest("PrepareRename");
+        String uri = params.getTextDocument().getUri();
+        ProjectAndFile projectAndFile = state.findProjectAndFile(uri);
+        if (projectAndFile == null) {
+            client.unknownFileError(uri, "prepareRename");
+            return completedFuture(null);
+        }
+
+        if (!(projectAndFile.file() instanceof IdlFile idlFile)) {
+            return completedFuture(null);
+        }
+
+        var handler = new RenameHandler(projectAndFile.project(), idlFile);
+        return supplyAsync(() -> Either3.forFirst(handler.prepare(params)));
     }
 
     private void sendFileDiagnosticsForManagedDocuments() {

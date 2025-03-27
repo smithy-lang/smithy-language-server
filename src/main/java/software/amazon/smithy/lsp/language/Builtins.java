@@ -65,6 +65,8 @@ final class Builtins {
                     MemberShape::getMemberName,
                     memberShape -> memberShape.getTarget()));
 
+    static final ShapeId SERVICE_RENAME_ID = id("Rename");
+
     private Builtins() {
     }
 
