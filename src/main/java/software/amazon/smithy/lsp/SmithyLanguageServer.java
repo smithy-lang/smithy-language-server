@@ -678,8 +678,7 @@ public class SmithyLanguageServer implements
             case IdlFile idlFile -> {
                 Project project = projectAndFile.project();
 
-                // TODO: Abstract away passing minimum severity
-                var handler = new HoverHandler(project, idlFile, this.serverOptions.getMinimumSeverity());
+                var handler = new HoverHandler(project, idlFile);
                 yield CompletableFuture.supplyAsync(() -> handler.handle(params));
             }
             case BuildFile buildFile -> {
