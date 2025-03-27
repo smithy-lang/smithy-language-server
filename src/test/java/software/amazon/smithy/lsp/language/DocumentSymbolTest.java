@@ -103,7 +103,7 @@ public class DocumentSymbolTest {
 
         var myOpSymbol = symbols.get(3);
         assertThat(myOpSymbol.getName(), equalTo("MyOp"));
-        assertThat(myOpSymbol.getKind(), equalTo(SymbolKind.Class));
+        assertThat(myOpSymbol.getKind(), equalTo(SymbolKind.Interface));
         assertThat(myOpSymbol.getRange(), hasText(document, allOf(
                 containsString("operation MyOp"),
                 containsString("input :="),
@@ -141,7 +141,7 @@ public class DocumentSymbolTest {
 
         var myResourceSymbol = symbols.get(4);
         assertThat(myResourceSymbol.getName(), equalTo("MyResource"));
-        assertThat(myResourceSymbol.getKind(), equalTo(SymbolKind.Class));
+        assertThat(myResourceSymbol.getKind(), equalTo(SymbolKind.Interface));
         assertThat(myResourceSymbol.getRange(), hasText(document, allOf(
                 containsString("resource MyResource"),
                 containsString("myId: String"),
@@ -208,7 +208,7 @@ public class DocumentSymbolTest {
 
         var myOpSymbol = symbols.get(0);
         assertThat(myOpSymbol.getName(), equalTo("MyOp"));
-        assertThat(myOpSymbol.getKind(), equalTo(SymbolKind.Class));
+        assertThat(myOpSymbol.getKind(), equalTo(SymbolKind.Interface));
         assertThat(myOpSymbol.getRange(), hasText(document, allOf(
                 containsString("operation MyOp for MyResource with [MyMixin]"),
                 containsString("input: MyOpInput"),

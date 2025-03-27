@@ -130,6 +130,7 @@ public record DocumentSymbolHandler(Document document, List<Syntax.Statement> st
     private static SymbolKind getSymbolKind(Syntax.Statement.ShapeDef shapeDef) {
         return switch (shapeDef.shapeType().stringValue()) {
             case "enum", "intEnum" -> SymbolKind.Enum;
+            case "operation", "service", "resource" -> SymbolKind.Interface;
             default -> SymbolKind.Class;
         };
     }
