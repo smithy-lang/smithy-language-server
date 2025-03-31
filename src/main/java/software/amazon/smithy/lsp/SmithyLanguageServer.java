@@ -51,6 +51,7 @@ import org.eclipse.lsp4j.DocumentFilter;
 import org.eclipse.lsp4j.DocumentFormattingParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
+import org.eclipse.lsp4j.DynamicRegistrationCapabilities;
 import org.eclipse.lsp4j.FoldingRange;
 import org.eclipse.lsp4j.FoldingRangeRequestParams;
 import org.eclipse.lsp4j.Hover;
@@ -77,6 +78,7 @@ import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.SetTraceParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.TextDocumentChangeRegistrationOptions;
+import org.eclipse.lsp4j.TextDocumentClientCapabilities;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentRegistrationOptions;
@@ -273,10 +275,11 @@ public class SmithyLanguageServer implements
     }
 
     private boolean isDynamicSyncRegistrationSupported() {
-        return clientCapabilities != null
-               && clientCapabilities.getTextDocument() != null
-               && clientCapabilities.getTextDocument().getSynchronization() != null
-               && clientCapabilities.getTextDocument().getSynchronization().getDynamicRegistration();
+        return Optional.ofNullable(clientCapabilities)
+                .map(ClientCapabilities::getTextDocument)
+                .map(TextDocumentClientCapabilities::getSynchronization)
+                .map(DynamicRegistrationCapabilities::getDynamicRegistration)
+                .orElse(false);
     }
 
     private void registerDocumentSynchronization() {
