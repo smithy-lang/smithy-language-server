@@ -889,11 +889,11 @@ public class IdlParserTest {
             new InvalidSyntaxTestCase(
                     "regular shape missing assignment",
                     """
-                            structure Foo {
-                                foo
-                                bar
-                            }
-                            """,
+                    structure Foo {
+                        foo
+                        bar
+                    }
+                    """,
                     List.of("expected :","expected :"),
                     List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block, Syntax.Statement.Type.MemberDef, Syntax.Statement.Type.MemberDef)
             ),
@@ -955,11 +955,11 @@ public class IdlParserTest {
             ),
             new InvalidSyntaxTestCase(
                     "node shape missing assignment",
-                            """
-                            service Foo{
-                                a
-                                b
-                            }
+                    """
+                    service Foo{
+                        a
+                        b
+                    }
                     """,
                     List.of("expected :", "expected :"),
                     List.of(Syntax.Statement.Type.ShapeDef, Syntax.Statement.Type.Block, Syntax.Statement.Type.NodeMemberDef, Syntax.Statement.Type.NodeMemberDef)
@@ -1000,7 +1000,8 @@ public class IdlParserTest {
                             {
                             foo:\s
                             }
-                    }""",
+                    }
+                    """,
                     List.of("expected identifier"),
                     List.of(
                             Syntax.Statement.Type.ShapeDef,
@@ -1049,7 +1050,8 @@ public class IdlParserTest {
                     operation Op {
                         input
                         output
-                    }""",
+                    }
+                    """,
                     List.of("expected :", "expected :"),
                     List.of(
                             Syntax.Statement.Type.ShapeDef,
@@ -1060,7 +1062,7 @@ public class IdlParserTest {
             new InvalidSyntaxTestCase(
                     "trait use unexpected key",
                     """
-                            @integration(String:
+                    @integration(String:
                     """,
                     List.of("unexpected token "),
                     List.of(
@@ -1069,9 +1071,9 @@ public class IdlParserTest {
             new InvalidSyntaxTestCase(
                     "control without value",
                     """
-                            $version
-                            $operationInputSuffix "Request"
-                            $operationInputSuffix: "Request"
+                    $version
+                    $operationInputSuffix "Request"
+                    $operationInputSuffix: "Request"
                     """,
                     List.of("expected :", "expected :"),
                     List.of(
@@ -1082,8 +1084,8 @@ public class IdlParserTest {
             new InvalidSyntaxTestCase(
                     "metadata without equal",
                     """
-                            metadata bar
-                            structure foo{}
+                    metadata bar
+                    structure foo{}
                     """,
                     List.of("expected ="),
                     List.of(
