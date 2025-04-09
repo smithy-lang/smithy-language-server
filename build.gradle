@@ -16,6 +16,7 @@
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
+import java.util.regex.Pattern
 
 buildscript {
   repositories {
@@ -272,6 +273,27 @@ runtime {
 tasks["assembleDist"].dependsOn("publish")
 tasks["assembleDist"].dependsOn("runtimeZip")
 
+// Generate a changelog that only includes the changes for the latest version
+// which Jreleaser will add to the release notes of the github release.
+def releaseChangelogFile = project.layout.buildDirectory.file("resources/RELEASE_CHANGELOG.md").get().asFile
+tasks.register("createReleaseChangelog") {
+    dependsOn processResources
+
+    doLast {
+        def changelog = project.file("CHANGELOG.md").text
+        // Copy the text in between the first two version headers
+        def matcher = Pattern.compile("^## \\d+\\.\\d+\\.\\d+", Pattern.MULTILINE).matcher(changelog)
+        def getIndex = {
+            matcher.find()
+            return matcher.start()
+        }
+        def result = changelog.substring(getIndex(), getIndex()).trim()
+        releaseChangelogFile.write(result)
+    }
+}
+
+tasks.jreleaserRelease.dependsOn(tasks.createReleaseChangelog)
+
 jreleaser {
     dryrun = false
 
@@ -290,7 +312,7 @@ jreleaser {
             tagName = '{{projectVersion}}'
             releaseName = 'Smithy Language Server v{{{projectVersion}}}'
             changelog {
-                enabled = false
+                external = releaseChangelogFile.absolutePath
             }
             commitAuthor {
                 name = "smithy-automation"
