@@ -36,7 +36,10 @@ plugins {
     id "com.palantir.git-version" version "0.12.3"
     id "checkstyle"
     id "org.jreleaser" version "1.13.0"
-    id 'org.beryx.runtime' version '1.13.1'
+
+    // Fork of runtime plugin with java 21 support, until https://github.com/beryx/badass-runtime-plugin/issues/153
+    // is resolved.
+    id "com.dua3.gradle.runtime" version "1.13.1-patch-1"
 }
 
 
@@ -69,7 +72,7 @@ task javadocJar(type: Jar) {
 ext {
     // Load the Smithy Language Server version from VERSION.
     libraryVersion = project.file("VERSION").getText('UTF-8').replace(System.lineSeparator(), "")
-    imageJreVersion = "17"
+    imageJreVersion = "21"
     correttoRoot = "https://corretto.aws/downloads/latest/amazon-corretto-${imageJreVersion}"
 }
 
@@ -206,7 +209,7 @@ tasks.named("checkstyleTest") {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
