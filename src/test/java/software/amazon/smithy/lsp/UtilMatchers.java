@@ -5,6 +5,8 @@
 
 package software.amazon.smithy.lsp;
 
+import static software.amazon.smithy.lsp.document.DocumentTest.safeString;
+
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.util.Optional;
@@ -64,6 +66,34 @@ public final class UtilMatchers {
             @Override
             protected void describeMismatchSafely(Path item, Description mismatchDescription) {
                 mismatchDescription.appendText(item.toString() + " did not end with " + path.toString());
+            }
+        };
+    }
+
+    public static Matcher<String> stringEquals(String expected) {
+        return new CustomTypeSafeMatcher<>(expected) {
+            @Override
+            protected boolean matchesSafely(String item) {
+                return safeString(expected).equals(item);
+            }
+
+            @Override
+            protected void describeMismatchSafely(String item, Description mismatchDescription) {
+                mismatchDescription.appendText("was: " + item);
+            }
+        };
+    }
+
+    public static Matcher<Runnable> throwsWithMessage(Matcher<String> message) {
+        return new CustomTypeSafeMatcher<>("Throws " + message) {
+            @Override
+            protected boolean matchesSafely(Runnable item) {
+                try {
+                    item.run();
+                    return false;
+                } catch (Exception e) {
+                    return message.matches(e.getMessage());
+                }
             }
         };
     }

@@ -26,7 +26,11 @@ import org.eclipse.lsp4j.FileEvent;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.PrepareRenameParams;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.ReferenceContext;
+import org.eclipse.lsp4j.ReferenceParams;
+import org.eclipse.lsp4j.RenameParams;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
@@ -241,6 +245,29 @@ public final class RequestBuilders {
                     new TextDocumentIdentifier(uri),
                     new Position(line, character),
                     new CompletionContext(CompletionTriggerKind.Invoked));
+        }
+
+        public ReferenceParams buildReference() {
+            return new ReferenceParams(
+                    new TextDocumentIdentifier(uri),
+                    new Position(line, character),
+                    new ReferenceContext(true)
+            );
+        }
+
+        public RenameParams buildRename(String newName) {
+            return new RenameParams(
+                    new TextDocumentIdentifier(uri),
+                    new Position(line, character),
+                    newName
+            );
+        }
+
+        public PrepareRenameParams buildPrepareRename() {
+            return new PrepareRenameParams(
+                    new TextDocumentIdentifier(uri),
+                    new Position(line, character)
+            );
         }
     }
 

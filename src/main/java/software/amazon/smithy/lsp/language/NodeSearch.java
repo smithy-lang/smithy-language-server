@@ -194,11 +194,11 @@ final class NodeSearch {
 
                 case NodeCursor.Key key -> new Result.ObjectKey(key, shape, model);
 
-                case NodeCursor.ValueForKey ignored
-                        when shape instanceof MapShape map -> searchTarget(cursor, map.getValue());
+                case NodeCursor.ValueForKey value
+                        when shape instanceof MapShape map -> searchTarget(cursor, value.parent(), map.getValue());
 
                 case NodeCursor.ValueForKey value -> shape.getMember(value.keyName())
-                        .map(member -> searchTarget(cursor, member))
+                        .map(member -> searchTarget(cursor, value.parent(), member))
                         .orElse(Result.NONE);
 
                 default -> Result.NONE;
@@ -213,13 +213,13 @@ final class NodeSearch {
             return switch (cursor.next()) {
                 case NodeCursor.Terminal ignored -> new Result.ArrayShape(arr.node(), shape, model);
 
-                case NodeCursor.Elem ignored -> searchTarget(cursor, shape.getMember());
+                case NodeCursor.Elem elem -> searchTarget(cursor, elem.parent(), shape.getMember());
 
                 default -> Result.NONE;
             };
         }
 
-        protected Result searchTarget(NodeCursor cursor, MemberShape memberShape) {
+        protected Result searchTarget(NodeCursor cursor, Syntax.Node parent, MemberShape memberShape) {
             return search(cursor, model.getShape(memberShape.getTarget()).orElse(null), memberShape);
         }
     }
@@ -236,18 +236,16 @@ final class NodeSearch {
         }
 
         @Override
-        protected Result searchTarget(NodeCursor cursor, MemberShape memberShape) {
+        protected Result searchTarget(NodeCursor cursor, Syntax.Node parent, MemberShape memberShape) {
             DynamicMemberTarget dynamicMemberTarget = dynamicMemberTargets.get(memberShape.getId());
             if (dynamicMemberTarget != null) {
-                cursor.setCheckpoint();
-                Shape target = dynamicMemberTarget.getTarget(cursor, model);
-                cursor.returnToCheckpoint();
+                Shape target = dynamicMemberTarget.getTarget(parent, model);
                 if (target != null) {
                     return search(cursor, target, memberShape);
                 }
             }
 
-            return super.searchTarget(cursor, memberShape);
+            return super.searchTarget(cursor, parent, memberShape);
         }
     }
 }
