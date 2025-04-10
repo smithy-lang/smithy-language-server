@@ -28,12 +28,11 @@ public final class Main {
      * @throws Exception If there is an error starting the server.
      */
     public static void main(String[] args) throws Exception {
-        ArgumentParser parser = new ArgumentParser(args);
-        parser.parse();
-        if (parser.isHelp()) {
+        var serverArguments = ServerArguments.create(args);
+        if (serverArguments.help()) {
             System.exit(0);
         }
-        ServerLauncher launcher = new ServerLauncher(parser.getPortNumber());
+        ServerLauncher launcher = new ServerLauncher(serverArguments.getPortNumber());
         launcher.initConnection();
         launcher.launch();
         launcher.closeConnection();
