@@ -87,6 +87,21 @@ public class NodeParserTest {
                 Syntax.Node.Type.Str,
                 Syntax.Node.Type.Str);
     }
+    @Test
+    public void goodObjSingleKeyWithTrailingComma() {
+        String text = """
+                {"a":{"abc": "def"} , }""";
+        assertTypesEqual(text,
+                Syntax.Node.Type.Obj,
+                Syntax.Node.Type.Kvps,
+                Syntax.Node.Type.Kvp,
+                Syntax.Node.Type.Str,
+                Syntax.Node.Type.Obj,
+                Syntax.Node.Type.Kvps,
+                Syntax.Node.Type.Kvp,
+                Syntax.Node.Type.Str,
+                Syntax.Node.Type.Str);
+    }
 
     @Test
     public void goodEmptyArr() {
@@ -321,6 +336,14 @@ public class NodeParserTest {
                     List.of(Syntax.Node.Type.Obj, Syntax.Node.Type.Kvps, Syntax.Node.Type.Kvp, Syntax.Node.Type.Str)
             ),
             new InvalidSyntaxTestCase(
+                    "String key with : but no }",
+                    "{\"1\": abc, \"2\": def",
+                    List.of("missing }"),
+                    List.of(Syntax.Node.Type.Obj, Syntax.Node.Type.Kvps, Syntax.Node.Type.Kvp,
+                            Syntax.Node.Type.Str, Syntax.Node.Type.Ident, Syntax.Node.Type.Kvp,
+                            Syntax.Node.Type.Str, Syntax.Node.Type.Ident)
+            ),
+            new InvalidSyntaxTestCase(
                     "Invalid key",
                     "{\"abc}",
                     List.of("unexpected eof", "missing }"),
@@ -331,6 +354,34 @@ public class NodeParserTest {
                     "{\"abc\" 1}",
                     List.of("expected :"),
                     List.of(Syntax.Node.Type.Obj, Syntax.Node.Type.Kvps, Syntax.Node.Type.Kvp, Syntax.Node.Type.Str)
+            ),
+            new InvalidSyntaxTestCase(
+                    "Missing key in obj",
+                            "{,}",
+                    List.of(),
+                    List.of(Syntax.Node.Type.Obj, Syntax.Node.Type.Kvps)
+            ),
+            new InvalidSyntaxTestCase(
+                    "Missing colon and unexpected value in obj",
+                    "{foo ?}",
+                    List.of("expected :","unexpected token ?"),
+                    List.of(Syntax.Node.Type.Obj, Syntax.Node.Type.Kvps, Syntax.Node.Type.Kvp, Syntax.Node.Type.Ident)
+            ),
+            new InvalidSyntaxTestCase(
+                    "Unclosed text block",
+                    """
+                            \"\"\"abc
+                            """,
+                    List.of(),
+                    List.of(Syntax.Node.Type.Err)
+            ),
+            new InvalidSyntaxTestCase(
+                    "Invalid number",
+                    """
+                           123?
+                            """,
+                    List.of(),
+                    List.of(Syntax.Node.Type.Err)
             )
     );
 
@@ -392,6 +443,48 @@ public class NodeParserTest {
         Syntax.Node third = arr.elements().get(2);
         assertThat(third, instanceOf(Syntax.Node.Str.class));
         assertThat(((Syntax.Node.Str) third).stringValue().trim(), equalTo("foo"));
+    }
+
+    @Test
+    public void badKvpWithTrailingIncompleteKvp() {
+        String text = "{\"foo\":bar, \"buz\"}";
+        Document document = Document.of(text);
+        Syntax.Node.Obj node = (Syntax.Node.Obj)Syntax.parseNode(document).value();
+        Syntax.Node.Kvps kvps = node.kvps();
+        assertThat(document.copySpan(kvps.start, kvps.end), equalTo("{\"foo\":bar, \"buz\"}"));
+        Syntax.Node.Kvp first = kvps.kvps().get(0);
+        assertThat(document.copySpan(first.start, first.end), equalTo("\"foo\":bar"));
+        Syntax.Node.Kvp second = kvps.kvps().get(1);
+        assertThat(document.copySpan(second.start, second.end), equalTo("\"buz\""));
+    }
+
+    @Test
+    public void badKvpWithLeadingComma() {
+        String text = "{,\"foo\":bar}";
+        Document document = Document.of(text);
+        Syntax.Node.Obj node = (Syntax.Node.Obj)Syntax.parseNode(document).value();
+        Syntax.Node.Kvps kvps = node.kvps();
+        assertThat(document.copySpan(kvps.start, kvps.end), equalTo("{,\"foo\":bar}"));
+        Syntax.Node.Kvp first = kvps.kvps().get(0);
+        assertThat(document.copySpan(first.start, first.end), equalTo("\"foo\":bar"));
+    }
+
+    @Test
+    public void badArrWithLeadingComma() {
+        String text = "[,a,";
+        Document document = Document.of(text);
+        Syntax.Node.Arr arr = (Syntax.Node.Arr)Syntax.parseNode(document).value();
+        assertThat(arr.elements(), hasSize(1));
+        assertThat(document.copySpan(arr.elements.get(0).start, arr.elements.get(0).end), equalTo("a"));
+    }
+
+    @Test
+    public void badArrWithInvalidNum() {
+        String text = "[456?,123]";
+        Document document = Document.of(text);
+        Syntax.Node.Arr arr = (Syntax.Node.Arr)Syntax.parseNode(document).value();
+        assertThat(arr.elements(), hasSize(1));
+        assertThat(document.copySpan(arr.elements.get(0).start, arr.elements.get(0).end), equalTo("123"));
     }
 
     private static void assertTypesEqual(String text, Syntax.Node.Type... types) {
