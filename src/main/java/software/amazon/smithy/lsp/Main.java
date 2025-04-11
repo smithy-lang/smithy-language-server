@@ -15,6 +15,11 @@
 
 package software.amazon.smithy.lsp;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
+import org.eclipse.lsp4j.launch.LSPLauncher;
+
 /**
  * Main launcher for the Language server, started by the editor.
  */
@@ -32,9 +37,27 @@ public final class Main {
         if (serverArguments.help()) {
             System.exit(0);
         }
-        ServerLauncher launcher = new ServerLauncher(serverArguments.getPortNumber());
-        launcher.initConnection();
-        launcher.launch();
-        launcher.closeConnection();
+
+        launch(serverArguments);
+    }
+
+    private static void launch(ServerArguments serverArguments) throws Exception {
+        if (serverArguments.getPortNumber() == ServerArguments.DEFAULT_PORT) {
+            startServer(System.in, System.out);
+        } else {
+            try (var socket = new Socket("localhost", serverArguments.getPortNumber())) {
+                startServer(socket.getInputStream(), socket.getOutputStream());
+            }
+        }
+    }
+
+    private static void startServer(InputStream in, OutputStream out) throws Exception {
+        var server = new SmithyLanguageServer();
+        var launcher = LSPLauncher.createServerLauncher(server, in, out);
+
+        var client = launcher.getRemoteProxy();
+        server.connect(client);
+
+        launcher.startListening().get();
     }
 }
