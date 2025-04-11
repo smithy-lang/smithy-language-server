@@ -18,15 +18,15 @@ import software.amazon.smithy.cli.HelpPrinter;
  */
 final class ServerArguments implements ArgumentReceiver {
 
-    static final int MIN_PORT = 0;
-    static final int MAX_PORT = 65535;
-    static final int DEFAULT_PORT = 0; // Default value for unset port number.
-    static final String HELP = "--help";
-    static final String HELP_SHORT = "-h";
-    static final String PORT_NUMBER = "--port-number";
-    static final String PORT_NUMBER_SHORT = "-p";
-    static final String PORT_NUMBER_POSITIONAL = "<port_number>";
-    private int portNumber = DEFAULT_PORT;
+    private static final int MIN_PORT = 0;
+    private static final int MAX_PORT = 65535;
+    private static final int DEFAULT_PORT = 0; // Default value for unset port number.
+    private static final String HELP = "--help";
+    private static final String HELP_SHORT = "-h";
+    private static final String PORT = "--port";
+    private static final String PORT_SHORT = "-p";
+    private static final String PORT_POSITIONAL = "<port>";
+    private int port = DEFAULT_PORT;
     private boolean help = false;
 
 
@@ -39,7 +39,7 @@ final class ServerArguments implements ArgumentReceiver {
             serverArguments.printHelp(arguments);
         }
         if (!positional.isEmpty()) {
-            serverArguments.portNumber = serverArguments.validatePortNumber(positional.getFirst());
+            serverArguments.port = serverArguments.validatePortNumber(positional.getFirst());
         }
         return serverArguments;
     }
@@ -47,9 +47,12 @@ final class ServerArguments implements ArgumentReceiver {
     @Override
     public void registerHelp(HelpPrinter printer) {
         printer.option(HELP, HELP_SHORT, "Print this help output.");
-        printer.param(PORT_NUMBER, PORT_NUMBER_SHORT, "PORT_NUMBER",
-                "The port number to be used by the Smithy Language Server. Default port number is 0 if not specified.");
-        printer.option(PORT_NUMBER_POSITIONAL, null, "Positional port-number.");
+        printer.param(PORT, PORT_SHORT, "PORT",
+                "The port to use for talking to the client. When not specified, or set to 0, "
+                        + "standard in/out is used. Standard in/out is preferred, "
+                        + "so usually this shouldn't be specified.");
+        printer.option(PORT_POSITIONAL, null, "Deprecated: use --port instead. When not specified, or set to 0, "
+                + "standard in/out is used. Standard in/out is preferred, so usually this shouldn't be specified.");
     }
 
     @Override
@@ -63,40 +66,44 @@ final class ServerArguments implements ArgumentReceiver {
 
     @Override
     public Consumer<String> testParameter(String name) {
-        if (name.equals(PORT_NUMBER_SHORT) || name.equals(PORT_NUMBER)) {
+        if (name.equals(PORT_SHORT) || name.equals(PORT)) {
             return value -> {
-                portNumber = validatePortNumber(value);
+                port = validatePortNumber(value);
             };
         }
         return null;
     }
 
-    public int getPortNumber() {
-        return portNumber;
+    int port() {
+        return port;
     }
 
-    public boolean help() {
+    boolean help() {
         return help;
     }
 
-    public int validatePortNumber(String portNumberStr) {
+    public boolean useSocket() {
+        return port != 0;
+    }
+
+    private int validatePortNumber(String portStr) {
         try {
-            int portNumber = Integer.parseInt(portNumberStr);
+            int portNumber = Integer.parseInt(portStr);
             if (portNumber < MIN_PORT || portNumber > MAX_PORT) {
-                throw new CliError("Invalid port number!");
+                throw new CliError("Invalid port number: should be an integer between "
+                        + MIN_PORT + " and " + MAX_PORT + ", inclusive.");
             } else {
                 return portNumber;
             }
         } catch (NumberFormatException e) {
-            throw new CliError("Invalid port number!");
+            throw new CliError("Invalid port number: Can not parse " + portStr);
         }
     }
 
-
     private void printHelp(Arguments arguments) {
         CliPrinter printer = CliPrinter.fromOutputStream(System.out);
-        HelpPrinter helpPrinter = HelpPrinter.fromArguments("java -jar smithy-lsp.jar", arguments);
-        helpPrinter.summary("Options for the Smithy Language Server:");
+        HelpPrinter helpPrinter = HelpPrinter.fromArguments("smithy-language-server", arguments);
+        helpPrinter.summary("Run the Smithy Language Server.");
         helpPrinter.print(AnsiColorFormatter.AUTO, printer);
         printer.flush();
     }

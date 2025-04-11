@@ -42,12 +42,12 @@ public final class Main {
     }
 
     private static void launch(ServerArguments serverArguments) throws Exception {
-        if (serverArguments.getPortNumber() == ServerArguments.DEFAULT_PORT) {
-            startServer(System.in, System.out);
-        } else {
-            try (var socket = new Socket("localhost", serverArguments.getPortNumber())) {
+        if (serverArguments.useSocket()) {
+            try (var socket = new Socket("localhost", serverArguments.port())) {
                 startServer(socket.getInputStream(), socket.getOutputStream());
             }
+        } else {
+            startServer(System.in, System.out);
         }
     }
 

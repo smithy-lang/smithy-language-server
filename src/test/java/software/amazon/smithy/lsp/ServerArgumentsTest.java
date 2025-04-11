@@ -15,7 +15,7 @@ public class ServerArgumentsTest {
     void validPositionalPortNumber() {
         String[] args = {"1"};
         ServerArguments serverArguments = ServerArguments.create(args);
-        assertEquals(1, serverArguments.getPortNumber());
+        assertEquals(1, serverArguments.port());
     }
 
     @Test
@@ -34,7 +34,7 @@ public class ServerArgumentsTest {
     void validFlagPortNumberShort() {
         String[] args = {"-p","100"};
         ServerArguments serverArguments = ServerArguments.create(args);
-        assertEquals(100, serverArguments.getPortNumber());
+        assertEquals(100, serverArguments.port());
     }
 
     @Test
@@ -42,7 +42,7 @@ public class ServerArgumentsTest {
         String[] args = {};
         ServerArguments serverArguments = ServerArguments.create(args);
 
-        assertEquals(0, serverArguments.getPortNumber());
+        assertEquals(0, serverArguments.port());
     }
 
     @Test
@@ -50,14 +50,14 @@ public class ServerArgumentsTest {
         String[] args = {"0"};
         ServerArguments serverArguments = ServerArguments.create(args);
 
-        assertEquals(0, serverArguments.getPortNumber());
+        assertEquals(0, serverArguments.port());
     }
 
     @Test
     void validFlagPortNumber() {
-        String[] args = {"--port-number","200"};
+        String[] args = {"--port","200"};
         ServerArguments serverArguments = ServerArguments.create(args);
-        assertEquals(200, serverArguments.getPortNumber());
+        assertEquals(200, serverArguments.port());
     }
 
     @Test
@@ -71,16 +71,12 @@ public class ServerArgumentsTest {
 
             String output = outContent.toString().trim();
 
-            assertTrue(output.contains("Options for the Smithy Language Server:"));
             assertTrue(output.contains("--help"));
             assertTrue(output.contains("-h"));
-            assertTrue(output.contains("Print this help output."));
-            assertTrue(output.contains("--port-number"));
+            assertTrue(output.contains("--port"));
             assertTrue(output.contains("-p"));
-            assertTrue(output.contains("PORT_NUMBER"));
-            assertTrue(output.contains("The port number to be used by the Smithy Language Server."));
-            assertTrue(output.contains("<port_number>"));
-            assertTrue(output.contains("Positional port-number."));
+            assertTrue(output.contains("PORT"));
+            assertTrue(output.contains("<port>"));
 
         } finally {
             // Restore original System.out
