@@ -23,14 +23,11 @@ import java.util.Properties
 import java.util.regex.Pattern
 
 plugins {
-    // Apply the java plugin to add support for Java
-    id("java")
+    java
+    application
+    `maven-publish`
+    checkstyle
 
-    // Apply the application plugin to add support for building a CLI application.
-    id("application")
-
-    id("maven-publish")
-    id("checkstyle")
     id("org.jreleaser") version "1.13.0"
 
     // Fork of runtime plugin with java 21 support, until https://github.com/beryx/badass-runtime-plugin/issues/153
@@ -40,18 +37,15 @@ plugins {
 
 // Reusable license copySpec for building JARs
 val licenseSpec = copySpec {
-    from("${project.rootDir}/LICENSE")
-    from("${project.rootDir}/NOTICE")
+    from("LICENSE", "NOTICE")
 }
 
-// Set up tasks that build source and javadoc jars.
 tasks.register<Jar>("sourcesJar") {
     metaInf.with(licenseSpec)
     from(sourceSets.main.get().allJava)
     archiveClassifier = "sources"
 }
 
-// Build a javadoc JAR too.
 tasks.register<Jar>("javadocJar") {
     metaInf.with(licenseSpec)
     from(tasks.javadoc)
@@ -64,9 +58,7 @@ description = "Language Server Protocol implementation for Smithy"
 
 println("Smithy Language Server version: '${version}'")
 
-val imageJreVersion = "21"
-val correttoRoot = "https://corretto.aws/downloads/latest/amazon-corretto-${imageJreVersion}"
-val stagingDirectory = rootProject.layout.buildDirectory.dir("staging")
+val stagingDirectory = layout.buildDirectory.dir("staging")
 
 repositories {
     mavenLocal()
@@ -85,33 +77,34 @@ publishing {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
 
-            // Ship the source and javadoc jars.
             artifact(tasks["sourcesJar"])
             artifact(tasks["javadocJar"])
 
-            // Include extra information in the POMs.
             pom {
-                name.set("Smithy Language Server")
-                description.set(project.description)
-                url.set("https://github.com/smithy-lang/smithy-language-server")
+                name = "Smithy Language Server"
+                description = project.description
+                url = "https://github.com/smithy-lang/smithy-language-server"
+
                 licenses {
                     license {
-                        name.set("Apache License 2.0")
-                        url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
-                        distribution.set("repo")
+                        name = "Apache License 2.0"
+                        url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
+                        distribution = "repo"
                     }
                 }
+
                 developers {
                     developer {
-                        id.set("smithy")
-                        name.set("Smithy")
-                        organization.set("Amazon Web Services")
-                        organizationUrl.set("https://aws.amazon.com")
+                        id = "smithy"
+                        name = "Smithy"
+                        organization = "Amazon Web Services"
+                        organizationUrl = "https://aws.amazon.com"
                         roles.add("developer")
                     }
                 }
+
                 scm {
-                    url.set("https://github.com/smithy-lang/smithy-language-server.git")
+                    url = "https://github.com/smithy-lang/smithy-language-server.git"
                 }
             }
         }
@@ -155,10 +148,11 @@ tasks.withType<Test>().configureEach {
 
 tasks.register("createProperties") {
     dependsOn(tasks.processResources)
+
     doLast {
-        val file = project.layout.buildDirectory.file("resources/main/version.properties").get().asFile
+        val file = layout.buildDirectory.file("resources/main/version.properties").get().asFile
         val properties = Properties()
-        properties["version"] = project.version.toString()
+        properties["version"] = version.toString()
         properties.store(file.writer(), null)
     }
 }
@@ -194,7 +188,6 @@ tasks.jar {
     }
 }
 
-
 runtime {
     addOptions("--compress", "2", "--strip-debug", "--no-header-files", "--no-man-pages")
     addModules("java.logging", "java.naming", "java.xml", "jdk.crypto.ec")
@@ -206,6 +199,9 @@ runtime {
                 "-XX:SharedArchiveFile={{BIN_DIR}}/../lib/smithy.jsa"
         )
     }
+
+    val imageJreVersion = "21"
+    val correttoRoot = "https://corretto.aws/downloads/latest/amazon-corretto-${imageJreVersion}"
 
     targetPlatform("linux-x86_64") {
         jdkHome = jdkDownload("${correttoRoot}-x64-linux-jdk.tar.gz")
@@ -236,13 +232,13 @@ tasks.assembleDist {
 }
 
 // Generate a changelog that only includes the changes for the latest version
-// which Jreleaser will add to the release notes of the github release.
-val releaseChangelogFile = project.layout.buildDirectory.file("resources/RELEASE_CHANGELOG.md").get()
+// which JReleaser will add to the release notes of the GitHub release.
+val releaseChangelogFile = layout.buildDirectory.file("resources/RELEASE_CHANGELOG.md").get()
 tasks.register("createReleaseChangelog") {
     dependsOn(tasks.processResources)
 
     doLast {
-        val changelog = project.file("CHANGELOG.md").readText()
+        val changelog = file("CHANGELOG.md").readText()
         // Copy the text in between the first two version headers
         val matcher = Pattern.compile("^## \\d+\\.\\d+\\.\\d+", Pattern.MULTILINE).matcher(changelog)
         val getIndex = fun(): Int {
@@ -275,9 +271,11 @@ jreleaser {
             overwrite = true
             tagName = "{{projectVersion}}"
             releaseName = "Smithy Language Server v{{{projectVersion}}}"
+
             changelog {
                 external = releaseChangelogFile
             }
+
             commitAuthor {
                 name = "smithy-automation"
                 email = "github-smithy-automation@amazon.com"
@@ -287,6 +285,7 @@ jreleaser {
 
     files {
         active = Active.ALWAYS
+
         artifact {
             // We'll include the VERSION file in the release artifacts so that the version can be easily
             // retrieving by hitting the GitHub `releases/latest` url
@@ -310,27 +309,27 @@ jreleaser {
             stereotype = Stereotype.CLI
 
             artifact {
-                path = file("build/image/smithy-language-server-linux-x86_64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-linux-x86_64.zip")
                 platform = "linux-x86_64"
             }
 
             artifact {
-                path = file("build/image/smithy-language-server-linux-aarch64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-linux-aarch64.zip")
                 platform = "linux-aarch_64"
             }
 
             artifact {
-                path = file("build/image/smithy-language-server-darwin-x86_64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-darwin-x86_64.zip")
                 platform = "osx-x86_64"
             }
 
             artifact {
-                path = file("build/image/smithy-language-server-darwin-aarch64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-darwin-aarch64.zip")
                 platform = "osx-aarch_64"
             }
 
             artifact {
-                path = file("build/image/smithy-language-server-windows-x64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-windows-x64.zip")
                 platform = "windows-x86_64"
             }
         }
