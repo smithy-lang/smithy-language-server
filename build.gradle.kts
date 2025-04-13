@@ -22,14 +22,6 @@ import java.util.Properties
 
 import java.util.regex.Pattern
 
-buildscript {
-  repositories {
-    maven { url = uri("https://plugins.gradle.org/m2/") }
-    mavenLocal()
-  }
-}
-
-
 plugins {
     // Apply the java plugin to add support for Java
     id("java")
@@ -45,7 +37,6 @@ plugins {
     // is resolved.
     id("com.dua3.gradle.runtime") version "1.13.1-patch-1"
 }
-
 
 // Reusable license copySpec for building JARs
 val licenseSpec = copySpec {
@@ -67,21 +58,15 @@ tasks.register<Jar>("javadocJar") {
     archiveClassifier = "javadoc"
 }
 
-val libraryVersion = project.file("VERSION").readText().trim()
+group = "software.amazon.smithy"
+version = file("VERSION").readText().trim()
+description = "Language Server Protocol implementation for Smithy"
+
+println("Smithy Language Server version: '${version}'")
+
 val imageJreVersion = "21"
 val correttoRoot = "https://corretto.aws/downloads/latest/amazon-corretto-${imageJreVersion}"
-
-println("Smithy Language Server version: '${libraryVersion}'")
-
 val stagingDirectory = rootProject.layout.buildDirectory.dir("staging")
-
-allprojects {
-    apply(plugin = "java")
-    apply(plugin = "maven-publish")
-    group = "software.amazon.smithy"
-    version = libraryVersion
-    description = "Language Server Protocol implementation for Smithy"
-}
 
 repositories {
     mavenLocal()
@@ -98,9 +83,6 @@ publishing {
 
     publications {
         create<MavenPublication>("mavenJava") {
-            groupId = project.group.toString()
-            artifactId = "smithy-language-server"
-
             from(components["java"])
 
             // Ship the source and javadoc jars.
@@ -108,30 +90,28 @@ publishing {
             artifact(tasks["javadocJar"])
 
             // Include extra information in the POMs.
-            afterEvaluate {
-                pom {
-                    name.set("Smithy Language Server")
-                    description.set(project.description)
-                    url.set("https://github.com/smithy-lang/smithy-language-server")
-                    licenses {
-                        license {
-                            name.set("Apache License 2.0")
-                            url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
-                            distribution.set("repo")
-                        }
+            pom {
+                name.set("Smithy Language Server")
+                description.set(project.description)
+                url.set("https://github.com/smithy-lang/smithy-language-server")
+                licenses {
+                    license {
+                        name.set("Apache License 2.0")
+                        url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+                        distribution.set("repo")
                     }
-                    developers {
-                        developer {
-                            id.set("smithy")
-                            name.set("Smithy")
-                            organization.set("Amazon Web Services")
-                            organizationUrl.set("https://aws.amazon.com")
-                            roles.add("developer")
-                        }
+                }
+                developers {
+                    developer {
+                        id.set("smithy")
+                        name.set("Smithy")
+                        organization.set("Amazon Web Services")
+                        organizationUrl.set("https://aws.amazon.com")
+                        roles.add("developer")
                     }
-                    scm {
-                        url.set("https://github.com/smithy-lang/smithy-language-server.git")
-                    }
+                }
+                scm {
+                    url.set("https://github.com/smithy-lang/smithy-language-server.git")
                 }
             }
         }
@@ -165,7 +145,7 @@ tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 
     testLogging {
-        events = setOf(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED, TestLogEvent.STANDARD_OUT, TestLogEvent.STANDARD_ERROR)
+        events = setOf(TestLogEvent.SKIPPED, TestLogEvent.FAILED)
         exceptionFormat = TestExceptionFormat.FULL
         showExceptions = true
         showCauses = true
@@ -192,10 +172,7 @@ application {
     mainClass = "software.amazon.smithy.lsp.Main"
 }
 
-// ==== CheckStyle ====
-// https://docs.gradle.org/current/userguide/checkstyle_plugin.html
-apply(plugin = "checkstyle")
-tasks.named("checkstyleTest") {
+tasks.checkstyleTest {
     enabled = false
 }
 
@@ -206,19 +183,12 @@ java {
 }
 
 tasks.jar {
-    from (configurations.compileClasspath.get().map { zipTree(it) }) {
-        exclude("about.html")
-        exclude("META-INF/LICENSE")
-        exclude("META-INF/LICENSE.txt")
-        exclude("META-INF/NOTICE")
-        exclude("META-INF/MANIFEST.MF")
-        exclude("META-INF/*.SF")
-        exclude("META-INF/*.DSA")
-        exclude("META-INF/*.RSA")
-        exclude("reflect.properties")
-        // Included by dependencies in later versions of java, causes duplicate entries in the output jar
-        exclude("**/module-info.class")
+    from(configurations.runtimeClasspath.get().map { zipTree(it) }) {
+        // Don't need signature files, and we don't use modules
+        exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "**/module-info.class")
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
+
     manifest {
         attributes("Main-Class" to "software.amazon.smithy.lsp.Main")
     }
@@ -261,8 +231,9 @@ runtime {
     imageZip = layout.buildDirectory.file("image/smithy-language-server.zip")
 }
 
-tasks["assembleDist"].dependsOn("publish")
-tasks["assembleDist"].dependsOn("runtimeZip")
+tasks.assembleDist {
+    dependsOn(tasks.publish, tasks.runtimeZip)
+}
 
 // Generate a changelog that only includes the changes for the latest version
 // which Jreleaser will add to the release notes of the github release.
@@ -283,7 +254,9 @@ tasks.register("createReleaseChangelog") {
     }
 }
 
-tasks.jreleaserRelease.get().dependsOn(tasks.processResources)
+tasks.jreleaserRelease {
+    dependsOn(tasks["createReleaseChangelog"])
+}
 
 jreleaser {
     dryrun = false
