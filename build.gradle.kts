@@ -126,8 +126,6 @@ dependencies {
     testImplementation("org.hamcrest:hamcrest:2.2")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-
-    checkstyle("com.puppycrawl.tools:checkstyle:${checkstyle.toolVersion}")
 }
 
 tasks.withType<Javadoc> {
