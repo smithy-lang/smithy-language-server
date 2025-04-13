@@ -38,7 +38,6 @@ plugins {
     id("application")
 
     id("maven-publish")
-    id("com.palantir.git-version") version "0.12.3"
     id("checkstyle")
     id("org.jreleaser") version "1.13.0"
 
@@ -47,9 +46,6 @@ plugins {
     id("com.dua3.gradle.runtime") version "1.13.1-patch-1"
 }
 
-
-val gitVersion: groovy.lang.Closure<String> by extra
-version = gitVersion().replaceFirst("v", "")
 
 // Reusable license copySpec for building JARs
 val licenseSpec = copySpec {
