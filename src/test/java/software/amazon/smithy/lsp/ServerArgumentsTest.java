@@ -63,6 +63,24 @@ public class ServerArgumentsTest {
     }
 
     @Test
+    void defaultPortNumberWithFlag() {
+        String[] args = {"--port","0"};
+        ServerArguments serverArguments = ServerArguments.create(args);
+        assertEquals(0, serverArguments.port());
+        assertFalse(serverArguments.help());
+        assertFalse(serverArguments.useSocket());
+    }
+
+    @Test
+    void defaultPortNumberWithShotFlag() {
+        String[] args = {"-p","0"};
+        ServerArguments serverArguments = ServerArguments.create(args);
+        assertEquals(0, serverArguments.port());
+        assertFalse(serverArguments.help());
+        assertFalse(serverArguments.useSocket());
+    }
+
+    @Test
     void validFlagPortNumber() {
         String[] args = {"--port","200"};
         ServerArguments serverArguments = ServerArguments.create(args);
