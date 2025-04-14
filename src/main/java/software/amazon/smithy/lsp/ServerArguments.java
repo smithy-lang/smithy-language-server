@@ -6,11 +6,9 @@
 package software.amazon.smithy.lsp;
 
 import java.util.function.Consumer;
-import software.amazon.smithy.cli.AnsiColorFormatter;
 import software.amazon.smithy.cli.ArgumentReceiver;
 import software.amazon.smithy.cli.Arguments;
 import software.amazon.smithy.cli.CliError;
-import software.amazon.smithy.cli.CliPrinter;
 import software.amazon.smithy.cli.HelpPrinter;
 
 /**
@@ -35,9 +33,6 @@ final class ServerArguments implements ArgumentReceiver {
         var serverArguments = new ServerArguments();
         arguments.addReceiver(serverArguments);
         var positional = arguments.getPositional();
-        if (serverArguments.help()) {
-            serverArguments.printHelp(arguments);
-        }
         if (!positional.isEmpty()) {
             serverArguments.port = serverArguments.validatePortNumber(positional.getFirst());
         }
@@ -82,7 +77,7 @@ final class ServerArguments implements ArgumentReceiver {
         return help;
     }
 
-    public boolean useSocket() {
+    boolean useSocket() {
         return port != 0;
     }
 
@@ -90,22 +85,17 @@ final class ServerArguments implements ArgumentReceiver {
         try {
             int portNumber = Integer.parseInt(portStr);
             if (portNumber < MIN_PORT || portNumber > MAX_PORT) {
-                throw new CliError("Invalid port number: should be an integer between "
-                        + MIN_PORT + " and " + MAX_PORT + ", inclusive.");
+                throw invalidPort(portStr);
             } else {
                 return portNumber;
             }
         } catch (NumberFormatException e) {
-            throw new CliError("Invalid port number: Can not parse " + portStr);
+            throw invalidPort(portStr);
         }
     }
 
-    private void printHelp(Arguments arguments) {
-        CliPrinter printer = CliPrinter.fromOutputStream(System.out);
-        HelpPrinter helpPrinter = HelpPrinter.fromArguments("smithy-language-server", arguments);
-        helpPrinter.summary("Run the Smithy Language Server.");
-        helpPrinter.print(AnsiColorFormatter.AUTO, printer);
-        printer.flush();
+    private static CliError invalidPort(String portStr) {
+        return new CliError("Invalid port number: expected an integer between "
+                + MIN_PORT + " and " + MAX_PORT + ", inclusive. Was: " + portStr);
     }
-
 }

@@ -19,6 +19,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import org.eclipse.lsp4j.launch.LSPLauncher;
+import software.amazon.smithy.cli.AnsiColorFormatter;
+import software.amazon.smithy.cli.CliPrinter;
+import software.amazon.smithy.cli.HelpPrinter;
 
 /**
  * Main launcher for the Language server, started by the editor.
@@ -35,6 +38,7 @@ public final class Main {
     public static void main(String[] args) throws Exception {
         var serverArguments = ServerArguments.create(args);
         if (serverArguments.help()) {
+            printHelp(serverArguments);
             System.exit(0);
         }
 
@@ -59,5 +63,14 @@ public final class Main {
         server.connect(client);
 
         launcher.startListening().get();
+    }
+
+    private static void printHelp(ServerArguments serverArguments) {
+        CliPrinter printer = CliPrinter.fromOutputStream(System.out);
+        HelpPrinter helpPrinter = new HelpPrinter("smithy-language-server");
+        serverArguments.registerHelp(helpPrinter);
+        helpPrinter.summary("Run the Smithy Language Server.");
+        helpPrinter.print(AnsiColorFormatter.AUTO, printer);
+        printer.flush();
     }
 }

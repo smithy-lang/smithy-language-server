@@ -7,6 +7,7 @@ import software.amazon.smithy.cli.CliError;
 
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,12 +17,15 @@ public class ServerArgumentsTest {
         String[] args = {"1"};
         ServerArguments serverArguments = ServerArguments.create(args);
         assertEquals(1, serverArguments.port());
+        assertFalse(serverArguments.help());
+        assertTrue(serverArguments.useSocket());
     }
 
     @Test
     void invalidPositionalPortNumber() {
         String[] args = {"65536"};
         assertThrows(CliError.class,()-> {ServerArguments.create(args);});
+
     }
 
     @Test
@@ -35,6 +39,8 @@ public class ServerArgumentsTest {
         String[] args = {"-p","100"};
         ServerArguments serverArguments = ServerArguments.create(args);
         assertEquals(100, serverArguments.port());
+        assertFalse(serverArguments.help());
+        assertTrue(serverArguments.useSocket());
     }
 
     @Test
@@ -43,14 +49,17 @@ public class ServerArgumentsTest {
         ServerArguments serverArguments = ServerArguments.create(args);
 
         assertEquals(0, serverArguments.port());
+        assertFalse(serverArguments.help());
+        assertFalse(serverArguments.useSocket());
     }
 
     @Test
     void defaultPortNumberInArg() {
         String[] args = {"0"};
         ServerArguments serverArguments = ServerArguments.create(args);
-
         assertEquals(0, serverArguments.port());
+        assertFalse(serverArguments.help());
+        assertFalse(serverArguments.useSocket());
     }
 
     @Test
@@ -61,32 +70,24 @@ public class ServerArgumentsTest {
     }
 
     @Test
-    void validHelp() {
-        ByteArrayOutputStream outContent = new ByteArrayOutputStream();
-        PrintStream originalOut = System.out;
-        System.setOut(new PrintStream(outContent));
-
-        try {
-            ServerArguments.create(new String[]{"--help"});
-
-            String output = outContent.toString().trim();
-
-            assertTrue(output.contains("--help"));
-            assertTrue(output.contains("-h"));
-            assertTrue(output.contains("--port"));
-            assertTrue(output.contains("-p"));
-            assertTrue(output.contains("PORT"));
-            assertTrue(output.contains("<port>"));
-
-        } finally {
-            // Restore original System.out
-            System.setOut(originalOut);
-        }
-    }
-
-    @Test
     void invalidFlag() {
         String[] args = {"--foo"};
         assertThrows(CliError.class,()-> {ServerArguments.create(args);});
+    }
+
+    @Test
+    void validHelpShort() {
+        String[] args = {"-h"};
+        ServerArguments serverArguments = ServerArguments.create(args);
+        assertTrue(serverArguments.help());
+        assertFalse(serverArguments.useSocket());
+    }
+
+    @Test
+    void validHelp() {
+        String[] args = {"--help"};
+        ServerArguments serverArguments = ServerArguments.create(args);
+        assertTrue(serverArguments.help());
+        assertFalse(serverArguments.useSocket());
     }
 }
