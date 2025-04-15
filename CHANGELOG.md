@@ -1,5 +1,18 @@
 # Smithy Language Server Changelog
 
+## 0.7.0 (2025-04-15)
+
+### Features
+* Added standalone runtime images to GitHub release, to run the language server without a local Java installation. ([#159](https://github.com/smithy-lang/smithy-language-server/pull/159))
+* Improved how the language server is launched from the CLI. ([#218](https://github.com/smithy-lang/smithy-language-server/pull/218))
+* Added textDocument/rename support. ([#213](https://github.com/smithy-lang/smithy-language-server/pull/213))
+* Added textDocument/references support. ([#213](https://github.com/smithy-lang/smithy-language-server/pull/213))
+* Made textDocument/documentSymbol return hierarchical symbols. ([#206](https://github.com/smithy-lang/smithy-language-server/pull/206))
+
+### Bug fixes
+* Fixed possible crash on initialization. ([#216](https://github.com/smithy-lang/smithy-language-server/pull/216))
+* Removed extraneous validation events from hover content. ([#214](https://github.com/smithy-lang/smithy-language-server/pull/214))
+
 ## 0.6.0 (2025-03-10)
 
 ### Features
