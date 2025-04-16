@@ -29,6 +29,7 @@ println("Smithy Language Server version: '${version}'")
 
 val stagingDirectory = layout.buildDirectory.dir("staging")
 val releaseChangelogFile = layout.buildDirectory.file("resources/RELEASE_CHANGELOG.md").get()
+val smithyVersion: String by project
 
 plugins {
     java
@@ -50,10 +51,10 @@ repositories {
 
 dependencies {
     implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1")
-    implementation("software.amazon.smithy:smithy-build:[smithyVersion, 2.0[")
-    implementation("software.amazon.smithy:smithy-cli:[smithyVersion, 2.0[")
-    implementation("software.amazon.smithy:smithy-model:[smithyVersion, 2.0[")
-    implementation("software.amazon.smithy:smithy-syntax:[smithyVersion, 2.0[")
+    implementation("software.amazon.smithy:smithy-build:[$smithyVersion, 2.0[")
+    implementation("software.amazon.smithy:smithy-cli:[$smithyVersion, 2.0[")
+    implementation("software.amazon.smithy:smithy-model:[$smithyVersion, 2.0[")
+    implementation("software.amazon.smithy:smithy-syntax:[$smithyVersion, 2.0[")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
     testImplementation("org.hamcrest:hamcrest:2.2")
