@@ -19,77 +19,149 @@ import org.jreleaser.model.Active
 import org.jreleaser.model.Distribution.DistributionType
 import org.jreleaser.model.Stereotype
 import java.util.Properties
-
 import java.util.regex.Pattern
 
-buildscript {
-  repositories {
-    maven { url = uri("https://plugins.gradle.org/m2/") }
-    mavenLocal()
-  }
-}
+group = "software.amazon.smithy"
+version = file("VERSION").readText().trim()
+description = "Language Server Protocol implementation for Smithy"
 
+println("Smithy Language Server version: '${version}'")
+
+val stagingDirectory = layout.buildDirectory.dir("staging")
+val releaseChangelogFile = layout.buildDirectory.file("resources/RELEASE_CHANGELOG.md").get()
+val smithyVersion: String by project
 
 plugins {
-    // Apply the java plugin to add support for Java
-    id("java")
-
-    // Apply the application plugin to add support for building a CLI application.
-    id("application")
-
-    id("maven-publish")
-    id("com.palantir.git-version") version "0.12.3"
-    id("checkstyle")
-    id("org.jreleaser") version "1.13.0"
+    java
+    application
+    `maven-publish`
+    checkstyle
 
     // Fork of runtime plugin with java 21 support, until https://github.com/beryx/badass-runtime-plugin/issues/153
     // is resolved.
     id("com.dua3.gradle.runtime") version "1.13.1-patch-1"
-}
 
-
-val gitVersion: groovy.lang.Closure<String> by extra
-version = gitVersion().replaceFirst("v", "")
-
-// Reusable license copySpec for building JARs
-val licenseSpec = copySpec {
-    from("${project.rootDir}/LICENSE")
-    from("${project.rootDir}/NOTICE")
-}
-
-// Set up tasks that build source and javadoc jars.
-tasks.register<Jar>("sourcesJar") {
-    metaInf.with(licenseSpec)
-    from(sourceSets.main.get().allJava)
-    archiveClassifier = "sources"
-}
-
-// Build a javadoc JAR too.
-tasks.register<Jar>("javadocJar") {
-    metaInf.with(licenseSpec)
-    from(tasks.javadoc)
-    archiveClassifier = "javadoc"
-}
-
-val libraryVersion = project.file("VERSION").readText().trim()
-val imageJreVersion = "21"
-val correttoRoot = "https://corretto.aws/downloads/latest/amazon-corretto-${imageJreVersion}"
-
-println("Smithy Language Server version: '${libraryVersion}'")
-
-val stagingDirectory = rootProject.layout.buildDirectory.dir("staging")
-
-allprojects {
-    apply(plugin = "java")
-    apply(plugin = "maven-publish")
-    group = "software.amazon.smithy"
-    version = libraryVersion
-    description = "Language Server Protocol implementation for Smithy"
+    id("org.jreleaser") version "1.13.0"
 }
 
 repositories {
     mavenLocal()
     mavenCentral()
+}
+
+dependencies {
+    implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1")
+    implementation("software.amazon.smithy:smithy-build:[$smithyVersion, 2.0[")
+    implementation("software.amazon.smithy:smithy-cli:[$smithyVersion, 2.0[")
+    implementation("software.amazon.smithy:smithy-model:[$smithyVersion, 2.0[")
+    implementation("software.amazon.smithy:smithy-syntax:[$smithyVersion, 2.0[")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testImplementation("org.hamcrest:hamcrest:2.2")
+
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks {
+    withType<Javadoc> {
+        (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
+    }
+
+    withType<Test>().configureEach {
+        useJUnitPlatform()
+
+        testLogging {
+            events = setOf(TestLogEvent.SKIPPED, TestLogEvent.FAILED)
+            exceptionFormat = TestExceptionFormat.FULL
+            showExceptions = true
+            showCauses = true
+            showStackTraces = true
+        }
+    }
+
+    // Reusable license copySpec for building JARs
+    val licenseSpec = copySpec {
+        from("LICENSE", "NOTICE")
+    }
+
+    register<Jar>("sourcesJar") {
+        metaInf.with(licenseSpec)
+        from(sourceSets.main.get().allJava)
+        archiveClassifier = "sources"
+    }
+
+    register<Jar>("javadocJar") {
+        metaInf.with(licenseSpec)
+        from(javadoc)
+        archiveClassifier = "javadoc"
+    }
+
+    val createProperties by register("createProperties") {
+        dependsOn(processResources)
+
+        doLast {
+            val file = layout.buildDirectory.file("resources/main/version.properties").get().asFile
+            val properties = Properties()
+            properties["version"] = version.toString()
+            properties.store(file.writer(), null)
+        }
+    }
+
+    // Generate a changelog that only includes the changes for the latest version
+    // which JReleaser will add to the release notes of the GitHub release.
+    val createReleaseChangelog by register("createReleaseChangelog") {
+        dependsOn(processResources)
+
+        doLast {
+            val changelog = file("CHANGELOG.md").readText()
+            // Copy the text in between the first two version headers
+            val matcher = Pattern.compile("^## \\d+\\.\\d+\\.\\d+", Pattern.MULTILINE).matcher(changelog)
+            val getIndex = fun(): Int {
+                matcher.find()
+                return matcher.start()
+            }
+            val result = changelog.substring(getIndex(), getIndex()).trim()
+            releaseChangelogFile.asFile.writeText(result)
+        }
+    }
+
+    classes {
+        dependsOn(createProperties)
+    }
+
+    jar {
+        from(configurations.runtimeClasspath.get().map { zipTree(it) }) {
+            // Don't need signature files, and we don't use modules
+            exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "**/module-info.class")
+            duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        }
+
+        manifest {
+            attributes("Main-Class" to "software.amazon.smithy.lsp.Main")
+        }
+    }
+
+    checkstyleTest {
+        enabled = false
+    }
+
+    assembleDist {
+        dependsOn(publish, runtimeZip)
+    }
+
+    jreleaserRelease {
+        dependsOn(createReleaseChangelog)
+    }
+}
+
+application {
+    mainClass = "software.amazon.smithy.lsp.Main"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 publishing {
@@ -102,40 +174,36 @@ publishing {
 
     publications {
         create<MavenPublication>("mavenJava") {
-            groupId = project.group.toString()
-            artifactId = "smithy-language-server"
-
             from(components["java"])
 
-            // Ship the source and javadoc jars.
             artifact(tasks["sourcesJar"])
             artifact(tasks["javadocJar"])
 
-            // Include extra information in the POMs.
-            afterEvaluate {
-                pom {
-                    name.set("Smithy Language Server")
-                    description.set(project.description)
-                    url.set("https://github.com/smithy-lang/smithy-language-server")
-                    licenses {
-                        license {
-                            name.set("Apache License 2.0")
-                            url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
-                            distribution.set("repo")
-                        }
+            pom {
+                name = "Smithy Language Server"
+                description = project.description
+                url = "https://github.com/smithy-lang/smithy-language-server"
+
+                licenses {
+                    license {
+                        name = "Apache License 2.0"
+                        url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
+                        distribution = "repo"
                     }
-                    developers {
-                        developer {
-                            id.set("smithy")
-                            name.set("Smithy")
-                            organization.set("Amazon Web Services")
-                            organizationUrl.set("https://aws.amazon.com")
-                            roles.add("developer")
-                        }
+                }
+
+                developers {
+                    developer {
+                        id = "smithy"
+                        name = "Smithy"
+                        organization = "Amazon Web Services"
+                        organizationUrl = "https://aws.amazon.com"
+                        roles.add("developer")
                     }
-                    scm {
-                        url.set("https://github.com/smithy-lang/smithy-language-server.git")
-                    }
+                }
+
+                scm {
+                    url = "https://github.com/smithy-lang/smithy-language-server.git"
                 }
             }
         }
@@ -146,100 +214,20 @@ checkstyle {
     toolVersion = "10.12.4"
 }
 
-dependencies {
-    implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1")
-    implementation("software.amazon.smithy:smithy-build:[smithyVersion, 2.0[")
-    implementation("software.amazon.smithy:smithy-cli:[smithyVersion, 2.0[")
-    implementation("software.amazon.smithy:smithy-model:[smithyVersion, 2.0[")
-    implementation("software.amazon.smithy:smithy-syntax:[smithyVersion, 2.0[")
-
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
-    testImplementation("org.hamcrest:hamcrest:2.2")
-
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-
-    checkstyle("com.puppycrawl.tools:checkstyle:${checkstyle.toolVersion}")
-}
-
-tasks.withType<Javadoc> {
-    (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
-}
-
-tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
-
-    testLogging {
-        events = setOf(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED, TestLogEvent.STANDARD_OUT, TestLogEvent.STANDARD_ERROR)
-        exceptionFormat = TestExceptionFormat.FULL
-        showExceptions = true
-        showCauses = true
-        showStackTraces = true
-    }
-}
-
-tasks.register("createProperties") {
-    dependsOn(tasks.processResources)
-    doLast {
-        val file = project.layout.buildDirectory.file("resources/main/version.properties").get().asFile
-        val properties = Properties()
-        properties["version"] = project.version.toString()
-        properties.store(file.writer(), null)
-    }
-}
-
-tasks.classes {
-    dependsOn(tasks["createProperties"])
-}
-
-application {
-    // Define the main class for the application.
-    mainClass = "software.amazon.smithy.lsp.Main"
-}
-
-// ==== CheckStyle ====
-// https://docs.gradle.org/current/userguide/checkstyle_plugin.html
-apply(plugin = "checkstyle")
-tasks.named("checkstyleTest") {
-    enabled = false
-}
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
-
-tasks.jar {
-    from (configurations.compileClasspath.get().map { zipTree(it) }) {
-        exclude("about.html")
-        exclude("META-INF/LICENSE")
-        exclude("META-INF/LICENSE.txt")
-        exclude("META-INF/NOTICE")
-        exclude("META-INF/MANIFEST.MF")
-        exclude("META-INF/*.SF")
-        exclude("META-INF/*.DSA")
-        exclude("META-INF/*.RSA")
-        exclude("reflect.properties")
-        // Included by dependencies in later versions of java, causes duplicate entries in the output jar
-        exclude("**/module-info.class")
-    }
-    manifest {
-        attributes("Main-Class" to "software.amazon.smithy.lsp.Main")
-    }
-}
-
-
 runtime {
     addOptions("--compress", "2", "--strip-debug", "--no-header-files", "--no-man-pages")
     addModules("java.logging", "java.naming", "java.xml", "jdk.crypto.ec")
 
     launcher {
         jvmArgs = listOf(
-                "-XX:-UsePerfData",
-                "-Xshare:auto",
-                "-XX:SharedArchiveFile={{BIN_DIR}}/../lib/smithy.jsa"
+            "-XX:-UsePerfData",
+            "-Xshare:auto",
+            "-XX:SharedArchiveFile={{BIN_DIR}}/../lib/smithy.jsa"
         )
     }
+
+    val imageJreVersion = "21"
+    val correttoRoot = "https://corretto.aws/downloads/latest/amazon-corretto-${imageJreVersion}"
 
     targetPlatform("linux-x86_64") {
         jdkHome = jdkDownload("${correttoRoot}-x64-linux-jdk.tar.gz")
@@ -265,30 +253,6 @@ runtime {
     imageZip = layout.buildDirectory.file("image/smithy-language-server.zip")
 }
 
-tasks["assembleDist"].dependsOn("publish")
-tasks["assembleDist"].dependsOn("runtimeZip")
-
-// Generate a changelog that only includes the changes for the latest version
-// which Jreleaser will add to the release notes of the github release.
-val releaseChangelogFile = project.layout.buildDirectory.file("resources/RELEASE_CHANGELOG.md").get()
-tasks.register("createReleaseChangelog") {
-    dependsOn(tasks.processResources)
-
-    doLast {
-        val changelog = project.file("CHANGELOG.md").readText()
-        // Copy the text in between the first two version headers
-        val matcher = Pattern.compile("^## \\d+\\.\\d+\\.\\d+", Pattern.MULTILINE).matcher(changelog)
-        val getIndex = fun(): Int {
-            matcher.find()
-            return matcher.start()
-        }
-        val result = changelog.substring(getIndex(), getIndex()).trim()
-        releaseChangelogFile.asFile.writeText(result)
-    }
-}
-
-tasks.jreleaserRelease.get().dependsOn(tasks.processResources)
-
 jreleaser {
     dryrun = false
 
@@ -306,9 +270,11 @@ jreleaser {
             overwrite = true
             tagName = "{{projectVersion}}"
             releaseName = "Smithy Language Server v{{{projectVersion}}}"
+
             changelog {
                 external = releaseChangelogFile
             }
+
             commitAuthor {
                 name = "smithy-automation"
                 email = "github-smithy-automation@amazon.com"
@@ -318,6 +284,7 @@ jreleaser {
 
     files {
         active = Active.ALWAYS
+
         artifact {
             // We'll include the VERSION file in the release artifacts so that the version can be easily
             // retrieving by hitting the GitHub `releases/latest` url
@@ -329,9 +296,9 @@ jreleaser {
     platform {
         // These replacements are for the names of files that are released, *not* for names within this build config
         replacements = mapOf(
-                "osx" to "darwin",
-                "aarch_64" to "aarch64",
-                "windows_x86_64" to "windows_x64"
+            "osx" to "darwin",
+            "aarch_64" to "aarch64",
+            "windows_x86_64" to "windows_x64"
         )
     }
 
@@ -341,27 +308,27 @@ jreleaser {
             stereotype = Stereotype.CLI
 
             artifact {
-                path = file("build/image/smithy-language-server-linux-x86_64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-linux-x86_64.zip")
                 platform = "linux-x86_64"
             }
 
             artifact {
-                path = file("build/image/smithy-language-server-linux-aarch64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-linux-aarch64.zip")
                 platform = "linux-aarch_64"
             }
 
             artifact {
-                path = file("build/image/smithy-language-server-darwin-x86_64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-darwin-x86_64.zip")
                 platform = "osx-x86_64"
             }
 
             artifact {
-                path = file("build/image/smithy-language-server-darwin-aarch64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-darwin-aarch64.zip")
                 platform = "osx-aarch_64"
             }
 
             artifact {
-                path = file("build/image/smithy-language-server-windows-x64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-windows-x64.zip")
                 platform = "windows-x86_64"
             }
         }
@@ -378,8 +345,6 @@ jreleaser {
         verify = true
     }
 
-    // Configuration for deploying to Maven Central.
-    // https://jreleaser.org/guide/latest/examples/maven/maven-central.html#_gradle
     deploy {
         maven {
             nexus2 {
