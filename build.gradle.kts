@@ -15,12 +15,16 @@
 
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
+import org.jreleaser.model.Active
+import org.jreleaser.model.Distribution.DistributionType
+import org.jreleaser.model.Stereotype
+import java.util.Properties
 
 import java.util.regex.Pattern
 
 buildscript {
   repositories {
-    maven { url "https://plugins.gradle.org/m2/" }
+    maven { url = uri("https://plugins.gradle.org/m2/") }
     mavenLocal()
   }
 }
@@ -28,62 +32,56 @@ buildscript {
 
 plugins {
     // Apply the java plugin to add support for Java
-    id "java"
+    id("java")
 
     // Apply the application plugin to add support for building a CLI application.
-    id "application"
+    id("application")
 
-    id "maven-publish"
-    id "com.palantir.git-version" version "0.12.3"
-    id "checkstyle"
-    id "org.jreleaser" version "1.13.0"
+    id("maven-publish")
+    id("com.palantir.git-version") version "0.12.3"
+    id("checkstyle")
+    id("org.jreleaser") version "1.13.0"
 
     // Fork of runtime plugin with java 21 support, until https://github.com/beryx/badass-runtime-plugin/issues/153
     // is resolved.
-    id "com.dua3.gradle.runtime" version "1.13.1-patch-1"
+    id("com.dua3.gradle.runtime") version "1.13.1-patch-1"
 }
 
 
-version gitVersion().replaceFirst("v", "")
+val gitVersion: groovy.lang.Closure<String> by extra
+version = gitVersion().replaceFirst("v", "")
 
 // Reusable license copySpec for building JARs
-def licenseSpec = copySpec {
-    from "${project.rootDir}/LICENSE"
-    from "${project.rootDir}/NOTICE"
+val licenseSpec = copySpec {
+    from("${project.rootDir}/LICENSE")
+    from("${project.rootDir}/NOTICE")
 }
 
 // Set up tasks that build source and javadoc jars.
-task sourcesJar(type: Jar) {
+tasks.register<Jar>("sourcesJar") {
     metaInf.with(licenseSpec)
-    from {
-        sourceSets.main.allJava
-    }
+    from(sourceSets.main.get().allJava)
     archiveClassifier = "sources"
 }
 
 // Build a javadoc JAR too.
-task javadocJar(type: Jar) {
+tasks.register<Jar>("javadocJar") {
     metaInf.with(licenseSpec)
-    from {
-        tasks.javadoc
-    }
+    from(tasks.javadoc)
     archiveClassifier = "javadoc"
 }
 
-ext {
-    // Load the Smithy Language Server version from VERSION.
-    libraryVersion = project.file("VERSION").getText('UTF-8').replace(System.lineSeparator(), "")
-    imageJreVersion = "21"
-    correttoRoot = "https://corretto.aws/downloads/latest/amazon-corretto-${imageJreVersion}"
-}
+val libraryVersion = project.file("VERSION").readText().trim()
+val imageJreVersion = "21"
+val correttoRoot = "https://corretto.aws/downloads/latest/amazon-corretto-${imageJreVersion}"
 
-println "Smithy Language Server version: '${libraryVersion}'"
+println("Smithy Language Server version: '${libraryVersion}'")
 
-def stagingDirectory = rootProject.layout.buildDirectory.dir("staging")
+val stagingDirectory = rootProject.layout.buildDirectory.dir("staging")
 
 allprojects {
-    apply plugin: "java"
-    apply plugin: "maven-publish"
+    apply(plugin = "java")
+    apply(plugin = "maven-publish")
     group = "software.amazon.smithy"
     version = libraryVersion
     description = "Language Server Protocol implementation for Smithy"
@@ -98,25 +96,23 @@ publishing {
     repositories {
         maven {
             name = "localStaging"
-            url = stagingDirectory
+            url = uri(stagingDirectory)
         }
     }
 
     publications {
-        mavenJava(MavenPublication) {
-            groupId = project.group
+        create<MavenPublication>("mavenJava") {
+            groupId = project.group.toString()
             artifactId = "smithy-language-server"
 
-            from components.java
-
-            jar
+            from(components["java"])
 
             // Ship the source and javadoc jars.
             artifact(tasks["sourcesJar"])
             artifact(tasks["javadocJar"])
 
             // Include extra information in the POMs.
-            project.afterEvaluate {
+            afterEvaluate {
                 pom {
                     name.set("Smithy Language Server")
                     description.set(project.description)
@@ -151,49 +147,48 @@ checkstyle {
 }
 
 dependencies {
-    implementation "org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1"
-    implementation "software.amazon.smithy:smithy-build:[smithyVersion, 2.0["
-    implementation "software.amazon.smithy:smithy-cli:[smithyVersion, 2.0["
-    implementation "software.amazon.smithy:smithy-model:[smithyVersion, 2.0["
-    implementation "software.amazon.smithy:smithy-syntax:[smithyVersion, 2.0["
+    implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1")
+    implementation("software.amazon.smithy:smithy-build:[smithyVersion, 2.0[")
+    implementation("software.amazon.smithy:smithy-cli:[smithyVersion, 2.0[")
+    implementation("software.amazon.smithy:smithy-model:[smithyVersion, 2.0[")
+    implementation("software.amazon.smithy:smithy-syntax:[smithyVersion, 2.0[")
 
-    testImplementation "org.junit.jupiter:junit-jupiter:5.10.0"
-    testImplementation "org.hamcrest:hamcrest:2.2"
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testImplementation("org.hamcrest:hamcrest:2.2")
 
-    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-    checkstyle "com.puppycrawl.tools:checkstyle:${checkstyle.toolVersion}"
+    checkstyle("com.puppycrawl.tools:checkstyle:${checkstyle.toolVersion}")
 }
 
-tasks.withType(Javadoc).all {
-    options.addStringOption('Xdoclint:none', '-quiet')
+tasks.withType<Javadoc> {
+    (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
 }
 
-tasks.withType(Test).configureEach {
+tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 
     testLogging {
-        events TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED, TestLogEvent.STANDARD_OUT, TestLogEvent.STANDARD_ERROR
-        exceptionFormat TestExceptionFormat.FULL
-        showExceptions true
-        showCauses true
-        showStackTraces true
+        events = setOf(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED, TestLogEvent.STANDARD_OUT, TestLogEvent.STANDARD_ERROR)
+        exceptionFormat = TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
     }
 }
 
-tasks.register('createProperties') {
-    dependsOn processResources
+tasks.register("createProperties") {
+    dependsOn(tasks.processResources)
     doLast {
-        new File("$buildDir/resources/main/version.properties").withWriter { w ->
-            Properties p = new Properties()
-            p['version'] = project.version.toString()
-            p.store w, null
-        }
+        val file = project.layout.buildDirectory.file("resources/main/version.properties").get().asFile
+        val properties = Properties()
+        properties["version"] = project.version.toString()
+        properties.store(file.writer(), null)
     }
 }
 
-classes {
-    dependsOn createProperties
+tasks.classes {
+    dependsOn(tasks["createProperties"])
 }
 
 application {
@@ -203,7 +198,7 @@ application {
 
 // ==== CheckStyle ====
 // https://docs.gradle.org/current/userguide/checkstyle_plugin.html
-apply plugin: "checkstyle"
+apply(plugin = "checkstyle")
 tasks.named("checkstyleTest") {
     enabled = false
 }
@@ -214,22 +209,22 @@ java {
     }
 }
 
-jar {
-    from (configurations.compileClasspath.collect { entry -> zipTree(entry) }) {
-        exclude "about.html"
-        exclude "META-INF/LICENSE"
-        exclude "META-INF/LICENSE.txt"
-        exclude "META-INF/NOTICE"
-        exclude "META-INF/MANIFEST.MF"
-        exclude "META-INF/*.SF"
-        exclude "META-INF/*.DSA"
-        exclude "META-INF/*.RSA"
-        exclude "reflect.properties"
+tasks.jar {
+    from (configurations.compileClasspath.get().map { zipTree(it) }) {
+        exclude("about.html")
+        exclude("META-INF/LICENSE")
+        exclude("META-INF/LICENSE.txt")
+        exclude("META-INF/NOTICE")
+        exclude("META-INF/MANIFEST.MF")
+        exclude("META-INF/*.SF")
+        exclude("META-INF/*.DSA")
+        exclude("META-INF/*.RSA")
+        exclude("reflect.properties")
         // Included by dependencies in later versions of java, causes duplicate entries in the output jar
-        exclude "**/module-info.class"
+        exclude("**/module-info.class")
     }
     manifest {
-        attributes("Main-Class": "software.amazon.smithy.lsp.Main")
+        attributes("Main-Class" to "software.amazon.smithy.lsp.Main")
     }
 }
 
@@ -239,11 +234,11 @@ runtime {
     addModules("java.logging", "java.naming", "java.xml", "jdk.crypto.ec")
 
     launcher {
-        jvmArgs = [
-                '-XX:-UsePerfData',
-                '-Xshare:auto',
-                '-XX:SharedArchiveFile={{BIN_DIR}}/../lib/smithy.jsa'
-        ]
+        jvmArgs = listOf(
+                "-XX:-UsePerfData",
+                "-Xshare:auto",
+                "-XX:SharedArchiveFile={{BIN_DIR}}/../lib/smithy.jsa"
+        )
     }
 
     targetPlatform("linux-x86_64") {
@@ -275,33 +270,33 @@ tasks["assembleDist"].dependsOn("runtimeZip")
 
 // Generate a changelog that only includes the changes for the latest version
 // which Jreleaser will add to the release notes of the github release.
-def releaseChangelogFile = project.layout.buildDirectory.file("resources/RELEASE_CHANGELOG.md").get().asFile
+val releaseChangelogFile = project.layout.buildDirectory.file("resources/RELEASE_CHANGELOG.md").get()
 tasks.register("createReleaseChangelog") {
-    dependsOn processResources
+    dependsOn(tasks.processResources)
 
     doLast {
-        def changelog = project.file("CHANGELOG.md").text
+        val changelog = project.file("CHANGELOG.md").readText()
         // Copy the text in between the first two version headers
-        def matcher = Pattern.compile("^## \\d+\\.\\d+\\.\\d+", Pattern.MULTILINE).matcher(changelog)
-        def getIndex = {
+        val matcher = Pattern.compile("^## \\d+\\.\\d+\\.\\d+", Pattern.MULTILINE).matcher(changelog)
+        val getIndex = fun(): Int {
             matcher.find()
             return matcher.start()
         }
-        def result = changelog.substring(getIndex(), getIndex()).trim()
-        releaseChangelogFile.write(result)
+        val result = changelog.substring(getIndex(), getIndex()).trim()
+        releaseChangelogFile.asFile.writeText(result)
     }
 }
 
-tasks.jreleaserRelease.dependsOn(tasks.createReleaseChangelog)
+tasks.jreleaserRelease.get().dependsOn(tasks.processResources)
 
 jreleaser {
     dryrun = false
 
     project {
-        website = 'https://smithy.io'
-        authors = ['Smithy']
+        website = "https://smithy.io"
+        authors = listOf("Smithy")
         vendor = "Smithy"
-        license = 'Apache-2.0'
+        license = "Apache-2.0"
         description = "Smithy Language Server - A Language Server Protocol implementation for the Smithy IDL."
         copyright = "2019"
     }
@@ -309,10 +304,10 @@ jreleaser {
     release {
         github {
             overwrite = true
-            tagName = '{{projectVersion}}'
-            releaseName = 'Smithy Language Server v{{{projectVersion}}}'
+            tagName = "{{projectVersion}}"
+            releaseName = "Smithy Language Server v{{{projectVersion}}}"
             changelog {
-                external = releaseChangelogFile.absolutePath
+                external = releaseChangelogFile
             }
             commitAuthor {
                 name = "smithy-automation"
@@ -322,51 +317,51 @@ jreleaser {
     }
 
     files {
-        active = "ALWAYS"
+        active = Active.ALWAYS
         artifact {
             // We'll include the VERSION file in the release artifacts so that the version can be easily
             // retrieving by hitting the GitHub `releases/latest` url
-            path = "VERSION"
-            extraProperties.put('skipSigning', true)
+            path = file("VERSION")
+            extraProperties.put("skipSigning", true)
         }
     }
 
     platform {
         // These replacements are for the names of files that are released, *not* for names within this build config
-        replacements = [
-                'osx': 'darwin',
-                'aarch_64': 'aarch64',
-                'windows_x86_64': 'windows_x64'
-        ]
+        replacements = mapOf(
+                "osx" to "darwin",
+                "aarch_64" to "aarch64",
+                "windows_x86_64" to "windows_x64"
+        )
     }
 
     distributions {
-        'smithy-language-server' {
-            distributionType = 'JLINK'
-            stereotype = 'CLI'
+        create("smithy-language-server") {
+            distributionType = DistributionType.JLINK
+            stereotype = Stereotype.CLI
 
             artifact {
-                path = "build/image/smithy-language-server-linux-x86_64.zip"
+                path = file("build/image/smithy-language-server-linux-x86_64.zip")
                 platform = "linux-x86_64"
             }
 
             artifact {
-                path = "build/image/smithy-language-server-linux-aarch64.zip"
+                path = file("build/image/smithy-language-server-linux-aarch64.zip")
                 platform = "linux-aarch_64"
             }
 
             artifact {
-                path = "build/image/smithy-language-server-darwin-x86_64.zip"
+                path = file("build/image/smithy-language-server-darwin-x86_64.zip")
                 platform = "osx-x86_64"
             }
 
             artifact {
-                path = "build/image/smithy-language-server-darwin-aarch64.zip"
+                path = file("build/image/smithy-language-server-darwin-aarch64.zip")
                 platform = "osx-aarch_64"
             }
 
             artifact {
-                path = "build/image/smithy-language-server-windows-x64.zip"
+                path = file("build/image/smithy-language-server-windows-x64.zip")
                 platform = "windows-x86_64"
             }
         }
@@ -378,7 +373,7 @@ jreleaser {
     }
 
     signing {
-        active = "RELEASE"
+        active = Active.RELEASE
         armored = true
         verify = true
     }
@@ -388,8 +383,8 @@ jreleaser {
     deploy {
         maven {
             nexus2 {
-                "maven-central" {
-                    active = "ALWAYS"
+                create("maven-central") {
+                    active = Active.ALWAYS
                     url = "https://aws.oss.sonatype.org/service/local"
                     snapshotUrl = "https://aws.oss.sonatype.org/content/repositories/snapshots"
                     closeRepository = true
