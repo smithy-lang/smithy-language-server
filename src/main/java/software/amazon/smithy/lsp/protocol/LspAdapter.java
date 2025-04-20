@@ -5,13 +5,11 @@
 
 package software.amazon.smithy.lsp.protocol;
 
-import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
-import java.util.logging.Logger;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
@@ -28,8 +26,6 @@ import software.amazon.smithy.model.SourceLocation;
  *  'smithyjar:' scheme we use.
  */
 public final class LspAdapter {
-    private static final Logger LOGGER = Logger.getLogger(LspAdapter.class.getName());
-
     private LspAdapter() {
     }
 
@@ -186,11 +182,11 @@ public final class LspAdapter {
      * @return A path representation of the {@code uri}, with the scheme removed
      */
     public static String toPath(String uri) {
-        if (uri.startsWith("file://")) {
+        if (uri.startsWith("file:")) {
             return Paths.get(URI.create(uri)).toString();
         } else if (isSmithyJarFile(uri)) {
-            String decoded = decode(uri);
-            return fixJarScheme(decoded);
+            URI jarUri = smithyJarUriToJarModelFilename(uri);
+            return jarUri.toString();
         }
         return uri;
     }
@@ -231,36 +227,74 @@ public final class LspAdapter {
     }
 
     /**
-     * Get a {@link URL} for the Jar represented by the given URI or path.
+     * Get a {@link URL} for the Jar represented by the given smithyjar URI.
      *
-     * @param uriOrPath LSP URI or regular path
-     * @return The {@link URL}, or throw if the uri/path cannot be decoded
+     * @param uri The smithyjar URI
+     * @return A URL which can be used to read the contents of the file
      */
-    public static URL jarUrl(String uriOrPath) {
+    public static URL smithyJarUriToReadableUrl(String uri) {
         try {
-            String decodedUri = decode(uriOrPath);
-            return URI.create(fixJarScheme(decodedUri)).toURL();
-        } catch (IOException e) {
+            URI jarUri = smithyJarUriToJarModelFilename(uri);
+            return jarUri.toURL();
+        } catch (MalformedURLException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static String decode(String uriOrPath) {
-        // Some clients encode parts of the jar, like !/
-        return URLDecoder.decode(uriOrPath, StandardCharsets.UTF_8);
-    }
-
-    private static String fixJarScheme(String uriOrPath) {
-        if (uriOrPath.startsWith("smithyjar:")) {
-            uriOrPath = uriOrPath.replaceFirst("smithyjar:", "");
-        }
-        if (uriOrPath.startsWith("jar:")) {
-            return uriOrPath;
-        } else if (uriOrPath.startsWith("file:")) {
-            return "jar:" + uriOrPath;
-        } else {
-            return "jar:file:" + uriOrPath;
+    /**
+     * Get a {@link URL} for the jar file from the filename in the model's
+     * source location.
+     *
+     * @param modelFilename The filename from the model's source location
+     * @return A URL which can be used to read the contents of the file
+     */
+    public static URL jarModelFilenameToReadableUrl(String modelFilename) {
+        try {
+            // No need to decode these, they're already encoded
+            return URI.create(modelFilename).toURL();
+        } catch (MalformedURLException e) {
+            throw new RuntimeException(e);
         }
     }
 
+    /**
+     * Converts a smithyjar uri that was sent from the client into a URI that
+     * is equivalent to what appears in the Smithy model.
+     *
+     * @param smithyJarUri smithyjar uri received from the client
+     * @return The converted URI
+     */
+    private static URI smithyJarUriToJarModelFilename(String smithyJarUri) {
+        // Clients encode URIs differently. VSCode is particularly aggressive with
+        // its encoding, so the URIs it produces aren't equivalent to what we get
+        // from source locations in the model.
+        //
+        // For example, given a jar that lives in some directory with special characters:
+        //  /path with spaces/foo.jar
+        // The model will have a source location with a filename like:
+        //  jar:file:/path%20with%20spaces/foo.jar!/baz.smithy
+        // When sending requests/notifications for this file, VSCode will encode the URI like:
+        //  smithyjar:/path%20with%20spaces/foo.jar%21/baz.smithy
+        // Note the ! is encoded.
+        //
+        // If we just used URI.create().toString(), we will end up with the exact same
+        // URI that VSCode sent, because URI.create() (and its equivalent ctor) keep
+        // the original input string to use for the toString() call.
+        //
+        // Instead, we use getSchemeSpecificPart() to fully decode everything after the
+        // smithyjar: part, to get:
+        //  /path with spaces/foo.jar!/baz.smithy
+        // Then, we reconstruct the URI from parts, using a different ctor that performs
+        // encoding. The resulting URI.toString() call will give us what we want:
+        //  jar:file:/path%20with%20spaces/foo.jar!/baz.smithy
+
+        URI encodedUri = URI.create(smithyJarUri);
+        String decodedPath = encodedUri.getSchemeSpecificPart();
+
+        try {
+            return new URI("jar", "file:" + decodedPath, null);
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
