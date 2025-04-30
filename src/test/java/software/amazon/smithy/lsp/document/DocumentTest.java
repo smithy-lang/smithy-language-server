@@ -16,6 +16,7 @@ import org.hamcrest.CustomTypeSafeMatcher;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.junit.jupiter.api.Test;
+import software.amazon.smithy.lsp.TextWithPositions;
 import software.amazon.smithy.lsp.protocol.RangeBuilder;
 
 public class DocumentTest {
@@ -311,45 +312,47 @@ public class DocumentTest {
     }
 
     @Test
-    public void borrowsDocumentShapeId() {
-        Document empty = makeDocument("");
-        Document notId = makeDocument("?!&");
-        Document onlyId = makeDocument("abc");
-        Document split = makeDocument("abc.def hij");
-        Document technicallyBroken = makeDocument("com.foo# com.foo$ com.foo. com$foo$bar com...foo $foo .foo #foo");
-        Document technicallyValid = makeDocument("com.foo#bar com.foo#bar$baz com.foo foo#bar foo#bar$baz foo$bar");
+    public void copiesDocumentIds() {
+        assertThat("%", isDocumentShapeId(nullValue()));
 
-        assertThat(empty.copyDocumentId(new Position(0, 0)), nullValue());
-        assertThat(notId.copyDocumentId(new Position(0, 0)), nullValue());
-        assertThat(notId.copyDocumentId(new Position(0, 2)), nullValue());
-        assertThat(onlyId.copyDocumentId(new Position(0, 0)), documentShapeId("abc", DocumentId.Type.ID));
-        assertThat(onlyId.copyDocumentId(new Position(0, 2)), documentShapeId("abc", DocumentId.Type.ID));
-        assertThat(onlyId.copyDocumentId(new Position(0, 3)), nullValue());
-        assertThat(split.copyDocumentId(new Position(0, 0)), documentShapeId("abc.def", DocumentId.Type.NAMESPACE));
-        assertThat(split.copyDocumentId(new Position(0, 6)), documentShapeId("abc.def", DocumentId.Type.NAMESPACE));
-        assertThat(split.copyDocumentId(new Position(0, 7)), nullValue());
-        assertThat(split.copyDocumentId(new Position(0, 8)), documentShapeId("hij", DocumentId.Type.ID));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 0)), documentShapeId("com.foo#", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 3)), documentShapeId("com.foo#", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 7)), documentShapeId("com.foo#", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 9)), documentShapeId("com.foo$", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 16)), documentShapeId("com.foo$", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 18)), documentShapeId("com.foo.", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 25)), documentShapeId("com.foo.", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 27)), documentShapeId("com$foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 30)), documentShapeId("com$foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 37)), documentShapeId("com$foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 39)), documentShapeId("com...foo", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 43)), documentShapeId("com...foo", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 49)), documentShapeId("$foo", DocumentId.Type.RELATIVE_WITH_MEMBER));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 54)), documentShapeId(".foo", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyBroken.copyDocumentId(new Position(0, 59)), documentShapeId("#foo", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyValid.copyDocumentId(new Position(0, 0)), documentShapeId("com.foo#bar", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyValid.copyDocumentId(new Position(0, 12)), documentShapeId("com.foo#bar$baz", DocumentId.Type.ABSOLUTE_WITH_MEMBER));
-        assertThat(technicallyValid.copyDocumentId(new Position(0, 28)), documentShapeId("com.foo", DocumentId.Type.NAMESPACE));
-        assertThat(technicallyValid.copyDocumentId(new Position(0, 36)), documentShapeId("foo#bar", DocumentId.Type.ABSOLUTE_ID));
-        assertThat(technicallyValid.copyDocumentId(new Position(0, 44)), documentShapeId("foo#bar$baz", DocumentId.Type.ABSOLUTE_WITH_MEMBER));
-        assertThat(technicallyValid.copyDocumentId(new Position(0, 56)), documentShapeId("foo$bar", DocumentId.Type.RELATIVE_WITH_MEMBER));
+        assertThat("%?!&", isDocumentShapeId(nullValue()));
+        assertThat("?!&%", isDocumentShapeId(nullValue()));
+
+        assertThat("%abc.def hij", isDocumentShapeId(withValueAndType("abc.def", DocumentId.Type.ROOT)));
+        assertThat("abc.def% hij", isDocumentShapeId(nullValue()));
+        assertThat("abc.def %hij", isDocumentShapeId(withValueAndType("hij", DocumentId.Type.ROOT)));
+        assertThat("abc.def hij%", isDocumentShapeId(nullValue()));
+
+        makeDocument("com.foo# com.foo$ com.foo. com$foo$bar com...foo $foo .foo #foo");
+        makeDocument("com.foo#bar com.foo#bar$baz com.foo foo#bar foo#bar$baz foo$bar");
+
+        assertThat("%com.foo#bar", isDocumentShapeId(withValueAndType("com.foo#bar", DocumentId.Type.ROOT)));
+        assertThat("com.foo#%bar", isDocumentShapeId(withValueAndType("com.foo#bar", DocumentId.Type.ROOT)));
+
+        assertThat("%com.foo#bar$baz", isDocumentShapeId(withValueAndType("com.foo#bar", DocumentId.Type.ROOT)));
+        assertThat("com.foo#%bar$baz", isDocumentShapeId(withValueAndType("com.foo#bar", DocumentId.Type.ROOT)));
+        assertThat("com.foo#bar$%baz", isDocumentShapeId(withValueAndType("com.foo#bar$baz", DocumentId.Type.MEMBER)));
+        assertThat("com.foo#bar%$baz", isDocumentShapeId(withValueAndType("com.foo#bar$baz", DocumentId.Type.MEMBER)));
+
+        assertThat("%foo$bar", isDocumentShapeId(withValueAndType("foo", DocumentId.Type.ROOT)));
+        assertThat("fo%o$bar", isDocumentShapeId(withValueAndType("foo", DocumentId.Type.ROOT)));
+
+        assertThat("foo%$bar", isDocumentShapeId(withValueAndType("foo$bar", DocumentId.Type.MEMBER)));
+        assertThat("foo$%bar", isDocumentShapeId(withValueAndType("foo$bar", DocumentId.Type.MEMBER)));
+
+        assertThat("%$foo", isDocumentShapeId(withValueAndType("$foo", DocumentId.Type.MEMBER)));
+    }
+
+    public static Matcher<String> isDocumentShapeId(Matcher<? super DocumentId> matcher) {
+        return new CustomTypeSafeMatcher<>("a DocumentShapeId matching " + matcher) {
+            @Override
+            protected boolean matchesSafely(String item) {
+                var twp = TextWithPositions.from(item);
+                var document = Document.of(twp.text());
+                var id = document.copyDocumentId(twp.positions()[0]);
+                return matcher.matches(id);
+            }
+        };
     }
 
     // This is used to convert the character offset in a file that assumes a single character
@@ -366,7 +369,7 @@ public class DocumentTest {
     public static String safeString(String s) {
         return s.replace("\n", System.lineSeparator());
     }
-    
+
     private static Document makeDocument(String s) {
         return Document.of(safeString(s));
     }
@@ -387,11 +390,11 @@ public class DocumentTest {
         };
     }
 
-    public static Matcher<DocumentId> documentShapeId(String other, DocumentId.Type type) {
+    public static Matcher<DocumentId> withValueAndType(String other, DocumentId.Type type) {
         return new CustomTypeSafeMatcher<>(other + " with type: " + type) {
             @Override
             protected boolean matchesSafely(DocumentId item) {
-                return other.equals(item.copyIdValue()) && item.type() == type;
+                return item != null && other.equals(item.copyIdValue()) && item.type() == type;
             }
         };
     }

@@ -37,6 +37,7 @@ final class Builtins {
             .addImport(Builtins.class.getResource("metadata.smithy"))
             .addImport(Builtins.class.getResource("members.smithy"))
             .addImport(Builtins.class.getResource("build.smithy"))
+            .addImport(Builtins.class.getResource("keywords.smithy"))
             .assemble()
             .unwrap();
 
@@ -57,10 +58,14 @@ final class Builtins {
 
     static final Shape SMITHY_PROJECT_JSON = MODEL.expectShape(id("SmithyProjectJson"));
 
+    static final Shape NON_SHAPE_KEYWORDS = MODEL.expectShape(id("NonShapeKeywords"));
+
     static final Map<String, ShapeId> VALIDATOR_CONFIG_MAPPING = VALIDATORS.members().stream()
             .collect(Collectors.toMap(
                     MemberShape::getMemberName,
                     memberShape -> memberShape.getTarget()));
+
+    static final ShapeId SERVICE_RENAME_ID = id("Rename");
 
     private Builtins() {
     }

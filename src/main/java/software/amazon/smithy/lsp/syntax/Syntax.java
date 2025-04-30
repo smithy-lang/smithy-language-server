@@ -293,12 +293,18 @@ public final class Syntax {
          * identifiers, so this class a single subclass {@link Ident}.
          */
         public static sealed class Str extends Node {
+            final int lineNumber;
             final String value;
 
-            Str(int start, int end, String value) {
+            Str(int lineNumber, int start, int end, String value) {
+                this.lineNumber = lineNumber;
                 this.start = start;
                 this.end = end;
                 this.value = value;
+            }
+
+            public int lineNumber() {
+                return lineNumber;
             }
 
             public String stringValue() {
@@ -367,6 +373,16 @@ public final class Syntax {
             };
         }
 
+        /**
+         * @param pos The character offset in the file to check
+         * @return Whether {@code pos} is within the keyword at the start
+         *  of this statement. Always returns {@code false} if this
+         *  statement doesn't start with a keyword.
+         */
+        public boolean isInKeyword(int pos) {
+            return false;
+        }
+
         public enum Type {
             Incomplete,
             Control,
@@ -374,7 +390,6 @@ public final class Syntax {
             Namespace,
             Use,
             Apply,
-            ShapeNode,
             ShapeDef,
             ForResource,
             Mixins,
@@ -442,6 +457,11 @@ public final class Syntax {
             public Node value() {
                 return value;
             }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "metadata".length();
+            }
         }
 
         /**
@@ -456,6 +476,11 @@ public final class Syntax {
 
             public Ident namespace() {
                 return namespace;
+            }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "namespace".length();
             }
         }
 
@@ -472,6 +497,11 @@ public final class Syntax {
             public Ident use() {
                 return use;
             }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "use".length();
+            }
         }
 
         /**
@@ -487,6 +517,11 @@ public final class Syntax {
 
             public Ident id() {
                 return id;
+            }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "apply".length();
             }
         }
 
@@ -509,6 +544,11 @@ public final class Syntax {
             public Ident shapeName() {
                 return shapeName;
             }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return shapeType.isIn(pos);
+            }
         }
 
         /**
@@ -525,6 +565,11 @@ public final class Syntax {
             public Ident resource() {
                 return resource;
             }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "for".length();
+            }
         }
 
         /**
@@ -537,6 +582,11 @@ public final class Syntax {
 
             public List<Ident> mixins() {
                 return mixins;
+            }
+
+            @Override
+            public boolean isInKeyword(int pos) {
+                return pos >= start && pos < start + "with".length();
             }
         }
 
@@ -754,10 +804,10 @@ public final class Syntax {
      * (i.e. `.`, `#`, `$`, `_` digits, alphas).
      */
     public static final class Ident extends Node.Str {
-        static final Ident EMPTY = new Ident(-1, -1, "");
+        static final Ident EMPTY = new Ident(-1, -1, -1, "");
 
-        Ident(int start, int end, String value) {
-            super(start, end, value);
+        Ident(int lineNumber, int start, int end, String value) {
+            super(lineNumber, start, end, value);
         }
 
         public boolean isEmpty() {

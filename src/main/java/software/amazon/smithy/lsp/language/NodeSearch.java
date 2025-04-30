@@ -16,6 +16,7 @@ import software.amazon.smithy.model.shapes.MapShape;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.traits.IdRefTrait;
 
 /**
  * Searches models along the path of {@link NodeCursor}s, with support for
@@ -112,9 +113,18 @@ final class NodeSearch {
          * The path ended on a shape.
          *
          * @param shape The shape at the end of the path.
+         * @param targetOf The nullable member {@code shape} is the target of.
          * @param model The model {@code shape} is within.
          */
-        record TerminalShape(Shape shape, Model model) implements Result {}
+        record TerminalShape(Shape shape, MemberShape targetOf, Model model) implements Result {
+            /**
+             * @return Whether the shape at the end of the path, or the member
+             *  it was targeted by, is an idRef.
+             */
+            boolean isIdRef() {
+                return shape.hasTrait(IdRefTrait.class) || (targetOf != null && targetOf.hasTrait(IdRefTrait.class));
+            }
+        }
 
         /**
          * The path ended on a key or member name of an object-like shape.
@@ -152,6 +162,10 @@ final class NodeSearch {
         }
 
         Result search(NodeCursor cursor, Shape shape) {
+            return search(cursor, shape, null);
+        }
+
+        protected final Result search(NodeCursor cursor, Shape shape, MemberShape targetOf) {
             if (!cursor.hasNext() || shape == null) {
                 return Result.NONE;
             }
@@ -164,7 +178,7 @@ final class NodeSearch {
                 case NodeCursor.Arr arr
                         when shape instanceof ListShape list -> searchArr(cursor, arr, list);
 
-                case NodeCursor.Terminal ignored -> new Result.TerminalShape(shape, model);
+                case NodeCursor.Terminal ignored -> new Result.TerminalShape(shape, targetOf, model);
 
                 default -> Result.NONE;
             };
@@ -180,11 +194,11 @@ final class NodeSearch {
 
                 case NodeCursor.Key key -> new Result.ObjectKey(key, shape, model);
 
-                case NodeCursor.ValueForKey ignored
-                        when shape instanceof MapShape map -> searchTarget(cursor, map.getValue());
+                case NodeCursor.ValueForKey value
+                        when shape instanceof MapShape map -> searchTarget(cursor, value.parent(), map.getValue());
 
                 case NodeCursor.ValueForKey value -> shape.getMember(value.keyName())
-                        .map(member -> searchTarget(cursor, member))
+                        .map(member -> searchTarget(cursor, value.parent(), member))
                         .orElse(Result.NONE);
 
                 default -> Result.NONE;
@@ -199,14 +213,14 @@ final class NodeSearch {
             return switch (cursor.next()) {
                 case NodeCursor.Terminal ignored -> new Result.ArrayShape(arr.node(), shape, model);
 
-                case NodeCursor.Elem ignored -> searchTarget(cursor, shape.getMember());
+                case NodeCursor.Elem elem -> searchTarget(cursor, elem.parent(), shape.getMember());
 
                 default -> Result.NONE;
             };
         }
 
-        protected Result searchTarget(NodeCursor cursor, MemberShape memberShape) {
-            return search(cursor, model.getShape(memberShape.getTarget()).orElse(null));
+        protected Result searchTarget(NodeCursor cursor, Syntax.Node parent, MemberShape memberShape) {
+            return search(cursor, model.getShape(memberShape.getTarget()).orElse(null), memberShape);
         }
     }
 
@@ -222,18 +236,16 @@ final class NodeSearch {
         }
 
         @Override
-        protected Result searchTarget(NodeCursor cursor, MemberShape memberShape) {
+        protected Result searchTarget(NodeCursor cursor, Syntax.Node parent, MemberShape memberShape) {
             DynamicMemberTarget dynamicMemberTarget = dynamicMemberTargets.get(memberShape.getId());
             if (dynamicMemberTarget != null) {
-                cursor.setCheckpoint();
-                Shape target = dynamicMemberTarget.getTarget(cursor, model);
-                cursor.returnToCheckpoint();
+                Shape target = dynamicMemberTarget.getTarget(parent, model);
                 if (target != null) {
-                    return search(cursor, target);
+                    return search(cursor, target, memberShape);
                 }
             }
 
-            return super.searchTarget(cursor, memberShape);
+            return super.searchTarget(cursor, parent, memberShape);
         }
     }
 }

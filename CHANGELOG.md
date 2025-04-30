@@ -1,5 +1,32 @@
 # Smithy Language Server Changelog
 
+## 0.7.0 (2025-04-15)
+
+### Features
+* Added standalone runtime images to GitHub release, to run the language server without a local Java installation. ([#159](https://github.com/smithy-lang/smithy-language-server/pull/159))
+* Improved how the language server is launched from the CLI. ([#218](https://github.com/smithy-lang/smithy-language-server/pull/218))
+* Added textDocument/rename support. ([#213](https://github.com/smithy-lang/smithy-language-server/pull/213))
+* Added textDocument/references support. ([#213](https://github.com/smithy-lang/smithy-language-server/pull/213))
+* Made textDocument/documentSymbol return hierarchical symbols. ([#206](https://github.com/smithy-lang/smithy-language-server/pull/206))
+
+### Bug fixes
+* Fixed possible crash on initialization. ([#216](https://github.com/smithy-lang/smithy-language-server/pull/216))
+* Removed extraneous validation events from hover content. ([#214](https://github.com/smithy-lang/smithy-language-server/pull/214))
+
+## 0.6.0 (2025-03-10)
+
+### Features
+* Improved completions, definition, and hover for everything in the IDL. ([#166](https://github.com/smithy-lang/smithy-language-server/pull/166))
+* Diagnostics for smithy-build.json. ([#188](https://github.com/smithy-lang/smithy-language-server/pull/188))
+* Completions for smithy-build.json. ([#193](https://github.com/smithy-lang/smithy-language-server/pull/193))
+* Hover for smithy-build.json. ([#202](https://github.com/smithy-lang/smithy-language-server/pull/202))
+* Folding range for traits and shape blocks. ([#190](https://github.com/smithy-lang/smithy-language-server/pull/190))
+* Inlay hints of the name of inline operation input/output. ([#200](https://github.com/smithy-lang/smithy-language-server/pull/200))
+
+### Bug fixes
+* Fixed crash when calling setTrace or cancelProgress. ([#183](https://github.com/smithy-lang/smithy-language-server/pull/183))
+* Fixed potential conflicting trait definition when rebuilding. ([#196](https://github.com/smithy-lang/smithy-language-server/pull/196))
+
 ## 0.5.0 (2024-11-06)
 
 ### Features

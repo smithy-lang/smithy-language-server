@@ -120,19 +120,7 @@ public final class LspAdapter {
      * @return The range of the identifier in the given document
      */
     public static Range identRange(Syntax.Ident ident, Document document) {
-        int line = document.lineOfIndex(ident.start());
-        if (line < 0) {
-            return null;
-        }
-
-        int lineStart = document.indexOfLine(line);
-        if (lineStart < 0) {
-            return null;
-        }
-
-        int startCharacter = ident.start() - lineStart;
-        int endCharacter = ident.end() - lineStart;
-        return LspAdapter.lineSpan(line, startCharacter, endCharacter);
+        return document.rangeOfValue(ident);
     }
 
     /**

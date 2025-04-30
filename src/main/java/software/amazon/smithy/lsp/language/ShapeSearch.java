@@ -9,12 +9,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import software.amazon.smithy.lsp.document.DocumentId;
+import software.amazon.smithy.lsp.document.DocumentImports;
 import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.syntax.NodeCursor;
 import software.amazon.smithy.lsp.syntax.StatementView;
 import software.amazon.smithy.lsp.syntax.Syntax;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.loader.Prelude;
+import software.amazon.smithy.model.shapes.MapShape;
 import software.amazon.smithy.model.shapes.ResourceShape;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
@@ -33,9 +35,9 @@ final class ShapeSearch {
      * Attempts to find a shape using a token, {@code nameOrId}.
      *
      * <p>When {@code nameOrId} does not contain a '#', this searches for shapes
-     * either in {@code idlParse}'s namespace, in {@code idlParse}'s
-     * imports, or the prelude, in that order. When {@code nameOrId} does contain
-     * a '#', it is assumed to be a full shape id and is searched for directly.
+     * either in {@code idlParse}'s imports, in {@code idlParse}'s namespace, or
+     * the prelude, in that order. When {@code nameOrId} does contain a '#', it
+     * is assumed to be a full shape id and is searched for directly.
      *
      * @param parseResult The parse result of the file {@code nameOrId} is within.
      * @param nameOrId    The name or shape id of the shape to find.
@@ -44,42 +46,69 @@ final class ShapeSearch {
      */
     static Optional<Shape> findShape(Syntax.IdlParseResult parseResult, String nameOrId, Model model) {
         return switch (nameOrId) {
-            case String s when s.isEmpty() -> Optional.empty();
-            case String s when s.contains("#") -> tryFrom(s).flatMap(model::getShape);
-            case String s -> {
-                Optional<Shape> fromCurrent = tryFromParts(parseResult.namespace().namespace(), s)
-                        .flatMap(model::getShape);
-                if (fromCurrent.isPresent()) {
-                    yield fromCurrent;
-                }
-
-                for (String fileImport : parseResult.imports().imports()) {
-                    Optional<Shape> imported = tryFrom(fileImport)
-                            .filter(importId -> importId.getName().equals(s))
-                            .flatMap(model::getShape);
-                    if (imported.isPresent()) {
-                        yield imported;
-                    }
-                }
-
-                yield tryFromParts(Prelude.NAMESPACE, s).flatMap(model::getShape);
-            }
             case null -> Optional.empty();
+
+            case String s when s.isEmpty() -> Optional.empty();
+
+            case String s when s.contains("#") -> tryFrom(s, model);
+
+            default -> fromImports(parseResult.imports(), nameOrId, model)
+                    .or(() -> tryFromRelative(parseResult.namespace().namespace(), nameOrId, model))
+                    .or(() -> tryFromRelative(Prelude.NAMESPACE, nameOrId, model));
         };
     }
 
-    private static Optional<ShapeId> tryFrom(String id) {
+    private static Optional<Shape> fromImports(DocumentImports imports, String nameOrId, Model model) {
+        if (imports.imports().isEmpty()) {
+            return Optional.empty();
+        }
+
+        if (nameOrId.contains("$")) {
+            // Relative member id, so it could be a member of an imported shape
+            String[] split = nameOrId.split("\\$");
+            String containerName = split[0];
+            String memberName = split[1];
+            String matchString = "#" + containerName;
+            for (String fileImport : imports.imports()) {
+                if (fileImport.endsWith(matchString)) {
+                    return tryWithMember(fileImport, memberName, model);
+                }
+            }
+        } else {
+            String matchString = "#" + nameOrId;
+            for (String fileImport : imports.imports()) {
+                if (fileImport.endsWith(matchString)) {
+                    return tryFrom(fileImport, model);
+                }
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private static Optional<Shape> tryFrom(String id, Model model) {
         try {
-            return Optional.of(ShapeId.from(id));
-        } catch (ShapeIdSyntaxException ignored) {
+            ShapeId shapeId = ShapeId.from(id);
+            return model.getShape(shapeId);
+        } catch (ShapeIdSyntaxException e) {
             return Optional.empty();
         }
     }
 
-    private static Optional<ShapeId> tryFromParts(String namespace, String name) {
+    private static Optional<Shape> tryWithMember(String rootId, String memberName, Model model) {
         try {
-            return Optional.of(ShapeId.fromRelative(namespace, name));
-        } catch (ShapeIdSyntaxException ignored) {
+            ShapeId shapeId = ShapeId.from(rootId).withMember(memberName);
+            return model.getShape(shapeId);
+        } catch (ShapeIdSyntaxException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<Shape> tryFromRelative(String namespace, String name, Model model) {
+        try {
+            ShapeId shapeId = ShapeId.fromRelative(namespace, name);
+            return model.getShape(shapeId);
+        } catch (ShapeIdSyntaxException e) {
             return Optional.empty();
         }
     }
@@ -94,25 +123,10 @@ final class ShapeSearch {
      */
     static Optional<? extends Shape> findShapeDefinition(IdlPosition idlPosition, DocumentId id, Model model) {
         return switch (idlPosition) {
-            case IdlPosition.TraitValue traitValue -> {
-                var result = searchTraitValue(traitValue, model);
-                if (result instanceof NodeSearch.Result.TerminalShape(var s, var m) && s.hasTrait(IdRefTrait.class)) {
-                    yield findShape(idlPosition.view().parseResult(), id.copyIdValue(), m);
-                } else if (result instanceof NodeSearch.Result.ObjectKey(var key, var container, var m)
-                           && !container.isMapShape()) {
-                    yield container.getMember(key.name());
-                }
-                yield Optional.empty();
-            }
+            case IdlPosition.TraitValue traitValue -> findShapeDefinitionInTrait(traitValue, id, model);
 
-            case IdlPosition.NodeMemberTarget nodeMemberTarget -> {
-                var result = searchNodeMemberTarget(nodeMemberTarget);
-                if (result instanceof NodeSearch.Result.TerminalShape(Shape shape, var ignored)
-                    && shape.hasTrait(IdRefTrait.class)) {
-                    yield findShape(nodeMemberTarget.view().parseResult(), id.copyIdValue(), model);
-                }
-                yield Optional.empty();
-            }
+            case IdlPosition.NodeMemberTarget nodeMemberTarget ->
+                    findShapeDefinitionInNodeMemberTarget(nodeMemberTarget, id, model);
 
             // Note: This could be made more specific, at least for mixins
             case IdlPosition.ElidedMember elidedMember ->
@@ -130,6 +144,107 @@ final class ShapeSearch {
             case IdlPosition pos when pos.isRootShapeReference() ->
                     findShape(pos.view().parseResult(), id.copyIdValue(), model);
 
+            default -> Optional.empty();
+        };
+    }
+
+    private static Optional<? extends Shape> findShapeDefinitionInTrait(
+            IdlPosition.TraitValue traitValue,
+            DocumentId id,
+            Model model
+    ) {
+        var result = searchTraitValue(traitValue, model);
+        return switch (result) {
+            case NodeSearch.Result.TerminalShape terminal when terminal.isIdRef() ->
+                    findShape(traitValue.view().parseResult(), id.copyIdValue(), model);
+
+            case NodeSearch.Result.ObjectKey objectKey when !objectKey.containerShape().isMapShape() ->
+                    objectKey.containerShape().getMember(objectKey.key().name());
+
+            default -> Optional.empty();
+        };
+    }
+
+    private static Optional<? extends Shape> findShapeDefinitionInNodeMemberTarget(
+            IdlPosition.NodeMemberTarget nodeMemberTarget,
+            DocumentId id,
+            Model model
+    ) {
+        var result = searchNodeMemberTarget(nodeMemberTarget);
+        if (result instanceof NodeSearch.Result.TerminalShape terminal && terminal.isIdRef()) {
+            return findShape(nodeMemberTarget.view().parseResult(), id.copyIdValue(), model);
+        }
+        return Optional.empty();
+    }
+
+    static Optional<Shape> getShapeReference(IdlPosition idlPosition, DocumentId id, Model model) {
+        Optional<Shape> shape = switch (idlPosition) {
+            case IdlPosition.TraitValue traitValue -> traitValueReference(traitValue, id, model);
+
+            case IdlPosition.NodeMemberTarget nodeMemberTarget ->
+                    nodeMemberTargetReference(nodeMemberTarget, id, model);
+
+            case IdlPosition pos when pos.isRootShapeReference() -> {
+                String nameOrId = id.copyIdValue();
+                yield findShape(pos.view().parseResult(), nameOrId, model);
+            }
+
+            default -> Optional.empty();
+        };
+
+        return shape.filter(s -> !s.isMemberShape());
+    }
+
+    private static Optional<Shape> traitValueReference(IdlPosition.TraitValue traitValue, DocumentId id, Model model) {
+        // Find the shape corresponding to the given traitValue position.
+        var searchResult = ShapeSearch.searchTraitValue(traitValue, model);
+
+        // We only care about results that could be shape refs, so trait members
+        // or idRefs.
+        return switch (searchResult) {
+            case NodeSearch.Result.TerminalShape terminal when terminal.isIdRef() -> {
+                String nameOrId = id.copyIdValue();
+                yield findShape(traitValue.view().parseResult(), nameOrId, model);
+            }
+
+            case NodeSearch.Result.ObjectKey objectKey -> {
+                if (objectKey.containerShape() instanceof MapShape mapShape) {
+                    if (mapShape.getKey().getMemberTrait(model, IdRefTrait.class).isPresent()) {
+                        String nameOrId = id.copyIdValue();
+                        yield findShape(traitValue.view().parseResult(), nameOrId, model);
+                    }
+                }
+                yield Optional.empty();
+            }
+
+            default -> Optional.empty();
+        };
+    }
+
+    private static Optional<Shape> nodeMemberTargetReference(
+            IdlPosition.NodeMemberTarget target,
+            DocumentId id,
+            Model model
+    ) {
+        var searchResult = ShapeSearch.searchNodeMemberTarget(target);
+        return switch (searchResult) {
+            // The cursor is on some node value nested within a member of a service, resource, or operation
+            // shape. When this value is supposed to represent a shape id, provide refs for that id.
+            case NodeSearch.Result.TerminalShape terminal when terminal.isIdRef() -> {
+                String nameOrId = id.copyIdValue();
+                yield findShape(target.view().parseResult(), nameOrId, model);
+            }
+
+            // The cursor is on some key of a node nested within a member of a service or resource shape.
+            // We want to provide refs when the key is a service closure shape rename.
+            case NodeSearch.Result.ObjectKey objectKey -> {
+                var containerId = objectKey.containerShape().getId();
+                if (Builtins.SERVICE_RENAME_ID.equals(containerId)) {
+                    yield findShape(target.view().parseResult(), objectKey.key().name(), model);
+                } else {
+                    yield Optional.empty();
+                }
+            }
             default -> Optional.empty();
         };
     }
@@ -275,7 +390,7 @@ final class ShapeSearch {
         // TODO: Note that searchTraitValue has to do a similar thing, but parsing
         //  trait values always yields at least an empty Kvps, so it is kind of the same.
         if (nodeMemberTarget.nodeMember().value() == null) {
-            return new NodeSearch.Result.TerminalShape(memberShapeDef, Builtins.MODEL);
+            return new NodeSearch.Result.TerminalShape(memberShapeDef, null, Builtins.MODEL);
         }
 
         NodeCursor cursor = NodeCursor.create(

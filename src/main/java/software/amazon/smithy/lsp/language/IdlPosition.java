@@ -70,12 +70,14 @@ sealed interface IdlPosition {
 
     static IdlPosition of(StatementView view) {
         int documentIndex = view.documentIndex();
+
+        if (view.getStatement().isInKeyword(documentIndex)) {
+            return new StatementKeyword(view);
+        }
+
         return switch (view.getStatement()) {
             case Syntax.Statement.Incomplete incomplete
                     when incomplete.ident().isIn(documentIndex) -> new IdlPosition.StatementKeyword(view);
-
-            case Syntax.Statement.ShapeDef shapeDef
-                    when shapeDef.shapeType().isIn(documentIndex) -> new IdlPosition.StatementKeyword(view);
 
             case Syntax.Statement.Apply apply
                     when apply.id().isIn(documentIndex) -> new IdlPosition.ApplyTarget(view);
@@ -109,6 +111,9 @@ sealed interface IdlPosition {
 
             case Syntax.Statement.TraitApplication t
                     when t.value() != null && t.value().isIn(documentIndex) -> new IdlPosition.TraitValue(view, t);
+
+            case Syntax.Statement.InlineMemberDef m
+                    when m.name().isIn(documentIndex) -> new IdlPosition.MemberName(view, m.name().stringValue());
 
             case Syntax.Statement.ElidedMemberDef ignored -> new IdlPosition.ElidedMember(view);
 

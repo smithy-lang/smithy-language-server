@@ -9,6 +9,7 @@ import java.util.Collection;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.InlayHint;
+import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
@@ -154,6 +155,35 @@ public final class LspMatchers {
                             + "," + item.getPosition().getCharacter()+ "'");
                 }
 
+            }
+        };
+    }
+
+    public static Matcher<Location> isLocationIncluding(String uri, Position position) {
+        return new CustomTypeSafeMatcher<>("a location in " + uri + " on the same line of, and including " + position) {
+            @Override
+            protected boolean matchesSafely(Location item) {
+                return rangeMatches(item.getRange()) && item.getUri().equals(uri);
+            }
+
+            private boolean rangeMatches(Range range) {
+                var start = range.getStart();
+                var end = range.getEnd();
+                return start.getLine() == position.getLine()
+                       && end.getLine() == position.getLine()
+                       && start.getCharacter() <= position.getCharacter()
+                       && end.getCharacter() > position.getCharacter();
+            }
+
+            @Override
+            protected void describeMismatchSafely(Location item, Description mismatchDescription) {
+                if (!item.getUri().equals(uri)) {
+                    mismatchDescription.appendText("uri was " + item.getUri());
+                }
+
+                if (!rangeMatches(item.getRange())) {
+                    mismatchDescription.appendText("range was " + item.getRange());
+                }
             }
         };
     }

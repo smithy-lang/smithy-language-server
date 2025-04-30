@@ -175,8 +175,14 @@ public final class CompletionHandler {
     ) {
         var result = ShapeSearch.searchTraitValue(traitValue, model);
         Set<String> excludeKeys = result.getOtherPresentKeys();
+        var contextWithExclude = context.withExclude(excludeKeys);
+
         CompletionCandidates candidates = CompletionCandidates.fromSearchResult(result);
-        return new SimpleCompleter(context.withExclude(excludeKeys)).getCompletionItems(candidates);
+        if (candidates instanceof CompletionCandidates.Shapes shapes) {
+            return new ShapeCompleter(traitValue, model, contextWithExclude).getCompletionItems(shapes);
+        }
+
+        return new SimpleCompleter(contextWithExclude).getCompletionItems(candidates);
     }
 
     private List<CompletionItem> memberNameCompletions(IdlPosition.MemberName memberName, CompleterContext context) {

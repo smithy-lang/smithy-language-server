@@ -75,6 +75,18 @@ public class BuildHoverHandlerTest {
         assertThat(hovers, empty());
     }
 
+    @Test
+    public void membersIncludeInheritedDocs() {
+        var twp = TextWithPositions.from("""
+                %{
+                    %"version": "1.0"
+                }
+                """);
+        var hovers = getHovers(BuildFileType.SMITHY_BUILD, twp);
+
+        assertThat(hovers, contains(containsString("Smithy Build Reference")));
+    }
+
     private static List<String> getHovers(BuildFileType buildFileType, TextWithPositions twp) {
         var workspace = TestWorkspace.emptyWithNoConfig("test");
         workspace.addModel(buildFileType.filename(), twp.text());

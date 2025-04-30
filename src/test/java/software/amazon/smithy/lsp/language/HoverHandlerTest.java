@@ -7,6 +7,7 @@ package software.amazon.smithy.lsp.language;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static software.amazon.smithy.lsp.document.DocumentTest.safeString;
 
@@ -22,7 +23,6 @@ import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectTest;
 import software.amazon.smithy.lsp.project.SmithyFile;
-import software.amazon.smithy.model.validation.Severity;
 
 public class HoverHandlerTest {
     @Test
@@ -42,7 +42,7 @@ public class HoverHandlerTest {
                 """);
         List<String> hovers = getHovers(text, new Position(0, 9));
 
-        assertThat(hovers, contains(containsString("suppressions")));
+        assertThat(hovers, contains(containsString("Suppressions")));
     }
 
     @Test
@@ -147,6 +147,219 @@ public class HoverHandlerTest {
         assertThat(hovers, contains(containsString("bar: String")));
     }
 
+    @Test
+    public void shapeKeywordHover() {
+        var twp = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                
+                %service MyService {}
+                %operation MyOperation {}
+                %resource MyResource {}
+                %list MyList {}
+                %map MyMap {}
+                %structure MyStructure {}
+                %union MyUnion {}
+                %blob MyBlob
+                %timestamp MyTimestamp
+                %document MyDocument
+                %enum MyEnum {}
+                %intEnum MyIntEnum {}
+                """);
+        var hovers = getHovers(twp);
+        assertThat(hovers, contains(
+                containsString("Service Reference"),
+                containsString("Operation Reference"),
+                containsString("Resource Reference"),
+                containsString("List Reference"),
+                containsString("Map Reference"),
+                containsString("Structure Reference"),
+                containsString("Union Reference"),
+                containsString("binary data"),
+                containsString("Timestamp Reference"),
+                containsString("Document Reference"),
+                containsString("Enum Reference"),
+                containsString("IntEnum Reference")
+        ));
+    }
+
+    @Test
+    public void builtinMemberHover() {
+        var twp = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                service MyService {
+                    %version: ""
+                    %operations: []
+                    %resources: []
+                    %errors: []
+                    %rename: {}
+                }
+                
+                operation MyOperation {
+                    %input := {}
+                    %output := {}
+                    %errors: []
+                }
+                
+                operation NoInlineOperation {
+                    %input: Foo
+                    %output: Foo
+                    %errors: []
+                }
+                
+                resource MyResource {
+                    %identifiers: {}
+                    %properties: {}
+                    %create: {}
+                    %put: {}
+                    %read: {}
+                    %update: {}
+                    %delete: {}
+                    %list: {}
+                    %operations: []
+                    %collectionOperations: []
+                    %resources: []
+                }
+                """);
+        var hovers = getHovers(twp);
+        assertThat(hovers, contains(
+                containsString("optional version"),
+                containsString("operation shapes"),
+                containsString("resource shapes"),
+                containsString("common errors"),
+                containsString("Disambiguates"),
+                containsString("input of the operation"),
+                containsString("output of the operation"),
+                containsString("errors that an operation"),
+                containsString("input of the operation"),
+                containsString("output of the operation"),
+                containsString("errors that an operation"),
+                containsString("map of identifier"),
+                containsString("map of property"),
+                containsString("create a resource"),
+                containsString("idempotent"),
+                containsString("retrieve the resource"),
+                containsString("update the resource"),
+                containsString("delete the resource"),
+                containsString("list resources"),
+                containsString("instance operations"),
+                containsString("collection operations"),
+                containsString("child resource")
+        ));
+    }
+
+    @Test
+    public void nonShapeKeywordHover() {
+        var twp = TextWithPositions.from("""
+                $version: "2"
+                
+                %metadata foo = "foo"
+                
+                %namespace com.foo
+                
+                %use com.foo#Foo
+                
+                %apply Foo @bar
+                
+                structure Foo %for Bar {}
+                
+                structure Baz %with [Foo] {}
+                """);
+        var hovers = getHovers(twp);
+
+        assertThat(hovers, contains(
+                containsString("schema-less"),
+                containsString("A namespace is"),
+                containsString("The use section"),
+                containsString("Applies a trait"),
+                containsString("Allows referencing"),
+                containsString("Mixes in")
+        ));
+    }
+
+    @Test
+    public void builtinsHoverIncludeInheritedDocs() {
+        var twp = TextWithPositions.from("""
+                $version: "2"
+                
+                metadata validators = [
+                    {
+                        %name: ""
+                    }
+                ]
+                
+                namespace com.foo
+                
+                operation MyOperation {
+                    %input := {}
+                }
+                """);
+        var hovers = getHovers(twp);
+
+        assertThat(hovers, contains(
+                containsString("Validators Reference"),
+                containsString("Operation Reference")
+        ));
+    }
+
+    @Test
+    public void builtinHoverDoesntClobberUserDocs() {
+        var twp = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                
+                list Foo {
+                    /// One
+                    %member: String
+                }
+                
+                map Bar {
+                    /// Two
+                    %key: String
+                
+                    /// Three
+                    %value: String
+                }
+                
+                structure Baz {
+                    /// Four
+                    /// Five
+                    %baz: String
+                }
+                """);
+        var hovers = getHovers(twp);
+
+        assertThat(hovers, contains(
+                containsString("One"),
+                containsString("Two"),
+                containsString("Three"),
+                containsString("Four")
+        ));
+    }
+
+    @Test
+    public void idRefMemberTraitValue() {
+        TextWithPositions text = TextWithPositions.from("""
+                $version: "2"
+                namespace com.foo
+                
+                @trait
+                structure foo {
+                    @idRef
+                    id: String
+                }
+                
+                @foo(id: %Bar)
+                string Bar
+                """);
+        var hovers = getHovers(text);
+
+        assertThat(hovers, containsInAnyOrder(
+                containsString("string Bar")
+        ));
+    }
+
     private static List<String> getHovers(TextWithPositions text) {
         return getHovers(text.text(), text.positions());
     }
@@ -158,7 +371,7 @@ public class HoverHandlerTest {
         SmithyFile smithyFile = (SmithyFile) project.getProjectFile(uri);
 
         List<String> hover = new ArrayList<>();
-        HoverHandler handler = new HoverHandler(project, (IdlFile) smithyFile, Severity.WARNING);
+        HoverHandler handler = new HoverHandler(project, (IdlFile) smithyFile);
         for (Position position : positions) {
             HoverParams params = RequestBuilders.positionRequest()
                     .uri(uri)
