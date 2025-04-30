@@ -52,9 +52,9 @@ You can also run the language server manually.
 2. Unzip the downloaded zip file.
 3. Run the language server by executing the following command:
       ```bash
-      java -jar /path/to/unziped/folder/smithy-language-server-0.x.x.jar [--port-number <port>]
-      // [--port-number] is optional (the default port number is set to 0).
-      ```
+      java -jar /path/to/unziped/folder/smithy-language-server-0.x.x.jar [--port | -p <port>]
+      // [--port | -p] is optional (port is set to 0 by default).
+      ``` 
 
 #### Neovim (JDK 21 is required)
 1. Download the latest release JAR from [release page](https://github.com/smithy-lang/smithy-language-server/releases).
