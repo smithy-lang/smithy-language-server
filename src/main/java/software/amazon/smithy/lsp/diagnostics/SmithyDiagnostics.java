@@ -208,8 +208,19 @@ public final class SmithyDiagnostics {
                 default -> DiagnosticSeverity.Hint;
             };
             var diagnosticRange = getDiagnosticRange(event);
-            var message = event.getId() + ": " + event.getMessage();
-            return new Diagnostic(diagnosticRange, message, diagnosticSeverity, "Smithy");
+
+            var message =
+                new StringBuilder(event.getId())
+                    .append(": ")
+                    .append(event.getMessage());
+
+            event.getHint().ifPresent(hint ->
+                message
+                    .append("\n\nHint: ")
+                    .append(hint)
+            );
+
+            return new Diagnostic(diagnosticRange, message.toString(), diagnosticSeverity, "Smithy");
         }
     }
 
