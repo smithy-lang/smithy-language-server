@@ -2,10 +2,23 @@ $version: "2.0"
 
 namespace smithy.lang.server
 
+/// Provides smithy-language-server with project layout information, including
+/// the location of source Smithy models and dependencies. Can be used for
+/// projects using an external build system.
 structure SmithyProjectJson {
+    /// List of file or directory paths containing the source Smithy files in
+    /// the project.
     sources: Strings
+
+    // Note: Extraneous, imports don't behave differently than sources for
+    //       the language server.
     imports: Strings
+
+    // Note: Unused right now. I was thinking maybe it could be used to ignore
+    //       the output dir if we wanted to search for models.
     outputDirectory: String
+
+    /// List of the project's dependencies.
     dependencies: ProjectDependencies
 }
 
@@ -13,9 +26,14 @@ list ProjectDependencies {
     member: ProjectDependency
 }
 
+/// Defines a dependency to include in the project.
 structure ProjectDependency {
+    // Note: This isn't and shouldn't be required, but the code expects it to
+    //       be present.
+    /// Name of the dependency.
     name: String
 
+    /// Path to the JAR file containing the dependency.
     @required
     path: String
 }
