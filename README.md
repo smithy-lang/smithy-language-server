@@ -21,8 +21,8 @@ For example, on an ARM Mac:
 
 ```shell
 curl -o download.zip -L "https://github.com/smithy-lang/smithy-language-server/releases/latest/download/smithy-language-server-darwin-aarch64.zip"
-unzip download.zip
-smithy-language-server-darwin-aarch64/bin/smithy-language-server --help
+unzip download.zip -d smithy-language-server
+smithy-language-server/bin/smithy-language-server --help
 ```
 
 Run smithy-language-server by running the launch script with no arguments - this
