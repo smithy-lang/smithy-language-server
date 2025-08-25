@@ -245,12 +245,36 @@ runtime {
         jdkHome = jdkDownload("${correttoRoot}-aarch64-macos-jdk.tar.gz")
     }
 
-    targetPlatform("windows-x64") {
+    targetPlatform("windows-x86_64") {
         jdkHome = jdkDownload("${correttoRoot}-x64-windows-jdk.zip")
     }
 
-    // Because we're using target-platforms, it will use this property as a prefix for each target zip
-    imageZip = layout.buildDirectory.file("image/smithy-language-server.zip")
+    // This block creates a custom `Zip` task for each `targetPlatform`, which zip up the contents of
+    // the platform's runtime image directory created by the runtime plugin. These tasks replace the
+    // action of `runtimeZip`.
+    //
+    // The only difference between this and what the runtime plugin does by default, is that the
+    // plugin zips each runtime image _directory_, whereas this zips each directory's _contents_.
+    // For example, with the runtime plugin's zips, if you `unzip smithy-language-server-<platform>.zip`,
+    // the launch script will be `./smithy-language-server-<platform>/bin/smithy-language-server`. With
+    // this, it will just be `./bin/smithy-language-server`. This makes it easier to download and run
+    // because there isn't an extra directory to go through, with a platform-dependent name.
+    afterEvaluate {
+        val runtimeZipTasks = targetPlatforms.get().keys.map { platformName ->
+            tasks.register<Zip>("runtimeZip$platformName") {
+                dependsOn(tasks.runtime)
+
+                archiveFileName = "smithy-language-server-$platformName.zip"
+                destinationDirectory = layout.buildDirectory.dir("image")
+                from(layout.buildDirectory.dir("image/smithy-language-server-$platformName"))
+            }
+        }
+
+        tasks.runtimeZip {
+            dependsOn(runtimeZipTasks)
+            actions.clear()
+        }
+    }
 }
 
 jreleaser {
@@ -298,7 +322,6 @@ jreleaser {
         replacements = mapOf(
             "osx" to "darwin",
             "aarch_64" to "aarch64",
-            "windows_x86_64" to "windows_x64"
         )
     }
 
@@ -328,7 +351,7 @@ jreleaser {
             }
 
             artifact {
-                path = layout.buildDirectory.file("image/smithy-language-server-windows-x64.zip")
+                path = layout.buildDirectory.file("image/smithy-language-server-windows-x86_64.zip")
                 platform = "windows-x86_64"
             }
         }
