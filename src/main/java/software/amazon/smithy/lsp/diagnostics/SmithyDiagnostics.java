@@ -192,6 +192,8 @@ public final class SmithyDiagnostics {
     }
 
     private sealed interface EventToDiagnostic {
+        String HINT_PREFIX = System.lineSeparator() + System.lineSeparator() + "Hint: ";
+
         default Range getDiagnosticRange(ValidationEvent event) {
             var start = LspAdapter.toPosition(event.getSourceLocation());
             var end = LspAdapter.toPosition(event.getSourceLocation());
@@ -211,8 +213,6 @@ public final class SmithyDiagnostics {
             var message = getMessage(event);
             return new Diagnostic(diagnosticRange, message, diagnosticSeverity, "Smithy");
         }
-       
-       String HINT_PREFIX = System.lineSeparator() + System.lineSeparator() + "Hint: ";
 
         private static String getMessage(ValidationEvent event) {
             var hint = event.getHint().orElse(null);
