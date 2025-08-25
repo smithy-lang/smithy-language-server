@@ -208,19 +208,19 @@ public final class SmithyDiagnostics {
                 default -> DiagnosticSeverity.Hint;
             };
             var diagnosticRange = getDiagnosticRange(event);
+            var message = getMessage(event);
+            return new Diagnostic(diagnosticRange, message, diagnosticSeverity, "Smithy");
+        }
+       
+       String HINT_PREFIX = System.lineSeparator() + System.lineSeparator() + "Hint: ";
 
-            var message =
-                new StringBuilder(event.getId())
-                    .append(": ")
-                    .append(event.getMessage());
+        private static String getMessage(ValidationEvent event) {
+            var hint = event.getHint().orElse(null);
+            if (hint == null) {
+                return event.getId() + ": " + event.getMessage();
+            }
 
-            event.getHint().ifPresent(hint ->
-                message
-                    .append("\n\nHint: ")
-                    .append(hint)
-            );
-
-            return new Diagnostic(diagnosticRange, message.toString(), diagnosticSeverity, "Smithy");
+            return event.getId() + ": " + event.getMessage() + HINT_PREFIX + hint;
         }
     }
 
