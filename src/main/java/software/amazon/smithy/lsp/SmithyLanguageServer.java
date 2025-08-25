@@ -369,7 +369,7 @@ public class SmithyLanguageServer implements
             return completedFuture(projectAndFile.file().document().copyText());
         } else {
             // Technically this can throw if the uri is invalid
-            return completedFuture(IoUtils.readUtf8Url(LspAdapter.jarUrl(uri)));
+            return completedFuture(IoUtils.readUtf8Url(LspAdapter.smithyJarUriToReadableUrl(uri)));
         }
     }
 

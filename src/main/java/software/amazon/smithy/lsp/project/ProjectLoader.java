@@ -211,7 +211,7 @@ public final class ProjectLoader {
         // the model stores jar paths as URIs
         if (LspAdapter.isSmithyJarFile(filePath) || LspAdapter.isJarFile(filePath)) {
             // Technically this can throw
-            String text = IoUtils.readUtf8Url(LspAdapter.jarUrl(filePath));
+            String text = IoUtils.readUtf8Url(LspAdapter.jarModelFilenameToReadableUrl(filePath));
             Document document = Document.of(text);
             consumer.accept(filePath, text, document);
             return;
