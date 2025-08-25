@@ -129,18 +129,6 @@ tasks {
         dependsOn(createProperties)
     }
 
-    jar {
-        from(configurations.runtimeClasspath.get().map { zipTree(it) }) {
-            // Don't need signature files, and we don't use modules
-            exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "**/module-info.class")
-            duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-        }
-
-        manifest {
-            attributes("Main-Class" to "software.amazon.smithy.lsp.Main")
-        }
-    }
-
     checkstyleTest {
         enabled = false
     }
@@ -215,7 +203,7 @@ checkstyle {
 }
 
 runtime {
-    addOptions("--compress", "2", "--strip-debug", "--no-header-files", "--no-man-pages")
+    addOptions("--compress", "zip-6", "--strip-debug", "--no-header-files", "--no-man-pages")
     addModules("java.logging", "java.naming", "java.xml", "jdk.crypto.ec")
 
     launcher {
