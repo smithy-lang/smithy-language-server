@@ -1,5 +1,21 @@
 # Smithy Language Server Changelog
 
+## 0.8.0 (2025-10-08)
+
+### Breaking
+* Changed file layout of GitHub release zips, so contents are not in a nested directory ([#234](https://github.com/smithy-lang/smithy-language-server/pull/234))
+* Changed Maven artifact to no longer be an uber jar ([#235](https://github.com/smithy-lang/smithy-language-server/pull/235))
+
+### Features
+* Added validation event hints to diagnostics, when present ([#230](https://github.com/smithy-lang/smithy-language-server/pull/230))
+
+### Bug fixes
+* Fixed loading projects when dependency paths have special characters ([#233](https://github.com/smithy-lang/smithy-language-server/pull/233))
+* Fixed possible `NoSuchMethod` error in model validation with Smithy 1.62.0 ([#238](https://github.com/smithy-lang/smithy-language-server/pull/238))
+
+### Documentation
+* Added installation instructions to README ([#232](https://github.com/smithy-lang/smithy-language-server/pull/232))
+
 ## 0.7.0 (2025-04-15)
 
 ### Features
