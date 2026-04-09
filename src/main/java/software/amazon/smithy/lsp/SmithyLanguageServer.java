@@ -19,13 +19,10 @@ import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.concurrent.CompletableFuture.supplyAsync;
 import static org.eclipse.lsp4j.jsonrpc.CompletableFutures.computeAsync;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -179,15 +176,6 @@ public class SmithyLanguageServer implements
     public void connect(LanguageClient client) {
         LOGGER.finest("Connect");
         this.client = new SmithyLanguageClient(client);
-        String message = "smithy-language-server";
-        try {
-            Properties props = new Properties();
-            props.load(Objects.requireNonNull(getClass().getClassLoader().getResourceAsStream("version.properties")));
-            message += " version " + props.getProperty("version");
-        } catch (IOException e) {
-            this.client.error("Failed to load smithy-language-server version: " + e);
-        }
-        this.client.info(message + " started.");
     }
 
     @Override
@@ -242,25 +230,45 @@ public class SmithyLanguageServer implements
         }
     }
 
+    // Some LSP clients don't respond to client/registerCapability or
+    // client/unregisterCapability, which blocks lsp4j's message loop.
+    // Capability registration is best-effort; the server still works without it.
+
+    private CompletableFuture<Void> registerBestEffort(RegistrationParams params, String description) {
+        return client.registerCapability(params)
+                .exceptionally(t -> {
+                    LOGGER.warning("Failed to " + description + ": " + t.getMessage());
+                    return null;
+                });
+    }
+
+    private CompletableFuture<Void> unregisterBestEffort(UnregistrationParams params, String description) {
+        return client.unregisterCapability(params)
+                .exceptionally(t -> {
+                    LOGGER.warning("Failed to " + description + ": " + t.getMessage());
+                    return null;
+                });
+    }
+
     private CompletableFuture<Void> registerSmithyFileWatchers() {
         List<Registration> registrations = FileWatcherRegistrations.getSmithyFileWatcherRegistrations(
                 state.getAllProjects());
-        return client.registerCapability(new RegistrationParams(registrations));
+        return registerBestEffort(new RegistrationParams(registrations), "register Smithy file watchers");
     }
 
     private CompletableFuture<Void> unregisterSmithyFileWatchers() {
         List<Unregistration> unregistrations = FileWatcherRegistrations.getSmithyFileWatcherUnregistrations();
-        return client.unregisterCapability(new UnregistrationParams(unregistrations));
+        return unregisterBestEffort(new UnregistrationParams(unregistrations), "unregister Smithy file watchers");
     }
 
     private CompletableFuture<Void> registerWorkspaceBuildFileWatchers() {
         var registrations = FileWatcherRegistrations.getBuildFileWatcherRegistrations(state.workspacePaths());
-        return client.registerCapability(new RegistrationParams(registrations));
+        return registerBestEffort(new RegistrationParams(registrations), "register build file watchers");
     }
 
     private CompletableFuture<Void> unregisterWorkspaceBuildFileWatchers() {
         var unregistrations = FileWatcherRegistrations.getBuildFileWatcherUnregistrations();
-        return client.unregisterCapability(new UnregistrationParams(unregistrations));
+        return unregisterBestEffort(new UnregistrationParams(unregistrations), "unregister build file watchers");
     }
 
     @Override
@@ -293,11 +301,12 @@ public class SmithyLanguageServer implements
         saveBuildOpts.setDocumentSelector(buildDocumentSelector);
         saveBuildOpts.setIncludeText(true);
 
-        client.registerCapability(new RegistrationParams(List.of(
+        registerBestEffort(new RegistrationParams(List.of(
                 new Registration("SyncSmithyBuildFiles/Open", "textDocument/didOpen", openCloseBuildOpts),
                 new Registration("SyncSmithyBuildFiles/Close", "textDocument/didClose", openCloseBuildOpts),
                 new Registration("SyncSmithyBuildFiles/Change", "textDocument/didChange", changeBuildOpts),
-                new Registration("SyncSmithyBuildFiles/Save", "textDocument/didSave", saveBuildOpts))));
+                new Registration("SyncSmithyBuildFiles/Save", "textDocument/didSave", saveBuildOpts))),
+                "register build file sync");
 
         DocumentFilter smithyFilter = new DocumentFilter();
         smithyFilter.setLanguage("smithy");
@@ -316,11 +325,12 @@ public class SmithyLanguageServer implements
         saveSmithyOpts.setDocumentSelector(smithyDocumentSelector);
         saveSmithyOpts.setIncludeText(true);
 
-        client.registerCapability(new RegistrationParams(List.of(
+        registerBestEffort(new RegistrationParams(List.of(
                 new Registration("SyncSmithyFiles/Open", "textDocument/didOpen", openCloseSmithyOpts),
                 new Registration("SyncSmithyFiles/Close", "textDocument/didClose", openCloseSmithyOpts),
                 new Registration("SyncSmithyFiles/Change", "textDocument/didChange", changeSmithyOpts),
-                new Registration("SyncSmithyFiles/Save", "textDocument/didSave", saveSmithyOpts))));
+                new Registration("SyncSmithyFiles/Save", "textDocument/didSave", saveSmithyOpts))),
+                "register Smithy file sync");
     }
 
     @Override
@@ -419,7 +429,7 @@ public class SmithyLanguageServer implements
 
         // TODO: Update watchers based on specific changes
         // Note: We don't update build file watchers here - only on workspace changes
-        unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
+        unregisterSmithyFileWatchers().thenCompose(unused -> registerSmithyFileWatchers());
 
         sendFileDiagnosticsForManagedDocuments();
     }
@@ -436,8 +446,8 @@ public class SmithyLanguageServer implements
             state.removeWorkspace(folder);
         }
 
-        unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
-        unregisterWorkspaceBuildFileWatchers().thenRun(this::registerWorkspaceBuildFileWatchers);
+        unregisterSmithyFileWatchers().thenCompose(unused -> registerSmithyFileWatchers());
+        unregisterWorkspaceBuildFileWatchers().thenCompose(unused -> registerWorkspaceBuildFileWatchers());
         sendFileDiagnosticsForManagedDocuments();
     }
 
@@ -542,7 +552,7 @@ public class SmithyLanguageServer implements
         Project project = projectAndFile.project();
         if (projectAndFile.file() instanceof BuildFile) {
             reportProjectLoadErrors(state.tryInitProject(project.root()));
-            unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
+            unregisterSmithyFileWatchers().thenCompose(unused -> registerSmithyFileWatchers());
             sendFileDiagnosticsForManagedDocuments();
         } else {
             CompletableFuture<Void> future = CompletableFuture

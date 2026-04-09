@@ -96,17 +96,6 @@ tasks {
         archiveClassifier = "javadoc"
     }
 
-    val createProperties by register("createProperties") {
-        dependsOn(processResources)
-
-        doLast {
-            val file = layout.buildDirectory.file("resources/main/version.properties").get().asFile
-            val properties = Properties()
-            properties["version"] = version.toString()
-            properties.store(file.writer(), null)
-        }
-    }
-
     // Generate a changelog that only includes the changes for the latest version
     // which JReleaser will add to the release notes of the GitHub release.
     val createReleaseChangelog by register("createReleaseChangelog") {
@@ -123,10 +112,6 @@ tasks {
             val result = changelog.substring(getIndex(), getIndex()).trim()
             releaseChangelogFile.asFile.writeText(result)
         }
-    }
-
-    classes {
-        dependsOn(createProperties)
     }
 
     checkstyleTest {

@@ -13,7 +13,7 @@ import org.eclipse.lsp4j.UnregistrationParams;
 import org.eclipse.lsp4j.WorkDoneProgressCreateParams;
 import org.eclipse.lsp4j.services.LanguageClient;
 
-public final class StubClient implements LanguageClient {
+public class StubClient implements LanguageClient {
     public final List<PublishDiagnosticsParams> diagnostics = new ArrayList<>();
     public List<MessageParams> shown = new ArrayList<>();
     public List<MessageParams> logged = new ArrayList<>();

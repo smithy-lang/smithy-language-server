@@ -48,11 +48,14 @@ import org.eclipse.lsp4j.FileChangeType;
 import org.eclipse.lsp4j.FormattingOptions;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.InitializeParams;
+import org.eclipse.lsp4j.InitializedParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.RegistrationParams;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
+import org.eclipse.lsp4j.UnregistrationParams;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.junit.jupiter.api.Test;
@@ -2243,6 +2246,62 @@ public class SmithyLanguageServerTest {
         assertThat(projectAndFile, notNullValue());
         assertThat(projectAndFile.project().type(), equalTo(expectedType));
         assertThat(projectAndFile.project().root(), equalTo(expectedRootPath));
+    }
+
+    @Test
+    public void initializedHandlesRegisterCapabilityFailure() throws Exception {
+        TestWorkspace workspace = TestWorkspace.singleModel(safeString("""
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """));
+
+        StubClient client = new StubClient() {
+            @Override
+            public CompletableFuture<Void> registerCapability(RegistrationParams params) {
+                return CompletableFuture.failedFuture(
+                        new RuntimeException("Client does not support registerCapability"));
+            }
+        };
+
+        SmithyLanguageServer server = initFromWorkspace(workspace, client);
+        server.initialized(new InitializedParams());
+
+        Project project = server.getState().findProjectByRoot(workspace.getRoot().toString());
+        assertThat(project, notNullValue());
+        assertThat(project.modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
+    }
+
+    @Test
+    public void unregisterFailureDoesNotBlockReRegistration() throws Exception {
+        TestWorkspace workspace = TestWorkspace.singleModel(safeString("""
+                $version: "2"
+                namespace com.foo
+                string Foo
+                """));
+
+        StubClient client = new StubClient() {
+            @Override
+            public CompletableFuture<Void> unregisterCapability(UnregistrationParams params) {
+                return CompletableFuture.failedFuture(
+                        new RuntimeException("Client does not support unregisterCapability"));
+            }
+        };
+
+        SmithyLanguageServer server = initFromWorkspace(workspace, client);
+        server.initialized(new InitializedParams());
+
+        // Trigger the unregister→register chain via didChangeWatchedFiles
+        server.didChangeWatchedFiles(RequestBuilders.didChangeWatchedFiles()
+                .event(workspace.getRoot().resolve("model/main.smithy").toUri().toString(),
+                        FileChangeType.Changed)
+                .build());
+
+        // Server should still function - the register should have proceeded
+        // despite the unregister failure
+        Project project = server.getState().findProjectByRoot(workspace.getRoot().toString());
+        assertThat(project, notNullValue());
+        assertThat(project.modelResult(), hasValue(hasShapeWithId("com.foo#Foo")));
     }
 
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {
