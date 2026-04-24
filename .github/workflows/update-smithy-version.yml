@@ -14,13 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'smithy-lang/smithy-language-server'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Fetch latest smithy version
         id: fetch-latest
         run: |
           echo "latestSmithy=$( \
-            curl -sL https://api.github.com/repos/awslabs/smithy/releases/latest | \
+            curl -sL https://api.github.com/repos/smithy-lang/smithy/releases/latest | \
             jq -r '.tag_name')" >> $GITHUB_OUTPUT
 
       - name: Get current versions
