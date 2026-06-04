@@ -1,11 +1,5 @@
 # Smithy Language Server Changelog
 
-## 0.9.0 (2026-06-04)
-
-### Other
-
-* Bump to update to the latest Smithy version.
-
 ## 0.8.0 (2025-10-08)
 
 ### Breaking
