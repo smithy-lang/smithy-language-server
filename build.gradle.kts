@@ -56,7 +56,8 @@ dependencies {
     implementation("software.amazon.smithy:smithy-model:[$smithyVersion, 2.0[")
     implementation("software.amazon.smithy:smithy-syntax:[$smithyVersion, 2.0[")
 
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testImplementation(platform("org.junit:junit-bom:5.10.0"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.hamcrest:hamcrest:2.2")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
