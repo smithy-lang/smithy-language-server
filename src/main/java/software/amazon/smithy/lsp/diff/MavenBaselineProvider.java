@@ -44,11 +44,9 @@ public final class MavenBaselineProvider implements BaselineProvider {
     private final boolean transitiveDependencies;
     private final Supplier<DependencyResolver> resolverFactory;
 
-    // Memoizes the assembled model by the resolved jar paths (which encode the concrete
-    // version), so re-calling loadBaseline() for a moving coordinate only re-assembles when the
-    // resolved version actually changed. Resolution itself is cheap (Maven metadata is locally
-    // cached per the resolver's update policy).
-    private List<Path> memoizedJars;
+    // Memoizes the assembled baseline so it is resolved and assembled once per provider instance
+    // and reused across saves. The provider is rebuilt (and this cache dropped) when the
+    // configured coordinate changes or on an explicit reload.
     private ValidatedResult<Model> memoizedResult;
 
     /**
@@ -132,6 +130,11 @@ public final class MavenBaselineProvider implements BaselineProvider {
                         "Baseline coordinate '" + coordinate + "' did not resolve to a matching artifact");
             }
             return jars;
+        } catch (BaselineModelException e) {
+            // Already a baseline error with a specific, user-facing message (e.g. "not found on
+            // disk", "did not resolve to a matching artifact"); surface it as-is rather than
+            // demoting it to the cause of the generic message below.
+            throw e;
         } catch (RuntimeException e) {
             throw new BaselineModelException(
                     "Failed to resolve baseline coordinate '" + coordinate + "'", e);

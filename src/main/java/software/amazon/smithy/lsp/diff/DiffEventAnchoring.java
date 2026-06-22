@@ -6,10 +6,10 @@
 package software.amazon.smithy.lsp.diff;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.SourceLocation;
@@ -63,12 +63,11 @@ public final class DiffEventAnchoring {
             Model currentModel,
             String buildFilePath
     ) {
-        Set<String> currentFiles = currentSourceFiles(currentModel);
-        Map<String, String> namespaceToFile = namespaceToFile(currentModel);
+        FileIndex index = indexCurrentFiles(currentModel);
 
         return diffEvents.stream()
-          .map(event -> anchorEvent(event, currentFiles, namespaceToFile, buildFilePath))
-          .toList();
+                .map(event -> anchorEvent(event, index.currentFiles(), index.namespaceToFile(), buildFilePath))
+                .toList();
     }
 
     private static ValidationEvent anchorEvent(
@@ -94,27 +93,26 @@ public final class DiffEventAnchoring {
                 .build();
     }
 
-    private static Set<String> currentSourceFiles(Model model) {
-        return model.shapes()
-                .map(shape -> shape.getSourceLocation().getFilename())
-                .filter(DiffEventAnchoring::isEditableFile)
-                .collect(Collectors.toSet());
+    // The set of current editable files and a map from each namespace to a deterministic
+    // (lexicographically smallest) current file defining a shape in it, built in a single pass.
+    private record FileIndex(Set<String> currentFiles, Map<String, String> namespaceToFile) {
     }
 
-    // Maps each namespace to a deterministic (lexicographically smallest) current file that
-    // defines a shape in it, so namespaces spanning multiple files anchor stably.
-    private static Map<String, String> namespaceToFile(Model model) {
+    private static FileIndex indexCurrentFiles(Model model) {
+        Set<String> currentFiles = new HashSet<>();
         Map<String, String> namespaceToFile = new HashMap<>();
         model.shapes().forEach(shape -> {
             String filename = shape.getSourceLocation().getFilename();
             if (isEditableFile(filename)) {
+                currentFiles.add(filename);
+                // Namespaces spanning multiple files anchor stably to the smallest filename.
                 namespaceToFile.merge(
                         shape.getId().getNamespace(),
                         filename,
                         (existing, candidate) -> existing.compareTo(candidate) <= 0 ? existing : candidate);
             }
         });
-        return namespaceToFile;
+        return new FileIndex(currentFiles, namespaceToFile);
     }
 
     private static boolean isEditableFile(String filename) {
