@@ -32,6 +32,7 @@ import software.amazon.smithy.cli.dependencies.DependencyResolver;
 import software.amazon.smithy.cli.dependencies.DependencyResolverException;
 import software.amazon.smithy.cli.dependencies.MavenDependencyResolver;
 import software.amazon.smithy.cli.dependencies.ResolvedArtifact;
+import software.amazon.smithy.lsp.diff.DiffConfig;
 import software.amazon.smithy.model.SourceException;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.loader.ModelDiscovery;
@@ -134,14 +135,16 @@ final class ProjectConfigLoader {
             }
         }
 
+        DiffConfig diffConfig = null;
         if (smithyProjectJson != null) {
             sources.addAll(smithyProjectJson.sources());
             imports.addAll(smithyProjectJson.imports());
             projectDependencies.addAll(smithyProjectJson.dependencies());
+            diffConfig = smithyProjectJson.diff();
         }
 
         var resolver = new Resolver(root, loader.events, loader.smithyNodes, dependencyResolverFactory);
-        ProjectConfig resolved = resolver.resolve(sources, imports, mavenConfig, projectDependencies);
+        ProjectConfig resolved = resolver.resolve(sources, imports, mavenConfig, projectDependencies, diffConfig);
 
         return new Result(resolved, resolver.events());
     }
@@ -323,7 +326,8 @@ final class ProjectConfigLoader {
                 List<String> sources,
                 List<String> imports,
                 MavenConfig mavenConfig,
-                List<SmithyProjectJson.ProjectDependency> projectDependencies
+                List<SmithyProjectJson.ProjectDependency> projectDependencies,
+                DiffConfig diffConfig
         ) {
             Set<Path> resolvedMaven = resolveMaven(mavenConfig);
             Set<Path> resolveProjectDependencies = resolveProjectDependencies(projectDependencies);
@@ -349,7 +353,8 @@ final class ProjectConfigLoader {
                     projectDependencies,
                     mavenConfig,
                     modelPaths,
-                    resolvedDependencies
+                    resolvedDependencies,
+                    diffConfig
             );
         }
 

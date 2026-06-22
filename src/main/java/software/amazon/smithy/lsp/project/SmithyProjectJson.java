@@ -6,6 +6,7 @@
 package software.amazon.smithy.lsp.project;
 
 import java.util.List;
+import software.amazon.smithy.lsp.diff.DiffConfig;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.node.ObjectNode;
 import software.amazon.smithy.model.node.StringNode;
@@ -14,10 +15,11 @@ record SmithyProjectJson(
         List<String> sources,
         List<String> imports,
         List<ProjectDependency> dependencies,
-        String outputDirectory
+        String outputDirectory,
+        DiffConfig diff
 ) {
     static SmithyProjectJson empty() {
-        return new SmithyProjectJson(List.of(), List.of(), List.of(), null);
+        return new SmithyProjectJson(List.of(), List.of(), List.of(), null, null);
     }
 
     static SmithyProjectJson fromNode(Node node) {
@@ -43,7 +45,11 @@ record SmithyProjectJson(
 
         String outputDirectory = objectNode.getStringMemberOrDefault("outputDirectory", null);
 
-        return new SmithyProjectJson(sources, imports, dependencies, outputDirectory);
+        DiffConfig diff = objectNode.getObjectMember("diff")
+                .map(DiffConfig::fromNode)
+                .orElse(null);
+
+        return new SmithyProjectJson(sources, imports, dependencies, outputDirectory, diff);
     }
 
     /**

@@ -13,10 +13,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import software.amazon.smithy.lsp.diff.DiffConfig;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.model.Model;
@@ -129,6 +131,14 @@ public final class Project {
 
     ProjectConfig config() {
         return config;
+    }
+
+    /**
+     * @return The project's diff configuration from {@code .smithy-project.json}, or empty if
+     *  the {@code diff} block is absent (the diff feature is off for this project).
+     */
+    public Optional<DiffConfig> diffConfig() {
+        return config.diffConfig();
     }
 
     public List<ValidationEvent> configEvents() {

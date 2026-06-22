@@ -8,7 +8,9 @@ package software.amazon.smithy.lsp.project;
 import java.net.URL;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import software.amazon.smithy.build.model.MavenConfig;
+import software.amazon.smithy.lsp.diff.DiffConfig;
 
 /**
  * A complete view of all a project's configuration that is needed to load it,
@@ -23,6 +25,7 @@ final class ProjectConfig {
     private final MavenConfig maven;
     private final List<Path> modelPaths;
     private final List<URL> resolvedDependencies;
+    private final DiffConfig diffConfig;
 
     ProjectConfig(
             List<String> sources,
@@ -30,7 +33,8 @@ final class ProjectConfig {
             List<SmithyProjectJson.ProjectDependency> projectDependencies,
             MavenConfig maven,
             List<Path> modelPaths,
-            List<URL> resolvedDependencies
+            List<URL> resolvedDependencies,
+            DiffConfig diffConfig
     ) {
         this.sources = sources;
         this.imports = imports;
@@ -38,14 +42,15 @@ final class ProjectConfig {
         this.maven = maven == null ? DEFAULT_MAVEN : maven;
         this.modelPaths = modelPaths;
         this.resolvedDependencies = resolvedDependencies;
+        this.diffConfig = diffConfig;
     }
 
     private ProjectConfig() {
-        this(List.of(), List.of(), List.of(), DEFAULT_MAVEN, List.of(), List.of());
+        this(List.of(), List.of(), List.of(), DEFAULT_MAVEN, List.of(), List.of(), null);
     }
 
     private ProjectConfig(Path modelPath) {
-        this(List.of(), List.of(), List.of(), DEFAULT_MAVEN, List.of(modelPath), List.of());
+        this(List.of(), List.of(), List.of(), DEFAULT_MAVEN, List.of(modelPath), List.of(), null);
     }
 
     static ProjectConfig empty() {
@@ -78,5 +83,9 @@ final class ProjectConfig {
 
     List<URL> resolvedDependencies() {
         return resolvedDependencies;
+    }
+
+    Optional<DiffConfig> diffConfig() {
+        return Optional.ofNullable(diffConfig);
     }
 }
