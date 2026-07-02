@@ -131,9 +131,6 @@ public final class MavenBaselineProvider implements BaselineProvider {
             }
             return jars;
         } catch (BaselineModelException e) {
-            // Already a baseline error with a specific, user-facing message (e.g. "not found on
-            // disk", "did not resolve to a matching artifact"); surface it as-is rather than
-            // demoting it to the cause of the generic message below.
             throw e;
         } catch (RuntimeException e) {
             throw new BaselineModelException(

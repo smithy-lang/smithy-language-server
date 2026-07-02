@@ -9,7 +9,9 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import software.amazon.smithy.build.model.MavenConfig;
+import software.amazon.smithy.build.model.MavenRepository;
 import software.amazon.smithy.lsp.diff.DiffConfig;
 
 /**
@@ -75,6 +77,10 @@ final class ProjectConfig {
 
     MavenConfig maven() {
         return maven;
+    }
+
+    Set<MavenRepository> mavenRepositories() {
+        return ProjectConfigLoader.configuredMavenRepos(maven);
     }
 
     List<Path> modelPaths() {

@@ -149,6 +149,15 @@ final class ProjectConfigLoader {
         return new Result(resolved, resolver.events());
     }
 
+    /**
+     * @param config the project's Maven configuration (may be null)
+     * @return the repositories used to resolve the project's dependencies, for reuse when
+     *  resolving a diff baseline coordinate from the same project
+     */
+    static Set<MavenRepository> configuredMavenRepos(MavenConfig config) {
+        return Resolver.getConfiguredMavenRepos(config);
+    }
+
     private SmithyBuildConfig loadSmithyBuild() {
         return loadFile(
                 buildFiles.getByType(BuildFileType.SMITHY_BUILD),

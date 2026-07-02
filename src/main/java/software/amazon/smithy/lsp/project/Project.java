@@ -51,6 +51,7 @@ public final class Project {
     private volatile ValidatedResult<Model> modelResult;
     private volatile RebuildIndex rebuildIndex;
     private volatile List<ValidationEvent> configEvents;
+    private volatile List<ValidationEvent> diffEvents;
 
     Project(
             Path root,
@@ -61,7 +62,8 @@ public final class Project {
             Type type,
             ValidatedResult<Model> modelResult,
             RebuildIndex rebuildIndex,
-            List<ValidationEvent> configEvents
+            List<ValidationEvent> configEvents,
+            List<ValidationEvent> diffEvents
     ) {
         this.root = root;
         this.config = config;
@@ -72,6 +74,7 @@ public final class Project {
         this.modelResult = modelResult;
         this.rebuildIndex = rebuildIndex;
         this.configEvents = configEvents;
+        this.diffEvents = diffEvents;
     }
 
     /**
@@ -119,7 +122,9 @@ public final class Project {
                 Type.EMPTY,
                 ValidatedResult.empty(),
                 new RebuildIndex(),
-                List.of());
+                List.of(),
+                List.of()
+        );
     }
 
     /**
@@ -143,6 +148,23 @@ public final class Project {
 
     public List<ValidationEvent> configEvents() {
         return configEvents;
+    }
+
+    /**
+     * @return The diff events from the most recent diff run, re-anchored to current files.
+     *  Empty until a diff has run
+     */
+    public List<ValidationEvent> diffEvents() {
+        return diffEvents;
+    }
+
+    /**
+     * Replaces the project's diff events, e.g. after running the diff on save.
+     *
+     * @param diffEvents the re-anchored diff events to surface as diagnostics
+     */
+    public void setDiffEvents(List<ValidationEvent> diffEvents) {
+        this.diffEvents = List.copyOf(diffEvents);
     }
 
     /**
