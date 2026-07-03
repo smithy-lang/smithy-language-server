@@ -120,6 +120,7 @@ build system, like Gradle. It has the following top-level properties:
 |--------------|------------|------------------------------------------------------------------------------------|
 | sources      | `[string]` | List of file or directory paths containing the source Smithy files in the project. |
 | dependencies | `[object]` | List of the project's dependencies.                                                |
+| diff         | `object`   | Optional. Enables in-editor breaking-change detection. See [Diff evaluation](#diff-evaluation). |
 
 Each object in `dependencies` has the following properties:
 
@@ -152,6 +153,110 @@ project that uses `smithy-build.json` to configure projections, but defines
 sources and dependencies elsewhere. If both `smithy-build.json` and `.smithy-project.json`
 define sources and dependencies, they will be merged together and de-duplicated.
 
+## Diff evaluation
+
+The language server can run Smithy [`DiffEvaluator`s](https://github.com/smithy-lang/smithy/tree/main/smithy-diff)
+against a *baseline* ("previous") version of your model as you edit, surfacing breaking-change
+diagnostics in your editor instead of waiting for CI. Configure it with a `diff` block in
+`.smithy-project.json`:
+
+```json
+{
+    "sources": ["model/"],
+    "diff": {
+        "baseline": {
+            "type": "maven",
+            "coordinate": "com.example:my-model:1.4.2"
+        },
+        "enabledEvaluators": ["MyCompatEvaluator"],
+        "disabledEvaluators": []
+    }
+}
+```
+
+The `diff` block has the following properties:
+
+| Property           | Type       | Description                                                                                                   |
+|--------------------|------------|---------------------------------------------------------------------------------------------------------------|
+| baseline           | `object`   | (**required**) How to load the baseline model to diff against.                                                |
+| enabledEvaluators  | `[string]` | Optional allowlist of evaluator event-id prefixes. If non-empty, only matching events are reported.           |
+| disabledEvaluators | `[string]` | Optional denylist of evaluator event-id prefixes. Subtracts from the allowed set (a denied prefix always wins). |
+| transitiveDependencies | `boolean` | Optional (default `false`, `"maven"` baselines only). When `false`, only the resolved baseline artifact's own jar is loaded (the baseline must be self-contained). Set to `true` to also load the artifact's transitive dependency jars, so a baseline that isn't self-contained can pull its trait definitions from its dependencies. Only enable this when the artifact does **not** redefine shapes its dependencies already declare, or assembly fails with "Duplicate shape". |
+
+`baseline` has the following properties:
+
+| Property   | Type     | Description                                                                                       |
+|------------|----------|---------------------------------------------------------------------------------------------------|
+| type       | `string` | (**required**) Baseline source: `"maven"` or `"url"`.                                              |
+| coordinate | `string` | (**required** for `"maven"`) Maven coordinate (`group:artifact:version`) of the artifact containing the baseline model. The version may be a pinned version (`1.4.2`), a version range (`[1.0,)`), or a `-SNAPSHOT`. The Maven metaversions `LATEST`/`RELEASE` are **not** supported (Smithy's dependency resolver rejects them); a coordinate using them is reported as a config error. |
+| url        | `string` | (**required** for `"url"`) An `http(s)` URL the server issues a `GET` to; the response body must be a [Smithy JSON AST](https://smithy.io/2.0/spec/json-ast.html) model. Fetched once and cached for the session (use `smithy.reloadDiffBaseline` to re-fetch). |
+
+With `type: "url"`, the baseline is fetched directly rather than resolved from Maven:
+
+```json
+{
+    "diff": {
+        "baseline": {
+            "type": "url",
+            "url": "https://example.com/my-model/baseline.json"
+        }
+    }
+}
+```
+
+The baseline model (Maven artifact or URL response) should be **self-contained** — for Maven, by default only the resolved artifact itself is
+loaded, not its transitive dependencies. A flattened JSON serialization that already includes
+the trait definitions from its dependencies is ideal; bundling those dependency jars *and* the
+flattened model would redefine the same shapes and fail with "Duplicate shape". Unknown traits
+are tolerated, so a baseline that references dependency traits without bundling their definitions
+still loads. If your baseline artifact is *not* self-contained and its dependencies define
+disjoint shapes (e.g. trait definitions it relies on), set `"transitiveDependencies": true` to
+also load its dependency jars.
+
+`enabledEvaluators`/`disabledEvaluators` match against the **event id** an evaluator emits
+(e.g. `RemovedShape`, or `MyCompatEvaluator`), by dot-delimited prefix: `"MyCompatEvaluator"`
+matches `MyCompatEvaluator` and `MyCompatEvaluator.Member`, but not `MyCompatEvaluatorX`. To run
+*only* a single custom evaluator (and silence the stock ones), set
+`"enabledEvaluators": ["MyCompatEvaluator"]`.
+
+### How it works
+
+- The diff runs **on save**, alongside normal validation. Breaking-change events appear in the
+  Problems view with the source `smithy-diff`.
+- Events about shapes that still exist (added/changed) appear at the shape's location. Events
+  about **removed** shapes — which have no current location — are anchored to the top of a file
+  in the same namespace, falling back to `.smithy-project.json`.
+- A **pinned** version (e.g. `1.4.2`) is resolved and assembled once, then cached for the
+  session. A **moving** version (a range or `-SNAPSHOT`) is re-resolved on each save so newly
+  published baselines are picked up automatically — the model is only re-assembled when the
+  resolved version actually changes, so this stays cheap. (Maven metadata is itself cached per
+  your resolver's update policy, typically daily, so a moving version reflects "the latest as of
+  the last metadata refresh," not necessarily the last second.)
+- A **`url`** baseline is fetched once and cached for the session, like a pinned Maven version.
+- The **`smithy.reloadDiffBaseline`** command forces a full refresh, and changing the
+  `coordinate`/`url` in `.smithy-project.json` picks up a new baseline immediately.
+- Evaluator severities, diff-event suppressions, and severity overrides from your model's
+  metadata are honored, exactly as with the `smithy diff` CLI.
+
+### Evaluators are discovered from your dependencies
+
+Evaluators are discovered via Java's `ServiceLoader` over your project's **resolved Maven
+dependencies** (the `maven` block of `smithy-build.json`). The stock `smithy-diff` evaluators
+(e.g. `RemovedShape`, `ChangedShapeType`) are always available. To run a **custom** evaluator,
+its artifact must:
+
+1. Contain a class implementing `software.amazon.smithy.diff.DiffEvaluator`, and
+2. Register it under `META-INF/services/software.amazon.smithy.diff.DiffEvaluator`, and
+3. Be declared as a dependency of your project (so the language server resolves it onto the
+   classpath).
+
+The artifact must be compiled against a Smithy version compatible with the one the language
+server bundles; an incompatible evaluator is skipped (and logged) rather than failing the diff.
+
+If the baseline `coordinate` can't be resolved, the server reports it both as a diagnostic on
+`.smithy-project.json` and as a window error message. Transient problems (e.g. the file you're
+editing doesn't currently parse) are skipped silently until the next successful save.
+
 ## Features
 
 - Completions in Smithy files and `smithy-build.json`
@@ -165,6 +270,7 @@ define sources and dependencies, they will be merged together and de-duplicated.
 - File structure (document symbols)
 - Code folding
 - Inlay hints for inline input/output
+- Breaking-change detection via Smithy diff evaluators (see [Diff evaluation](#diff-evaluation))
 
 ## Security
 

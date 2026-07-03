@@ -9,11 +9,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticCodeDescription;
 import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
+import software.amazon.smithy.lsp.diff.DiffEventAnchoring;
 import software.amazon.smithy.lsp.document.DocumentParser;
 import software.amazon.smithy.lsp.project.BuildFile;
 import software.amazon.smithy.lsp.project.IdlFile;
@@ -34,6 +36,10 @@ public final class SmithyDiagnostics {
     public static final String DEFINE_VERSION = "define-idl-version";
     public static final String DETACHED_FILE = "detached-file";
     public static final String USE_SMITHY_BUILD = "use-smithy-build";
+
+    /** Distinguishes breaking-change diff diagnostics from assembler validation diagnostics. */
+    public static final String DIFF_SOURCE = "smithy-diff";
+    public static final String SMITHY_SOURCE = "Smithy";
 
     private static final DiagnosticCodeDescription UPDATE_VERSION_DESCRIPTION =
             new DiagnosticCodeDescription("https://smithy.io/2.0/guides/migrating-idl-1-to-2.html");
@@ -63,10 +69,16 @@ public final class SmithyDiagnostics {
         String path = projectAndFile.file().path();
         EventToDiagnostic eventToDiagnostic = diagnose.getEventToDiagnostic();
 
-        List<Diagnostic> diagnostics = diagnose.getValidationEvents().stream()
+        Stream<Diagnostic> diffDiagnostics = projectAndFile.project().diffEvents().stream()
                 .filter(event -> event.getSeverity().compareTo(minimumSeverity) >= 0
                                  && event.getSourceLocation().getFilename().equals(path))
-                .map(eventToDiagnostic::toDiagnostic)
+                .map(event -> eventToDiagnostic.toDiagnostic(event, DIFF_SOURCE));
+        Stream<Diagnostic> validationDiagnostics = diagnose.getValidationEvents().stream()
+                .filter(event -> event.getSeverity().compareTo(minimumSeverity) >= 0
+                                 && event.getSourceLocation().getFilename().equals(path))
+                .map(eventToDiagnostic::toDiagnostic);
+
+        List<Diagnostic> diagnostics = Stream.concat(diffDiagnostics, validationDiagnostics)
                 .collect(Collectors.toCollection(ArrayList::new));
 
         diagnose.addExtraDiagnostics(diagnostics);
@@ -195,6 +207,10 @@ public final class SmithyDiagnostics {
         String HINT_PREFIX = System.lineSeparator() + System.lineSeparator() + "Hint: ";
 
         default Range getDiagnosticRange(ValidationEvent event) {
+            if (DiffEventAnchoring.isAnchoredToOrigin(event)) {
+                return new Range(new Position(0, 0), new Position(0, 1));
+            }
+
             var start = LspAdapter.toPosition(event.getSourceLocation());
             var end = LspAdapter.toPosition(event.getSourceLocation());
             end.setCharacter(end.getCharacter() + 1); // Range is exclusive
@@ -203,15 +219,19 @@ public final class SmithyDiagnostics {
         }
 
         default Diagnostic toDiagnostic(ValidationEvent event) {
+          return toDiagnostic(event, SMITHY_SOURCE);
+        }
+
+        default Diagnostic toDiagnostic(ValidationEvent event, String source) {
             var diagnosticSeverity = switch (event.getSeverity()) {
                 case ERROR, DANGER -> DiagnosticSeverity.Error;
                 case WARNING -> DiagnosticSeverity.Warning;
                 case NOTE -> DiagnosticSeverity.Information;
                 default -> DiagnosticSeverity.Hint;
             };
-            var diagnosticRange = getDiagnosticRange(event);
+            Range diagnosticRange = getDiagnosticRange(event);
             var message = getMessage(event);
-            return new Diagnostic(diagnosticRange, message, diagnosticSeverity, "Smithy");
+            return new Diagnostic(diagnosticRange, message, diagnosticSeverity, source);
         }
 
         private static String getMessage(ValidationEvent event) {
@@ -231,6 +251,12 @@ public final class SmithyDiagnostics {
         public Range getDiagnosticRange(ValidationEvent event) {
             Position eventStart = LspAdapter.toPosition(event.getSourceLocation());
             final Range defaultRange = EventToDiagnostic.super.getDiagnosticRange(event);
+
+            // A re-anchored removal points at the origin as a placeholder, not a real token, so
+            // don't let range refinement "improve" it into the token at the top of the file.
+            if (DiffEventAnchoring.isAnchoredToOrigin(event)) {
+                return defaultRange;
+            }
 
             if (event.getShapeId().isPresent()) {
                 int eventStartIndex = parser.getDocument().indexOfPosition(eventStart);

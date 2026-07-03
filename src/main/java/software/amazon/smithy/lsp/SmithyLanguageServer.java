@@ -22,11 +22,15 @@ import static org.eclipse.lsp4j.jsonrpc.CompletableFutures.computeAsync;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.eclipse.lsp4j.ClientCapabilities;
@@ -52,6 +56,8 @@ import org.eclipse.lsp4j.DocumentFormattingParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.DynamicRegistrationCapabilities;
+import org.eclipse.lsp4j.ExecuteCommandOptions;
+import org.eclipse.lsp4j.ExecuteCommandParams;
 import org.eclipse.lsp4j.FoldingRange;
 import org.eclipse.lsp4j.FoldingRangeRequestParams;
 import org.eclipse.lsp4j.Hover;
@@ -63,6 +69,8 @@ import org.eclipse.lsp4j.InlayHint;
 import org.eclipse.lsp4j.InlayHintParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
+import org.eclipse.lsp4j.MessageParams;
+import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.PrepareRenameDefaultBehavior;
 import org.eclipse.lsp4j.PrepareRenameParams;
 import org.eclipse.lsp4j.PrepareRenameResult;
@@ -122,6 +130,8 @@ import software.amazon.smithy.lsp.project.BuildFile;
 import software.amazon.smithy.lsp.project.IdlFile;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectAndFile;
+import software.amazon.smithy.lsp.project.ProjectDiffer;
+import software.amazon.smithy.lsp.project.ProjectFile;
 import software.amazon.smithy.lsp.project.SmithyFile;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.syntax.Syntax;
@@ -135,6 +145,8 @@ import software.amazon.smithy.utils.IoUtils;
 
 public class SmithyLanguageServer implements
         LanguageServer, LanguageClientAware, SmithyProtocolExtensions, WorkspaceService, TextDocumentService {
+    static final String RELOAD_DIFF_BASELINE_COMMAND = "smithy.reloadDiffBaseline";
+
     private static final Logger LOGGER = Logger.getLogger(SmithyLanguageServer.class.getName());
     private static final ServerCapabilities CAPABILITIES;
 
@@ -151,6 +163,7 @@ public class SmithyLanguageServer implements
         capabilities.setInlayHintProvider(true);
         capabilities.setReferencesProvider(true);
         capabilities.setRenameProvider(new RenameOptions(true));
+        capabilities.setExecuteCommandProvider(new ExecuteCommandOptions(List.of(RELOAD_DIFF_BASELINE_COMMAND)));
 
         WorkspaceFoldersOptions workspaceFoldersOptions = new WorkspaceFoldersOptions();
         workspaceFoldersOptions.setSupported(true);
@@ -161,10 +174,32 @@ public class SmithyLanguageServer implements
 
     private SmithyLanguageClient client;
     private final ServerState state = new ServerState();
+    private final ProjectDiffer projectDiffer;
+
+    // The unmanaged (closed) files that currently carry a published diff diagnostic, keyed by
+    // project root. Tracked so that when a breaking change is fixed and a file stops carrying a
+    // diff event, its stale diagnostic is cleared — sendFileDiagnosticsForManagedDocuments only
+    // re-publishes open files, so a closed file would otherwise keep the diagnostic forever.
+    private final Map<String, Set<String>> unmanagedDiffDiagnosticUrisByRoot = new ConcurrentHashMap<>();
     private ClientCapabilities clientCapabilities;
     private ServerOptions serverOptions;
 
     SmithyLanguageServer() {
+        this.projectDiffer = new ProjectDiffer(this::showBaselineConfigError);
+        registerProjectDiffer();
+    }
+
+    // Test seam: lets tests supply a ProjectDiffer with an in-memory baseline provider so the
+    // diff can run without resolving a real Maven coordinate.
+    SmithyLanguageServer(ProjectDiffer projectDiffer) {
+        this.projectDiffer = projectDiffer;
+        registerProjectDiffer();
+    }
+
+    // Release each project's diff resources (its cached evaluator class loader) when the project
+    // is removed, so dependency jar handles aren't leaked (finding #10).
+    private void registerProjectDiffer() {
+        state.setProjectRemovalListener(projectDiffer::evict);
     }
 
     ServerState getState() {
@@ -172,7 +207,27 @@ public class SmithyLanguageServer implements
     }
 
     Severity getMinimumSeverity() {
-        return this.serverOptions.getMinimumSeverity();
+        return serverOptions.getMinimumSeverity();
+    }
+
+    // Eagerly load each loaded project's diff baseline at startup, off the message thread, so the
+    // first save isn't slowed by baseline resolution + assembly. A baseline config error surfaces
+    // via the same window message / diagnostic path as a save-time diff; projects without a diff
+    // config are skipped inside ProjectDiffer.
+    private void warmDiffBaselines() {
+        CompletableFuture.runAsync(() -> {
+            for (Project project : state.getAllProjects()) {
+                projectDiffer.warmBaseline(project);
+            }
+        });
+    }
+
+    // Surfaces a baseline configuration error as a window message, in addition to the
+    // diagnostic on .smithy-project.json (which is only visible when that file is open).
+    private void showBaselineConfigError(String message) {
+        if (client != null) {
+            client.showMessage(new MessageParams(MessageType.Error, message));
+        }
     }
 
     @Override
@@ -217,6 +272,8 @@ public class SmithyLanguageServer implements
                 WorkDoneProgressEnd notification = new WorkDoneProgressEnd();
                 client.notifyProgress(new ProgressParams(workDoneProgressToken, Either.forLeft(notification)));
             }
+
+            warmDiffBaselines();
         }
 
         this.clientCapabilities = params.getCapabilities();
@@ -410,6 +467,27 @@ public class SmithyLanguageServer implements
     }
 
     @Override
+    public CompletableFuture<Object> executeCommand(ExecuteCommandParams params) {
+        LOGGER.finest("ExecuteCommand");
+
+        if (RELOAD_DIFF_BASELINE_COMMAND.equals(params.getCommand())) {
+            // Snapshot the live project map before iterating on a background thread, since other
+            // LSP callbacks can mutate it concurrently (getAllProjects() returns the live values).
+            List<Project> projects = new ArrayList<>(state.getAllProjects());
+            return CompletableFuture.runAsync(() -> {
+                for (Project project : projects) {
+                    projectDiffer.reload(project);
+                }
+            }).thenRun(() -> {
+                sendFileDiagnosticsForManagedDocuments();
+                projects.forEach(this::sendDiffDiagnosticsForUnmanagedAnchoredFiles);
+            }).thenApply(ignored -> null);
+        }
+
+        return completedFuture(null);
+    }
+
+    @Override
     public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
         LOGGER.finest("DidChangeWatchedFiles");
 
@@ -543,11 +621,46 @@ public class SmithyLanguageServer implements
         if (projectAndFile.file() instanceof BuildFile) {
             reportProjectLoadErrors(state.tryInitProject(project.root()));
             unregisterSmithyFileWatchers().thenRun(this::registerSmithyFileWatchers);
-            sendFileDiagnosticsForManagedDocuments();
+            // tryInitProject replaces the project, so re-run the diff against the rebuilt project so
+            // a changed baseline coordinate is picked up immediately (the coordinate-keyed cache in
+            // ProjectDiffer rebuilds when it changes). Keep the baseline I/O off the message thread.
+            Project rebuilt = state.findProjectByRoot(project.root().toString());
+            if (rebuilt != null) {
+                CompletableFuture<Void> future = CompletableFuture
+                        .runAsync(() -> projectDiffer.runDiff(rebuilt))
+                        .thenRunAsync(() -> {
+                            sendFileDiagnosticsForManagedDocuments();
+                            sendDiffDiagnosticsForUnmanagedAnchoredFiles(rebuilt);
+                        });
+                state.lifecycleTasks().putTask(uri, future);
+            } else {
+                sendFileDiagnosticsForManagedDocuments();
+            }
         } else {
             CompletableFuture<Void> future = CompletableFuture
-                    .runAsync(() -> project.updateAndValidateModel(uri))
-                    .thenRunAsync(() -> sendFileDiagnostics(projectAndFile));
+                    .supplyAsync(() -> {
+                        project.updateAndValidateModel(uri);
+                        // The changed-diff-files set (empty when the diff produced the same events
+                        // as last time) lets us skip the workspace-wide refresh when nothing the
+                        // diff touched changed.
+                        return projectDiffer.runDiff(project);
+                    })
+                    .thenAcceptAsync(changedDiffFiles -> {
+                        // Diff events can anchor to files other than the saved one (a removal's
+                        // namespace file, or the build file). Only refresh those files when the
+                        // diff actually changed them; otherwise keep the cheaper single-file path
+                        // for the saved document (finding #11). The saved file is always refreshed
+                        // for its ordinary validation diagnostics.
+                        String savedPath = LspAdapter.toPath(uri);
+                        boolean onlySavedFileChanged = changedDiffFiles.isEmpty()
+                                || (changedDiffFiles.size() == 1 && changedDiffFiles.contains(savedPath));
+                        if (onlySavedFileChanged) {
+                            sendFileDiagnostics(projectAndFile);
+                        } else {
+                            sendFileDiagnosticsForManagedDocuments();
+                            sendDiffDiagnosticsForUnmanagedAnchoredFiles(project);
+                        }
+                    });
             state.lifecycleTasks().putTask(uri, future);
         }
     }
@@ -787,12 +900,63 @@ public class SmithyLanguageServer implements
         }
     }
 
+    // Diff events re-anchor to whichever file is most relevant — a removal's namespace file, or
+    // the .smithy-project.json for full-namespace removals / no-shapeId events / baseline config
+    // errors. Those target files are often not open, and the managed-document refresh above only
+    // reaches open files, so the most severe breaks would never appear in the Problems panel
+    // (finding #6). publishDiagnostics populates the panel for any URI, open or not, so publish
+    // for each distinct unmanaged file a diff event anchored to. (Open files are already covered.)
+    private void sendDiffDiagnosticsForUnmanagedAnchoredFiles(Project project) {
+        String root = project.root().toString();
+        Set<String> anchoredPaths = project.diffEvents().stream()
+                .map(event -> event.getSourceLocation().getFilename())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Set<String> currentUris = new LinkedHashSet<>();
+        for (String path : anchoredPaths) {
+            String uri = LspAdapter.toUri(path);
+            if (state.findManaged(uri) != null) {
+                continue; // open files are refreshed via sendFileDiagnosticsForManagedDocuments
+            }
+            ProjectFile file = project.getProjectFile(uri);
+            if (file != null) {
+                currentUris.add(uri);
+                publishFileDiagnostics(new ProjectAndFile(uri, project, file));
+            }
+        }
+
+        // Clear stale diff diagnostics: any unmanaged file that carried a diff diagnostic on the
+        // previous cycle but no longer does (e.g. the breaking change was fixed). Re-publishing its
+        // current diagnostics drops the now-absent diff event while keeping any real diagnostics;
+        // if it's no longer a project file, publish an empty set to clear it outright.
+        Set<String> previousUris = unmanagedDiffDiagnosticUrisByRoot.getOrDefault(root, Set.of());
+        for (String staleUri : previousUris) {
+            if (currentUris.contains(staleUri) || state.findManaged(staleUri) != null) {
+                continue;
+            }
+            ProjectFile file = project.getProjectFile(staleUri);
+            if (file != null) {
+                publishFileDiagnostics(new ProjectAndFile(staleUri, project, file));
+            } else {
+                client.publishDiagnostics(new PublishDiagnosticsParams(staleUri, List.of()));
+            }
+        }
+
+        if (currentUris.isEmpty()) {
+            unmanagedDiffDiagnosticUrisByRoot.remove(root);
+        } else {
+            unmanagedDiffDiagnosticUrisByRoot.put(root, currentUris);
+        }
+    }
+
     private CompletableFuture<Void> sendFileDiagnostics(ProjectAndFile projectAndFile) {
-        return CompletableFuture.runAsync(() -> {
-            List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(
-                    projectAndFile, this.serverOptions.getMinimumSeverity());
-            var publishDiagnosticsParams = new PublishDiagnosticsParams(projectAndFile.uri(), diagnostics);
-            client.publishDiagnostics(publishDiagnosticsParams);
-        });
+        return CompletableFuture.runAsync(() -> publishFileDiagnostics(projectAndFile));
+    }
+
+    private void publishFileDiagnostics(ProjectAndFile projectAndFile) {
+        List<Diagnostic> diagnostics = SmithyDiagnostics.getFileDiagnostics(
+                projectAndFile, getMinimumSeverity());
+        var publishDiagnosticsParams = new PublishDiagnosticsParams(projectAndFile.uri(), diagnostics);
+        client.publishDiagnostics(publishDiagnosticsParams);
     }
 }

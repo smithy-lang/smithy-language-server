@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.logging.Logger;
 import org.eclipse.lsp4j.FileEvent;
 import org.eclipse.lsp4j.WorkspaceFolder;
@@ -37,6 +38,9 @@ public final class ServerState implements ManagedFiles {
     private final Set<Path> workspacePaths;
     private final Set<String> managedUris;
     private final FileTasks lifecycleTasks;
+    // Notified (with the project root) whenever a project is removed, so per-project resources
+    // held elsewhere (e.g. the diff evaluator class loader in ProjectDiffer) can be released.
+    private Consumer<String> projectRemovalListener = root -> { };
 
     /**
      * Create a new, empty server state.
@@ -46,6 +50,16 @@ public final class ServerState implements ManagedFiles {
         this.workspacePaths = new HashSet<>();
         this.managedUris = new HashSet<>();
         this.lifecycleTasks = new FileTasks();
+    }
+
+    /**
+     * Registers a callback invoked with a project's root whenever that project is removed, so
+     * resources keyed on the project (e.g. the diff evaluator class loader) can be cleaned up.
+     *
+     * @param projectRemovalListener the removal callback
+     */
+    void setProjectRemovalListener(Consumer<String> projectRemovalListener) {
+        this.projectRemovalListener = projectRemovalListener;
     }
 
     /**
@@ -142,7 +156,10 @@ public final class ServerState implements ManagedFiles {
         ProjectAndFile projectAndFile = findProjectAndFile(uri);
         if (projectAndFile != null && shouldDropOnClose(projectAndFile.project())) {
             lifecycleTasks.cancelTask(uri);
-            projects.remove(uri);
+            Project removed = projects.remove(uri);
+            if (removed != null) {
+                projectRemovalListener.accept(removed.root().toString());
+            }
         }
     }
 
@@ -247,6 +264,7 @@ public final class ServerState implements ManagedFiles {
     private void removeProjectAndResolve(String projectName) {
         Project removedProject = projects.remove(projectName);
         if (removedProject != null) {
+            projectRemovalListener.accept(removedProject.root().toString());
             resolveProjects(removedProject, Project.empty(removedProject.root()));
         }
     }
