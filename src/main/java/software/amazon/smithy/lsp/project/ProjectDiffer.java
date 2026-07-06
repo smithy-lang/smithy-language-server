@@ -8,6 +8,7 @@ package software.amazon.smithy.lsp.project;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -16,12 +17,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import software.amazon.smithy.build.model.MavenRepository;
+import software.amazon.smithy.diff.DiffEvaluator;
 import software.amazon.smithy.lsp.diff.BaselineModelException;
 import software.amazon.smithy.lsp.diff.BaselineProvider;
 import software.amazon.smithy.lsp.diff.DiffConfig;
@@ -53,18 +56,16 @@ public final class ProjectDiffer {
 
     private static final Logger LOGGER = Logger.getLogger(ProjectDiffer.class.getName());
 
-    // Maps a parsed baseline config to its provider. Baseline types other than the supported ones
-    // are rejected at config parse time (DiffConfig.Baseline.fromNode), so the default branch is
-    // defensive and not normally reached.
+    // Maps a parsed baseline config to its provider. The switch is exhaustive over the sealed
+    // Baseline hierarchy, so unsupported baseline types can't reach here — they're rejected at
+    // config parse time (DiffConfig.Baseline.fromNode).
     private static final BaselineProviderFactory DEFAULT_FACTORY = (baseline, repositories) ->
-            switch (baseline.type()) {
-                case DiffConfig.Baseline.MAVEN ->
-                        new MavenBaselineProvider(baseline.coordinate(), new ArrayList<>(repositories),
-                                baseline.transitiveDependencies());
-                case DiffConfig.Baseline.URL ->
-                        new UrlBaselineProvider(baseline.url());
-                default -> throw new BaselineModelException(
-                        "Unsupported diff baseline type '" + baseline.type() + "'");
+            switch (baseline) {
+                case DiffConfig.MavenBaseline maven ->
+                        new MavenBaselineProvider(maven.coordinate(), new ArrayList<>(repositories),
+                                maven.transitiveDependencies());
+                case DiffConfig.UrlBaseline url ->
+                        new UrlBaselineProvider(url.url());
             };
 
     // One context per project root, holding that project's diff lock, baseline provider, and
@@ -125,6 +126,17 @@ public final class ProjectDiffer {
      */
     public Set<String> runDiff(Project project) {
         String root = project.root().toString();
+        Optional<DiffConfig> maybeConfig = project.diffConfig();
+        if (maybeConfig.isEmpty()) {
+            // Don't create a context for a project without a diff config — every save of every
+            // project (including detached single files) runs through here, and contexts for
+            // no-config roots would grow contextsByRoot unboundedly. Just drop any stale context
+            // (e.g. the diff block was removed from the config) and clear the project's events.
+            List<ValidationEvent> previousEvents = project.diffEvents();
+            project.setDiffEvents(List.of());
+            evict(root);
+            return changedFiles(previousEvents, List.of());
+        }
         DiffContext context = contextsByRoot.computeIfAbsent(root, ignored -> new DiffContext());
         context.lock.lock();
         try {
@@ -134,22 +146,14 @@ public final class ProjectDiffer {
             if (contextsByRoot.get(root) != context) {
                 return Set.of();
             }
-            return runDiffLocked(project, root, context);
+            return runDiffLocked(project, maybeConfig.get(), context);
         } finally {
             context.lock.unlock();
         }
     }
 
-    private Set<String> runDiffLocked(Project project, String root, DiffContext context) {
+    private Set<String> runDiffLocked(Project project, DiffConfig config, DiffContext context) {
         List<ValidationEvent> previousEvents = project.diffEvents();
-
-        Optional<DiffConfig> maybeConfig = project.diffConfig();
-        if (maybeConfig.isEmpty()) {
-            project.setDiffEvents(List.of());
-            context.reset();
-            return changedFiles(previousEvents, List.of());
-        }
-        DiffConfig config = maybeConfig.get();
 
         // Resolve/assemble the baseline before checking the current model, so a baseline config
         // error is surfaced (or cleared) on its own merits regardless of whether the edited model
@@ -164,9 +168,11 @@ public final class ProjectDiffer {
             // Config-loud: the baseline coordinate is unresolvable/malformed — user-fixable.
             List<ValidationEvent> errorEvents = surfaceBaselineConfigError(project, context, e);
             return changedFiles(previousEvents, errorEvents);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | Error e) {
             // Runtime-quiet: an unexpected failure assembling the baseline must not break the
-            // save flow — skip this cycle and keep the previous diff events.
+            // save flow — skip this cycle and keep the previous diff events. Error is included
+            // (matching the diff-execution catch below) because the resolver stack loads lazily
+            // and a LinkageError here would otherwise suppress the save's diagnostics publish.
             LOGGER.log(Level.WARNING, "Skipping diff: failed to load baseline", e);
             return Set.of();
         }
@@ -194,8 +200,8 @@ public final class ProjectDiffer {
 
         List<ValidationEvent> anchored;
         try {
-            URLClassLoader classLoader = context.evaluatorClassLoader(project);
-            List<ValidationEvent> rawEvents = ModelDiffRunner.run(classLoader, baselineModel, currentModel);
+            List<DiffEvaluator> evaluators = context.evaluators(project);
+            List<ValidationEvent> rawEvents = ModelDiffRunner.run(evaluators, baselineModel, currentModel);
             List<ValidationEvent> diffEvents =
                     new DiffEvaluatorFilter(config.enabledEvaluators(), config.disabledEvaluators())
                             .filter(rawEvents);
@@ -234,21 +240,34 @@ public final class ProjectDiffer {
     }
 
     /**
-     * Invalidates the cached baseline for the project (so a moving coordinate is re-fetched)
-     * and re-runs the diff. Held under the same per-project lock as {@link #runDiff}, so a
-     * concurrent save can't repopulate the cache between the drop and the re-run.
+     * Invalidates the cached baseline for the project (so a newly published baseline is
+     * re-fetched even for an unchanged coordinate/url) and re-runs the diff. Held under the same
+     * per-project lock as {@link #runDiff}, so a concurrent save can't repopulate the cache
+     * between the drop and the re-run.
      *
      * @param project the project whose baseline should be reloaded
      */
     public void reload(Project project) {
         String root = project.root().toString();
+        Optional<DiffConfig> maybeConfig = project.diffConfig();
+        if (maybeConfig.isEmpty()) {
+            // Nothing to reload; drop any stale context and events (the config was removed).
+            project.setDiffEvents(List.of());
+            evict(root);
+            return;
+        }
         DiffContext context = contextsByRoot.computeIfAbsent(root, ignored -> new DiffContext());
         context.lock.lock();
         try {
+            // Same evicted-context re-check as runDiff/warmBaseline: rebuilding on an orphaned
+            // context would leak a class loader nothing will ever close.
+            if (contextsByRoot.get(root) != context) {
+                return;
+            }
             // Drop the cached provider/baseline/class loader entirely so the next diff rebuilds
             // from scratch, forcing a fresh resolve + assemble even for a pinned coordinate.
             context.reset();
-            runDiffLocked(project, root, context);
+            runDiffLocked(project, maybeConfig.get(), context);
         } finally {
             context.lock.unlock();
         }
@@ -257,8 +276,8 @@ public final class ProjectDiffer {
     /**
      * Eagerly resolves and assembles the project's diff baseline so the (potentially slow) baseline
      * I/O is paid once at server startup rather than on the first save. The provider memoizes the
-     * assembled baseline by its resolved jar paths, so the subsequent first {@link #runDiff} reuses
-     * it instead of re-resolving.
+     * assembled baseline for its lifetime, so the subsequent first {@link #runDiff} reuses it
+     * instead of re-resolving.
      *
      * <p>A no-op for a project without a {@code diff} config. Runs under the same per-project lock as
      * {@link #runDiff}, and surfaces a baseline config error the same way (a loud diagnostic on
@@ -288,7 +307,7 @@ public final class ProjectDiffer {
         } catch (BaselineModelException e) {
             // Config-loud: the baseline coordinate is unresolvable/malformed — user-fixable.
             surfaceBaselineConfigError(project, context, e);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | Error e) {
             // Runtime-quiet: an unexpected failure warming the baseline must not break startup —
             // log and leave it for the first save's runDiff to retry.
             LOGGER.log(Level.WARNING, "Skipping diff baseline warm-up: failed to load baseline", e);
@@ -320,12 +339,19 @@ public final class ProjectDiffer {
     public void evict(String root) {
         DiffContext context = contextsByRoot.remove(root);
         if (context != null) {
-            context.lock.lock();
-            try {
-                context.reset();
-            } finally {
-                context.lock.unlock();
-            }
+            // Reset off the calling thread: eviction runs on the LSP message thread (didClose,
+            // workspace removal), and taking the context lock there would park all message
+            // processing behind an in-flight baseline resolve. Removing the context from the map
+            // (above) is what stops new work — runDiff/warmBaseline/reload re-check membership
+            // after locking — so the async reset only closes resources once in-flight work ends.
+            CompletableFuture.runAsync(() -> {
+                context.lock.lock();
+                try {
+                    context.reset();
+                } finally {
+                    context.lock.unlock();
+                }
+            });
         }
     }
 
@@ -340,7 +366,8 @@ public final class ProjectDiffer {
 
     private static String diffConfigFilePath(Project project) {
         return project.getAllBuildFilePaths().stream()
-                .filter(path -> path.endsWith(".smithy-project.json"))
+                .filter(path -> Paths.get(path).getFileName().toString()
+                        .equals(BuildFileType.SMITHY_PROJECT.filename()))
                 .findFirst()
                 .or(() -> project.getAllBuildFilePaths().stream().findFirst())
                 .orElseGet(() -> project.root().toString());
@@ -360,9 +387,12 @@ public final class ProjectDiffer {
         private List<MavenRepository> repositories;
         private BaselineProvider provider;
 
-        // Evaluator class loader, keyed by the resolved dependency jar URLs.
+        // Evaluator class loader and the evaluators discovered on it, keyed by the resolved
+        // dependency jar URLs. Caching the instantiated evaluators (not just the loader) avoids
+        // re-reading META-INF/services and re-instantiating every evaluator on each save.
         private List<String> classLoaderKey;
         private URLClassLoader evaluatorClassLoader;
+        private List<DiffEvaluator> evaluators;
 
         // Last config-error message surfaced, so we notify only when it changes.
         private String lastConfigError;
@@ -381,27 +411,30 @@ public final class ProjectDiffer {
                     && newRepositories.equals(repositories)) {
                 return;
             }
+            // Create before updating the key fields: if create() throws, the old provider must
+            // not survive paired with the new key, or later calls would silently reuse it for a
+            // different configured baseline.
+            this.provider = providerFactory.create(newBaseline, newRepositories);
             this.baseline = newBaseline;
             this.repositories = newRepositories;
-            this.provider = providerFactory.create(newBaseline, newRepositories);
         }
 
         /**
-         * Returns the cached evaluator class loader, rebuilding it (and closing the old one to
-         * avoid leaking dependency jar handles, finding #10) when the resolved dependencies
-         * change. The loader is reused across saves rather than rebuilt + SPI-rescanned each
-         * diff.
+         * Returns the cached evaluators, rebuilding the class loader and re-running SPI
+         * discovery (and closing the old loader to avoid leaking dependency jar handles,
+         * finding #10) only when the resolved dependencies change.
          */
-        URLClassLoader evaluatorClassLoader(Project project) {
+        List<DiffEvaluator> evaluators(Project project) {
             List<URL> deps = project.config().resolvedDependencies();
             List<String> newKey = deps.stream().map(URL::toString).toList();
-            if (evaluatorClassLoader != null && newKey.equals(classLoaderKey)) {
-                return evaluatorClassLoader;
+            if (evaluators != null && newKey.equals(classLoaderKey)) {
+                return evaluators;
             }
             closeClassLoader();
             this.evaluatorClassLoader = ModelDiffRunner.evaluatorClassLoader(deps);
             this.classLoaderKey = newKey;
-            return evaluatorClassLoader;
+            this.evaluators = ModelDiffRunner.discoverEvaluators(evaluatorClassLoader);
+            return evaluators;
         }
 
         void notifyConfigErrorOnce(String message, Consumer<String> notifier) {
@@ -433,6 +466,7 @@ public final class ProjectDiffer {
                 }
                 evaluatorClassLoader = null;
                 classLoaderKey = null;
+                evaluators = null;
             }
         }
     }

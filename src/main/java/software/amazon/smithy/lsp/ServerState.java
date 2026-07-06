@@ -11,11 +11,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 import org.eclipse.lsp4j.FileEvent;
@@ -46,9 +46,11 @@ public final class ServerState implements ManagedFiles {
      * Create a new, empty server state.
      */
     public ServerState() {
-        this.projects = new HashMap<>();
+        // Concurrent collections: diff/diagnostics work reads these from background threads
+        // (baseline warm-up, post-save diagnostic refreshes) while LSP messages mutate them.
+        this.projects = new ConcurrentHashMap<>();
         this.workspacePaths = new HashSet<>();
-        this.managedUris = new HashSet<>();
+        this.managedUris = ConcurrentHashMap.newKeySet();
         this.lifecycleTasks = new FileTasks();
     }
 
@@ -75,7 +77,11 @@ public final class ServerState implements ManagedFiles {
     public Collection<ProjectAndFile> getAllManaged() {
         List<ProjectAndFile> allManaged = new ArrayList<>(managedUris.size());
         for (String uri : managedUris) {
-            allManaged.add(findManaged(uri));
+            ProjectAndFile managed = findManaged(uri);
+            // May be null when a concurrent close/removal raced this iteration.
+            if (managed != null) {
+                allManaged.add(managed);
+            }
         }
         return allManaged;
     }
@@ -178,7 +184,15 @@ public final class ServerState implements ManagedFiles {
             if (updatedProject.type() == Project.Type.EMPTY) {
                 removeProjectAndResolve(projectName);
             } else {
-                resolveProjects(projects.get(projectName), updatedProject);
+                Project existingProject = projects.get(projectName);
+                if (existingProject != null) {
+                    // Carry the diff events across the reload: a freshly loaded Project has none,
+                    // and callers that skip the diff (or whose diff cycle fails quietly) would
+                    // otherwise republish open files without them, silently wiping breaking-change
+                    // diagnostics that are still valid.
+                    updatedProject.setDiffEvents(existingProject.diffEvents());
+                }
+                resolveProjects(existingProject, updatedProject);
                 projects.put(projectName, updatedProject);
             }
 
@@ -249,7 +263,10 @@ public final class ServerState implements ManagedFiles {
 
                 // If any file was previously opened and created a detached project, remove them
                 for (String createdUri : createdUris) {
-                    projects.remove(createdUri);
+                    Project removed = projects.remove(createdUri);
+                    if (removed != null) {
+                        projectRemovalListener.accept(removed.root().toString());
+                    }
                 }
             }
         }
@@ -304,7 +321,10 @@ public final class ServerState implements ManagedFiles {
     private void removeDetachedOrUnresolvedProjects(Set<String> filePaths) {
         for (String filePath : filePaths) {
             String uri = LspAdapter.toUri(filePath);
-            projects.remove(uri);
+            Project removed = projects.remove(uri);
+            if (removed != null) {
+                projectRemovalListener.accept(removed.root().toString());
+            }
         }
     }
 

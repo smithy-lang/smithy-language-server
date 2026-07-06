@@ -8,10 +8,13 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
+import software.amazon.smithy.lsp.diff.DiffConfig.MavenBaseline;
+import software.amazon.smithy.lsp.diff.DiffConfig.UrlBaseline;
 import software.amazon.smithy.model.SourceException;
 import software.amazon.smithy.model.node.Node;
 
@@ -26,8 +29,8 @@ public class DiffConfigTest {
                   "disabledEvaluators": ["RemovedShape"]
                 }"""));
 
-        assertThat(config.baseline().type(), is("maven"));
-        assertThat(config.baseline().coordinate(), is("com.example:model:1.2.3"));
+        assertThat(config.baseline(), instanceOf(MavenBaseline.class));
+        assertThat(((MavenBaseline) config.baseline()).coordinate(), is("com.example:model:1.2.3"));
         assertThat(config.enabledEvaluators(), contains("CompatValidator"));
         assertThat(config.disabledEvaluators(), contains("RemovedShape"));
     }
@@ -37,7 +40,7 @@ public class DiffConfigTest {
         DiffConfig config = DiffConfig.fromNode(Node.parse("""
                 { "baseline": { "type": "maven", "coordinate": "com.example:model:1.2.3" } }"""));
 
-        assertThat(config.baseline().transitiveDependencies(), is(false));
+        assertThat(((MavenBaseline) config.baseline()).transitiveDependencies(), is(false));
     }
 
     @Test
@@ -47,7 +50,7 @@ public class DiffConfigTest {
                   "baseline": { "type": "maven", "coordinate": "com.example:model:1.2.3", "transitiveDependencies": true }
                 }"""));
 
-        assertThat(config.baseline().transitiveDependencies(), is(true));
+        assertThat(((MavenBaseline) config.baseline()).transitiveDependencies(), is(true));
     }
 
     @Test
@@ -81,8 +84,8 @@ public class DiffConfigTest {
         assertThrows(SourceException.class, () -> baseline("com.example:m:release")); // case-insensitive
     }
 
-    private static DiffConfig.Baseline baseline(String coordinate) {
-        return DiffConfig.fromNode(Node.parse(
+    private static MavenBaseline baseline(String coordinate) {
+        return (MavenBaseline) DiffConfig.fromNode(Node.parse(
                 "{ \"baseline\": { \"type\": \"maven\", \"coordinate\": \"" + coordinate + "\" } }")).baseline();
     }
 
@@ -127,9 +130,8 @@ public class DiffConfigTest {
         DiffConfig config = DiffConfig.fromNode(Node.parse("""
                 { "baseline": { "type": "url", "url": "https://example.com/baseline.json" } }"""));
 
-        assertThat(config.baseline().type(), is("url"));
-        assertThat(config.baseline().url(), is("https://example.com/baseline.json"));
-        assertThat(config.baseline().coordinate(), is((String) null));
+        assertThat(config.baseline(), instanceOf(UrlBaseline.class));
+        assertThat(((UrlBaseline) config.baseline()).url(), is("https://example.com/baseline.json"));
     }
 
     @Test

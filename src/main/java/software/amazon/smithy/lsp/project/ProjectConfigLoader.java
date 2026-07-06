@@ -77,8 +77,17 @@ final class ProjectConfigLoader {
                 case SMITHY_PROJECT -> LoadBuildFile.LOAD_SMITHY_PROJECT;
             };
 
-            loadFile(buildFile, loader, events::add, (type, node) -> {
+            Object loaded = loadFile(buildFile, loader, events::add, (type, node) -> {
             });
+            // The diff block is parsed leniently during load (see parseDiffConfig), so validate
+            // it explicitly here to keep surfacing its errors while the file is being edited.
+            if (loaded instanceof SmithyProjectJson smithyProjectJson && smithyProjectJson.diff() != null) {
+                try {
+                    DiffConfig.fromNode(smithyProjectJson.diff());
+                } catch (Exception e) {
+                    events.add(toEvent(e, buildFile));
+                }
+            }
         }
         return events;
     }
@@ -140,7 +149,7 @@ final class ProjectConfigLoader {
             sources.addAll(smithyProjectJson.sources());
             imports.addAll(smithyProjectJson.imports());
             projectDependencies.addAll(smithyProjectJson.dependencies());
-            diffConfig = smithyProjectJson.diff();
+            diffConfig = loader.parseDiffConfig(smithyProjectJson.diff());
         }
 
         var resolver = new Resolver(root, loader.events, loader.smithyNodes, dependencyResolverFactory);
@@ -156,6 +165,22 @@ final class ProjectConfigLoader {
      */
     static Set<MavenRepository> configuredMavenRepos(MavenConfig config) {
         return Resolver.getConfiguredMavenRepos(config);
+    }
+
+    // Parses the diff block on its own so a malformed block surfaces as a diagnostic on
+    // .smithy-project.json without discarding the rest of that file's config (sources, imports,
+    // dependencies) — which is what would happen if DiffConfig.fromNode threw from inside
+    // SmithyProjectJson.fromNode and loadFile dropped the whole parse.
+    private DiffConfig parseDiffConfig(Node diffNode) {
+        if (diffNode == null) {
+            return null;
+        }
+        try {
+            return DiffConfig.fromNode(diffNode);
+        } catch (Exception e) {
+            events.add(toEvent(e, buildFiles.getByType(BuildFileType.SMITHY_PROJECT)));
+            return null;
+        }
     }
 
     private SmithyBuildConfig loadSmithyBuild() {

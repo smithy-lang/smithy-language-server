@@ -72,7 +72,6 @@ public class SmithyDiagnosticsDiffTest {
         List<Diagnostic> diagnostics = diffDiagnostics(
                 new ProjectAndFile(workspace.getUri("main.smithy"), project, sourceFile));
 
-        System.out.println("diagnostics: " + diagnostics);
         assertThat(diagnostics, contains(hasProperty("range", is(new Range(new Position(0, 0), new Position(0, 1))))));
     }
 

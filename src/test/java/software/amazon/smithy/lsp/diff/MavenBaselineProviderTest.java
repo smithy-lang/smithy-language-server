@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import software.amazon.smithy.build.model.MavenRepository;
@@ -55,6 +56,31 @@ public class MavenBaselineProviderTest {
         assertThat(result.getResult().isPresent(), is(true));
         assertThat(result.getResult().get().expectShape(ShapeId.from("example#Baseline")).getId().toString(),
                 is("example#Baseline"));
+    }
+
+    @Test
+    public void loadBaselineResolvesOncePerProviderRegardlessOfVersion(@TempDir Path tempDir) throws IOException {
+        // The baseline is resolved and assembled once per provider instance and then memoized —
+        // moving versions (-SNAPSHOT, ranges) get NO special re-resolution; a newly published
+        // baseline is only picked up via smithy.reloadDiffBaseline (which rebuilds the provider)
+        // or a coordinate change.
+        for (String coordinate : List.of("example:baseline:1.0.0", "example:baseline:1.0-SNAPSHOT")) {
+            Path jar = buildModelJar(tempDir, BASELINE_IDL);
+            DependencyResolver resolver = new FakeResolver(
+                    List.of(ResolvedArtifact.fromCoordinates(jar, coordinate)));
+            AtomicInteger resolutions = new AtomicInteger();
+
+            MavenBaselineProvider provider = new MavenBaselineProvider(
+                    coordinate, List.of(), false,
+                    () -> {
+                        resolutions.incrementAndGet();
+                        return resolver;
+                    });
+            provider.loadBaseline();
+            provider.loadBaseline();
+
+            assertThat(resolutions.get(), is(1));
+        }
     }
 
     @Test

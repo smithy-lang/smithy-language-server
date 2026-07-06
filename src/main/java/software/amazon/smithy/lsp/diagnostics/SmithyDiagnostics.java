@@ -72,7 +72,7 @@ public final class SmithyDiagnostics {
         Stream<Diagnostic> diffDiagnostics = projectAndFile.project().diffEvents().stream()
                 .filter(event -> event.getSeverity().compareTo(minimumSeverity) >= 0
                                  && event.getSourceLocation().getFilename().equals(path))
-                .map(event -> eventToDiagnostic.toDiagnostic(event, DIFF_SOURCE));
+                .map(event -> toDiffDiagnostic(eventToDiagnostic, event));
         Stream<Diagnostic> validationDiagnostics = diagnose.getValidationEvents().stream()
                 .filter(event -> event.getSeverity().compareTo(minimumSeverity) >= 0
                                  && event.getSourceLocation().getFilename().equals(path))
@@ -203,14 +203,22 @@ public final class SmithyDiagnostics {
         return new Diagnostic(range, title, DiagnosticSeverity.Warning, "smithy-language-server", code);
     }
 
+    // A re-anchored diff event points at the file origin as a placeholder, not a real token, so
+    // pin it to a neutral range rather than letting IDL range refinement "improve" it into the
+    // token at the top of the file. Only diff events are checked: an ordinary validation event
+    // genuinely located at 1:1 keeps its refined range.
+    private static Diagnostic toDiffDiagnostic(EventToDiagnostic eventToDiagnostic, ValidationEvent event) {
+        Diagnostic diagnostic = eventToDiagnostic.toDiagnostic(event, DIFF_SOURCE);
+        if (DiffEventAnchoring.isAnchoredToOrigin(event)) {
+            diagnostic.setRange(new Range(new Position(0, 0), new Position(0, 1)));
+        }
+        return diagnostic;
+    }
+
     private sealed interface EventToDiagnostic {
         String HINT_PREFIX = System.lineSeparator() + System.lineSeparator() + "Hint: ";
 
         default Range getDiagnosticRange(ValidationEvent event) {
-            if (DiffEventAnchoring.isAnchoredToOrigin(event)) {
-                return new Range(new Position(0, 0), new Position(0, 1));
-            }
-
             var start = LspAdapter.toPosition(event.getSourceLocation());
             var end = LspAdapter.toPosition(event.getSourceLocation());
             end.setCharacter(end.getCharacter() + 1); // Range is exclusive
@@ -219,7 +227,7 @@ public final class SmithyDiagnostics {
         }
 
         default Diagnostic toDiagnostic(ValidationEvent event) {
-          return toDiagnostic(event, SMITHY_SOURCE);
+            return toDiagnostic(event, SMITHY_SOURCE);
         }
 
         default Diagnostic toDiagnostic(ValidationEvent event, String source) {
@@ -251,12 +259,6 @@ public final class SmithyDiagnostics {
         public Range getDiagnosticRange(ValidationEvent event) {
             Position eventStart = LspAdapter.toPosition(event.getSourceLocation());
             final Range defaultRange = EventToDiagnostic.super.getDiagnosticRange(event);
-
-            // A re-anchored removal points at the origin as a placeholder, not a real token, so
-            // don't let range refinement "improve" it into the token at the top of the file.
-            if (DiffEventAnchoring.isAnchoredToOrigin(event)) {
-                return defaultRange;
-            }
 
             if (event.getShapeId().isPresent()) {
                 int eventStartIndex = parser.getDocument().indexOfPosition(eventStart);

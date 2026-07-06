@@ -188,7 +188,7 @@ The `diff` block has the following properties:
 | Property   | Type     | Description                                                                                       |
 |------------|----------|---------------------------------------------------------------------------------------------------|
 | type       | `string` | (**required**) Baseline source: `"maven"` or `"url"`.                                              |
-| coordinate | `string` | (**required** for `"maven"`) Maven coordinate (`group:artifact:version`) of the artifact containing the baseline model. The version may be a pinned version (`1.4.2`), a version range (`[1.0,)`), or a `-SNAPSHOT`. The Maven metaversions `LATEST`/`RELEASE` are **not** supported (Smithy's dependency resolver rejects them); a coordinate using them is reported as a config error. |
+| coordinate | `string` | (**required** for `"maven"`) Maven coordinate (`group:artifact:version`) of the artifact containing the baseline model. The version may be a pinned version (`1.4.2`), a version range (`[1.0,)`), or a `-SNAPSHOT`; whatever it resolves to is cached for the session (use `smithy.reloadDiffBaseline` to pick up a newly published baseline). The Maven metaversions `LATEST`/`RELEASE` are **not** supported (Smithy's dependency resolver rejects them); a coordinate using them is reported as a config error. |
 | url        | `string` | (**required** for `"url"`) An `http(s)` URL the server issues a `GET` to; the response body must be a [Smithy JSON AST](https://smithy.io/2.0/spec/json-ast.html) model. Fetched once and cached for the session (use `smithy.reloadDiffBaseline` to re-fetch). |
 
 With `type: "url"`, the baseline is fetched directly rather than resolved from Maven:
@@ -226,13 +226,10 @@ matches `MyCompatEvaluator` and `MyCompatEvaluator.Member`, but not `MyCompatEva
 - Events about shapes that still exist (added/changed) appear at the shape's location. Events
   about **removed** shapes — which have no current location — are anchored to the top of a file
   in the same namespace, falling back to `.smithy-project.json`.
-- A **pinned** version (e.g. `1.4.2`) is resolved and assembled once, then cached for the
-  session. A **moving** version (a range or `-SNAPSHOT`) is re-resolved on each save so newly
-  published baselines are picked up automatically — the model is only re-assembled when the
-  resolved version actually changes, so this stays cheap. (Maven metadata is itself cached per
-  your resolver's update policy, typically daily, so a moving version reflects "the latest as of
-  the last metadata refresh," not necessarily the last second.)
-- A **`url`** baseline is fetched once and cached for the session, like a pinned Maven version.
+- A **`maven`** baseline is resolved and assembled once, then cached for the session — including
+  version ranges and `-SNAPSHOT`s, which get no special re-resolution. To pick up a newly
+  published baseline, run `smithy.reloadDiffBaseline`.
+- A **`url`** baseline is fetched once and cached for the session, like a Maven baseline.
 - The **`smithy.reloadDiffBaseline`** command forces a full refresh, and changing the
   `coordinate`/`url` in `.smithy-project.json` picks up a new baseline immediately.
 - Evaluator severities, diff-event suppressions, and severity overrides from your model's

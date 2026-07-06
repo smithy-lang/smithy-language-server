@@ -45,8 +45,9 @@ public final class MavenBaselineProvider implements BaselineProvider {
     private final Supplier<DependencyResolver> resolverFactory;
 
     // Memoizes the assembled baseline so it is resolved and assembled once per provider instance
-    // and reused across saves. The provider is rebuilt (and this cache dropped) when the
-    // configured coordinate changes or on an explicit reload.
+    // and reused across saves — regardless of the version (a -SNAPSHOT or range gets no special
+    // re-resolution). The provider is rebuilt (and this cache dropped) when the configured
+    // coordinate changes or on an explicit smithy.reloadDiffBaseline.
     private ValidatedResult<Model> memoizedResult;
 
     /**
@@ -84,8 +85,8 @@ public final class MavenBaselineProvider implements BaselineProvider {
     @Override
     public synchronized ValidatedResult<Model> loadBaseline() {
         if (memoizedResult == null) {
-          List<Path> jars = resolveJars();
-          memoizedResult = assembleFrom(jars);
+            List<Path> jars = resolveJars();
+            memoizedResult = assembleFrom(jars);
         }
 
         return memoizedResult;
@@ -156,6 +157,11 @@ public final class MavenBaselineProvider implements BaselineProvider {
     static ValidatedResult<Model> assembleFrom(List<Path> jars) {
         ModelAssembler assembler = Model.assembler()
                 .putProperty(ModelAssembler.ALLOW_UNKNOWN_TRAITS, true)
+                // Bypass JarURLConnection's global JarFile cache: a re-resolved -SNAPSHOT (or a
+                // reload after republish) overwrites the jar at the same local-repo path, and the
+                // cache would silently serve the old contents — and hold the jar's file handle
+                // open past this method.
+                .putProperty(ModelAssembler.DISABLE_JAR_CACHE, true)
                 .disableValidation();
 
         List<URL> urls = new ArrayList<>();

@@ -9,6 +9,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.lsp.TestWorkspace;
 import software.amazon.smithy.lsp.diff.BaselineModelException;
+import software.amazon.smithy.lsp.diff.DiffConfig;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidatedResult;
@@ -66,7 +68,8 @@ public class ProjectDifferTest {
         Project project = loadProjectWithDiffConfig();
         List<String> notifications = new ArrayList<>();
         ProjectDiffer differ = new ProjectDiffer((baselineConfig, repositories) -> () -> {
-            throw new BaselineModelException("could not resolve " + baselineConfig.coordinate());
+            throw new BaselineModelException("could not resolve "
+                    + ((DiffConfig.MavenBaseline) baselineConfig).coordinate());
         }, notifications::add);
 
         differ.runDiff(project);
@@ -86,25 +89,6 @@ public class ProjectDifferTest {
     }
 
     @Test
-    public void movingVersionPicksUpNewBaselineWithoutReload() {
-        Project project = loadProjectWithCoordinate("com.example:baseline:1.0-SNAPSHOT");
-        // Successive resolutions of the moving coordinate yield different baselines.
-        List<Model> baselines = List.of(baselineWithExtraShape("RemovedA"), baselineWithExtraShape("RemovedB"));
-        AtomicInteger call = new AtomicInteger();
-        ProjectDiffer differ = new ProjectDiffer(
-                (baselineConfig, repositories) -> () ->
-                        ValidatedResult.fromValue(baselines.get(Math.min(call.getAndIncrement(), baselines.size() - 1))),
-                message -> { });
-
-        differ.runDiff(project);
-        assertThat(removedShapeIds(project), contains("example#RemovedA"));
-
-        // Second save re-resolves the moving baseline and reflects the new version — no reload.
-        differ.runDiff(project);
-        assertThat(removedShapeIds(project), contains("example#RemovedB"));
-    }
-
-    @Test
     public void urlBaselineConfigDrivesFactoryWithTheUrl() {
         TestWorkspace workspace = TestWorkspace.singleModel(MODEL);
         writeFile(workspace, ".smithy-project.json",
@@ -112,7 +96,7 @@ public class ProjectDifferTest {
                         + " \"url\": \"https://example.com/baseline.json\" } } }");
         Project project = ProjectTest.load(workspace.getRoot());
 
-        List<software.amazon.smithy.lsp.diff.DiffConfig.Baseline> baselinesSeen = new ArrayList<>();
+        List<DiffConfig.Baseline> baselinesSeen = new ArrayList<>();
         ProjectDiffer differ = new ProjectDiffer((baselineConfig, repositories) -> {
             baselinesSeen.add(baselineConfig);
             return () -> ValidatedResult.fromValue(baselineWithExtraShape("Removed"));
@@ -121,8 +105,9 @@ public class ProjectDifferTest {
         differ.runDiff(project);
 
         assertThat(baselinesSeen.size(), is(1));
-        assertThat(baselinesSeen.get(0).type(), is("url"));
-        assertThat(baselinesSeen.get(0).url(), is("https://example.com/baseline.json"));
+        assertThat(baselinesSeen.get(0), instanceOf(DiffConfig.UrlBaseline.class));
+        assertThat(((DiffConfig.UrlBaseline) baselinesSeen.get(0)).url(),
+                is("https://example.com/baseline.json"));
         assertThat(removedShapeIds(project), contains("example#Removed"));
     }
 

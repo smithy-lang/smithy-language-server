@@ -63,6 +63,56 @@ public final class ModelDiffRunner {
      * @return the diff validation events produced by the evaluators that ran successfully
      */
     public static List<ValidationEvent> run(ClassLoader evaluatorClassLoader, Model oldModel, Model newModel) {
+        return run(discoverEvaluators(evaluatorClassLoader), oldModel, newModel);
+    }
+
+    /**
+     * Discovers all {@link DiffEvaluator} SPI providers on the class loader, skipping (and
+     * logging) providers that fail to load so a single bad entry can't suppress the rest.
+     *
+     * <p>Discovery is separated from {@link #run(List, Model, Model)} so callers can cache the
+     * instantiated evaluators alongside the class loader instead of re-scanning
+     * {@code META-INF/services} and re-instantiating every evaluator on each diff.
+     *
+     * @param evaluatorClassLoader class loader scanned for {@link DiffEvaluator} SPI providers
+     * @return the evaluators that loaded successfully
+     */
+    public static List<DiffEvaluator> discoverEvaluators(ClassLoader evaluatorClassLoader) {
+        List<DiffEvaluator> evaluators = new ArrayList<>();
+        // Iterate explicitly (rather than stream().forEach) so the try/catch also covers advancing
+        // the iterator: a malformed META-INF/services entry (missing class / wrong type) throws a
+        // ServiceConfigurationError from hasNext()/next(), before any provider runs, and a
+        // provider whose class fails to LINK (e.g. its superclass is missing due to Smithy
+        // version skew) surfaces as a raw LinkageError from the same calls. Guarding the advance
+        // contains a single bad provider rather than aborting the whole diff.
+        Iterator<DiffEvaluator> iterator =
+                ServiceLoader.load(DiffEvaluator.class, evaluatorClassLoader).iterator();
+        while (true) {
+            try {
+                if (!iterator.hasNext()) {
+                    break;
+                }
+                // A bad provider can't be skipped individually in the catch (we never got a
+                // handle to it), but ServiceLoader's iterator advances past it, so the loop
+                // just continues to the next one.
+                evaluators.add(iterator.next());
+            } catch (ServiceConfigurationError | LinkageError e) {
+                LOGGER.log(Level.WARNING, "Skipping DiffEvaluator that failed to load", e);
+            }
+        }
+        return evaluators;
+    }
+
+    /**
+     * Runs the given evaluators against the two models, isolating each evaluator so one failure
+     * can't suppress the rest.
+     *
+     * @param evaluators the evaluators to run (see {@link #discoverEvaluators})
+     * @param oldModel the baseline ("previous") model
+     * @param newModel the current (edited) model
+     * @return the diff validation events produced by the evaluators that ran successfully
+     */
+    public static List<ValidationEvent> run(List<DiffEvaluator> evaluators, Model oldModel, Model newModel) {
         Differences differences = Differences.detect(oldModel, newModel);
         // Suppressions and severity overrides come from the new model's metadata, applied to
         // each event just as ModelDiff.compare does.
@@ -72,26 +122,7 @@ public final class ModelDiffRunner {
                 .orElse(ValidationEventDecorator.IDENTITY);
 
         List<ValidationEvent> events = new ArrayList<>();
-        // Iterate explicitly (rather than stream().forEach) so the try/catch also covers advancing
-        // the iterator: a malformed META-INF/services entry (missing class / wrong type) throws a
-        // ServiceConfigurationError from hasNext()/next(), before any provider runs. Guarding both
-        // the advance and the evaluation contains a single bad provider rather than aborting the
-        // whole diff.
-        Iterator<DiffEvaluator> iterator =
-                ServiceLoader.load(DiffEvaluator.class, evaluatorClassLoader).iterator();
-        while (true) {
-            DiffEvaluator evaluator;
-            try {
-                if (!iterator.hasNext()) {
-                    break;
-                }
-                evaluator = iterator.next();
-            } catch (ServiceConfigurationError e) {
-                // A bad provider can't be skipped individually here (we never got a handle to it),
-                // but ServiceLoader's iterator advances past it, so continue to the next one.
-                LOGGER.log(Level.WARNING, "Skipping DiffEvaluator that failed to load", e);
-                continue;
-            }
+        for (DiffEvaluator evaluator : evaluators) {
             try {
                 for (ValidationEvent event : evaluator.evaluate(differences)) {
                     events.add(decorator.decorate(event));

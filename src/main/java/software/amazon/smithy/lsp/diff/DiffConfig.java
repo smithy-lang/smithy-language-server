@@ -76,18 +76,40 @@ public record DiffConfig(
     }
 
     /**
-     * The baseline ("previous") model source. The {@code type} discriminator selects how the
-     * baseline is obtained: {@link #MAVEN} resolves a Maven {@code coordinate}; {@link #URL}
-     * fetches a Smithy JSON AST model from a {@code url}. Exactly one of {@code coordinate}/
-     * {@code url} is populated, matching {@code type}; the other is {@code null}.
-     *
-     * @param type the provider discriminator ({@link #MAVEN} or {@link #URL})
-     * @param coordinate the Maven coordinate of the baseline artifact ({@code maven} type), else null
-     * @param url the URL to fetch the baseline JSON model from ({@code url} type), else null
+     * The baseline ("previous") model source. Modeled as a sealed hierarchy so each provider's
+     * fields are only present on the variant that uses them and the {@code type} discriminator in
+     * the config maps to a concrete subtype: {@link MavenBaseline} resolves a Maven coordinate;
+     * {@link UrlBaseline} fetches a Smithy JSON AST model from a URL.
      */
-    public record Baseline(String type, String coordinate, String url, Boolean transitiveDependencies) {
-        public static final String MAVEN = "maven";
-        public static final String URL = "url";
+    public sealed interface Baseline permits MavenBaseline, UrlBaseline {
+        /**
+         * Parses a {@code baseline} block, dispatching on its {@code type} member to the matching
+         * variant. Throws {@link SourceException} for an unknown type.
+         *
+         * @param objectNode the {@code baseline} object node
+         * @return the parsed baseline
+         */
+        static Baseline fromNode(ObjectNode objectNode) {
+            String type = objectNode.expectStringMember("type").getValue();
+            return switch (type) {
+                case MavenBaseline.TYPE -> MavenBaseline.fromNode(objectNode);
+                case UrlBaseline.TYPE -> UrlBaseline.fromNode(objectNode);
+                default -> throw new SourceException(
+                        "Unsupported diff baseline type '" + type + "'; supported types are '"
+                                + MavenBaseline.TYPE + "' and '" + UrlBaseline.TYPE + "'",
+                        objectNode);
+            };
+        }
+    }
+
+    /**
+     * A baseline resolved from a Maven {@code coordinate}.
+     *
+     * @param coordinate the Maven coordinate of the baseline artifact
+     * @param transitiveDependencies whether to also load the coordinate's transitive dependencies
+     */
+    public record MavenBaseline(String coordinate, boolean transitiveDependencies) implements Baseline {
+        public static final String TYPE = "maven";
 
         private static final String LATEST_VERSION = "LATEST";
         private static final String RELEASE_VERSION = "RELEASE";
@@ -107,38 +129,8 @@ public record DiffConfig(
             return coordinate.substring(coordinate.lastIndexOf(':') + 1);
         }
 
-        static Baseline fromNode(ObjectNode objectNode) {
-            String type = objectNode.expectStringMember("type").getValue();
-            return switch (type) {
-                case MAVEN -> mavenFromNode(objectNode);
-                case URL -> urlFromNode(objectNode);
-                default -> throw new SourceException(
-                        "Unsupported diff baseline type '" + type + "'; supported types are '"
-                                + MAVEN + "' and '" + URL + "'",
-                        objectNode);
-            };
-        }
-
-        private static Baseline urlFromNode(ObjectNode objectNode) {
-            String url = objectNode.expectStringMember("url").getValue();
-            URI parsed;
-            try {
-                parsed = new URI(url);
-            } catch (URISyntaxException e) {
-                throw new SourceException(
-                        "Malformed diff baseline url '" + url + "'", objectNode.expectStringMember("url"));
-            }
-            String scheme = parsed.getScheme();
-            if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
-                throw new SourceException(
-                        "Unsupported diff baseline url scheme in '" + url + "'; expected an http(s) URL",
-                        objectNode.expectStringMember("url"));
-            }
-            return new Baseline(URL, null, url, false);
-        }
-
-        private static Baseline mavenFromNode(ObjectNode objectNode) {
-            Boolean transitiveDependencies =  objectNode.getBooleanMemberOrDefault("transitiveDependencies");
+        static MavenBaseline fromNode(ObjectNode objectNode) {
+            boolean transitiveDependencies = objectNode.getBooleanMemberOrDefault("transitiveDependencies");
             String coordinate = objectNode.expectStringMember("coordinate").getValue();
             if (!COORDINATE_PATTERN.matcher(coordinate).matches()) {
                 throw new SourceException(
@@ -155,7 +147,34 @@ public record DiffConfig(
                                 + "version (1.4.2), a version range ([1.0,)), or a -SNAPSHOT.",
                         objectNode.expectStringMember("coordinate"));
             }
-            return new Baseline(MAVEN, coordinate, null, transitiveDependencies);
+            return new MavenBaseline(coordinate, transitiveDependencies);
+        }
+    }
+
+    /**
+     * A baseline fetched as a Smithy JSON AST model from an {@code http(s)} URL.
+     *
+     * @param url the URL to fetch the baseline JSON model from
+     */
+    public record UrlBaseline(String url) implements Baseline {
+        public static final String TYPE = "url";
+
+        static UrlBaseline fromNode(ObjectNode objectNode) {
+            String url = objectNode.expectStringMember("url").getValue();
+            URI parsed;
+            try {
+                parsed = new URI(url);
+            } catch (URISyntaxException e) {
+                throw new SourceException(
+                        "Malformed diff baseline url '" + url + "'", objectNode.expectStringMember("url"));
+            }
+            String scheme = parsed.getScheme();
+            if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
+                throw new SourceException(
+                        "Unsupported diff baseline url scheme in '" + url + "'; expected an http(s) URL",
+                        objectNode.expectStringMember("url"));
+            }
+            return new UrlBaseline(url);
         }
     }
 }

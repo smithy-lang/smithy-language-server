@@ -6,7 +6,6 @@
 package software.amazon.smithy.lsp.project;
 
 import java.util.List;
-import software.amazon.smithy.lsp.diff.DiffConfig;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.node.ObjectNode;
 import software.amazon.smithy.model.node.StringNode;
@@ -16,7 +15,7 @@ record SmithyProjectJson(
         List<String> imports,
         List<ProjectDependency> dependencies,
         String outputDirectory,
-        DiffConfig diff
+        ObjectNode diff
 ) {
     static SmithyProjectJson empty() {
         return new SmithyProjectJson(List.of(), List.of(), List.of(), null, null);
@@ -45,9 +44,11 @@ record SmithyProjectJson(
 
         String outputDirectory = objectNode.getStringMemberOrDefault("outputDirectory", null);
 
-        DiffConfig diff = objectNode.getObjectMember("diff")
-                .map(DiffConfig::fromNode)
-                .orElse(null);
+        // Kept as the raw node: DiffConfig.fromNode throws SourceException on a malformed block,
+        // and throwing from here would make the loader discard this ENTIRE file's config
+        // (sources, imports, dependencies) over a typo in the optional diff block. The loader
+        // parses it separately so its errors surface as a diagnostic without that blast radius.
+        ObjectNode diff = objectNode.getObjectMember("diff").orElse(null);
 
         return new SmithyProjectJson(sources, imports, dependencies, outputDirectory, diff);
     }

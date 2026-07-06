@@ -93,7 +93,10 @@ public final class UrlBaselineProvider implements BaselineProvider {
             throw new BaselineModelException("Failed to fetch baseline from URL '" + uri + "'", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new BaselineModelException("Interrupted fetching baseline from URL '" + uri + "'", e);
+            // Deliberately NOT a BaselineModelException: an interruption (task cancellation,
+            // executor shutdown) is transient, not a user-fixable config problem, so it must be
+            // handled runtime-quiet (skip the cycle) rather than published as a config error.
+            throw new RuntimeException("Interrupted fetching baseline from URL '" + uri + "'", e);
         }
     }
 

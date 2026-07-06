@@ -39,7 +39,7 @@ public class DiffConfigLoadingTest {
 
         assertThat(project.diffConfig().isPresent(), is(true));
         DiffConfig diff = project.diffConfig().orElseThrow();
-        assertThat(diff.baseline().coordinate(), is("com.example:model:1.0.0"));
+        assertThat(((DiffConfig.MavenBaseline) diff.baseline()).coordinate(), is("com.example:model:1.0.0"));
         assertThat(diff.enabledEvaluators(), contains("CompatValidator"));
     }
 
