@@ -281,7 +281,7 @@ public class SmithyLanguageServerTest {
         // No diff has run yet, so there are no diff events.
         assertThat(server.getState().findProjectAndFile(buildUri).project().diffEvents(), empty());
 
-        // Saving the build file rebuilds the project AND re-runs the diff (finding #3).
+        // Saving the build file rebuilds the project AND re-runs the diff.
         server.didSave(new RequestBuilders.DidSave().uri(buildUri).build());
         server.getState().lifecycleTasks().waitForAllTasks();
 
@@ -297,7 +297,7 @@ public class SmithyLanguageServerTest {
         // The current model is in namespace com.foo; the baseline has an extra shape in a
         // DIFFERENT namespace (other#Gone), so its removal can't anchor to a current source file
         // and instead anchors to .smithy-project.json. That file is never opened, so before the
-        // fix the most severe break would never reach the Problems panel (finding #6).
+        // fix the most severe break would never reach the Problems panel.
         String model = safeString("""
                 $version: "2"
                 namespace com.foo

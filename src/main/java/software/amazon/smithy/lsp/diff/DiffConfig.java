@@ -75,12 +75,6 @@ public record DiffConfig(
                 .orElse(List.of());
     }
 
-    /**
-     * The baseline ("previous") model source. Modeled as a sealed hierarchy so each provider's
-     * fields are only present on the variant that uses them and the {@code type} discriminator in
-     * the config maps to a concrete subtype: {@link MavenBaseline} resolves a Maven coordinate;
-     * {@link UrlBaseline} fetches a Smithy JSON AST model from a URL.
-     */
     public sealed interface Baseline permits MavenBaseline, UrlBaseline {
         /**
          * Parses a {@code baseline} block, dispatching on its {@code type} member to the matching

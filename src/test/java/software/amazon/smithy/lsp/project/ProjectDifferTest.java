@@ -122,14 +122,14 @@ public class ProjectDifferTest {
         List<String> notifications = new ArrayList<>();
         // An unexpected runtime failure (not a BaselineModelException config problem) must not
         // propagate out of runDiff — if it did, it would share the save-flow CompletableFuture
-        // stage and suppress ordinary validation diagnostics for the saved file (finding #1).
+        // stage and suppress ordinary validation diagnostics for the saved file.
         ProjectDiffer differ = new ProjectDiffer((baselineConfig, repositories) -> () -> {
             throw new IllegalStateException("unexpected runtime failure");
         }, notifications::add);
 
         differ.runDiff(project); // must not throw
 
-        // Runtime-quiet (ADR 0007): previous diff events are kept, no config-error diagnostic,
+        // Runtime-quiet: previous diff events are kept, no config-error diagnostic,
         // and no window notification.
         assertThat(project.diffEvents(), contains(previous));
         assertThat(notifications, is(empty()));
@@ -149,7 +149,7 @@ public class ProjectDifferTest {
 
     @Test
     public void reportsChangedFilesOnFirstRunAndNothingWhenUnchanged() {
-        // Finding #11: runDiff reports which files' diff diagnostics may have changed so a save
+        // runDiff reports which files' diff diagnostics may have changed so a save
         // can skip the workspace-wide refresh when the diff produced the same events as before.
         Project project = loadProjectWithDiffConfig();
         String sourcePath = project.getProjectFile(uri(project, "main.smithy")).path();
@@ -170,7 +170,7 @@ public class ProjectDifferTest {
     @Test
     public void reportsExactlyTheFilesTheDiffEventsAnchorTo() {
         // The changed set covers every file a diff event anchored to, so a save refreshes those
-        // files' diagnostics even when they differ from the saved file (finding #11).
+        // files' diagnostics even when they differ from the saved file.
         Project project = loadProjectWithDiffConfig();
         Model baseline = baselineWithExtraShape("Removed");
         ProjectDiffer differ = new ProjectDiffer(
@@ -222,7 +222,7 @@ public class ProjectDifferTest {
     @Test
     public void repositoryChangeWithSameCoordinateRebuildsProvider() {
         // Same coordinate + root, different maven repositories across a project reload: the
-        // provider must be rebuilt so it resolves against the new repositories (finding #7).
+        // provider must be rebuilt so it resolves against the new repositories.
         TestWorkspace workspace = TestWorkspace.singleModel(MODEL);
         writeDiffConfig(workspace, "com.example:baseline:1.0.0");
         writeMavenRepos(workspace, "https://repo-one.example/maven");
@@ -263,7 +263,7 @@ public class ProjectDifferTest {
         differ.runDiff(project);
         URLClassLoader second = capturedClassLoader(differ, project);
 
-        // The class loader is cached per project (finding #10): the same instance is reused across
+        // The class loader is cached per project: the same instance is reused across
         // saves rather than rebuilt + SPI-rescanned each diff, and it stays open while in use.
         assertThat(second, sameInstance(first));
         assertThat(first.getResource("META-INF/probe.txt"), notNullValue());

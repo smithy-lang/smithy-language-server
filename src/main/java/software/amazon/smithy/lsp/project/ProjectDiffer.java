@@ -42,7 +42,7 @@ import software.amazon.smithy.model.validation.ValidationEvent;
 /**
  * Runs the configured diff for a project and stores the resulting (re-anchored) events on it.
  * Holds a per-project {@link DiffContext} so the expensive baseline assembly and evaluator class loader
- * are paid once and reused across saves  and serializes diff work per project so concurrent saves/reloads don't race.
+ * are paid once and reused across saves and serializes diff work per project so concurrent saves/reloads don't race.
  *
  * A failure to resolve/read the baseline (a user-fixable config problem) is surfaced loudly as a diagnostic
  * on the {@code .smithy-project.json} file.
@@ -121,17 +121,12 @@ public final class ProjectDiffer {
      * @param project the project to diff
      * @return the files whose diff diagnostics may have changed (the union of files referenced by
      *  the previous and new diff events when those differ); empty when the diff events are
-     *  unchanged. Lets callers skip a workspace-wide diagnostic refresh when nothing changed
-     *  (finding #11). Never used to drop a refresh that's actually needed.
+     *  unchanged. Lets callers skip a workspace-wide diagnostic refresh when nothing changed.
      */
     public Set<String> runDiff(Project project) {
         String root = project.root().toString();
         Optional<DiffConfig> maybeConfig = project.diffConfig();
         if (maybeConfig.isEmpty()) {
-            // Don't create a context for a project without a diff config — every save of every
-            // project (including detached single files) runs through here, and contexts for
-            // no-config roots would grow contextsByRoot unboundedly. Just drop any stale context
-            // (e.g. the diff block was removed from the config) and clear the project's events.
             List<ValidationEvent> previousEvents = project.diffEvents();
             project.setDiffEvents(List.of());
             evict(root);
@@ -207,7 +202,7 @@ public final class ProjectDiffer {
                             .filter(rawEvents);
             anchored = DiffEventAnchoring.anchor(diffEvents, currentModel, diffConfigFilePath(project));
         } catch (RuntimeException | Error e) {
-            // Runtime-quiet (ADR 0007): a failure in diff execution, filtering, or anchoring must
+            // A failure in diff execution, filtering, or anchoring must
             // not break the save flow or suppress ordinary validation diagnostics — skip this
             // cycle and keep the previous diff events.
             LOGGER.log(Level.WARNING, "Skipping diff: diff execution failed", e);
@@ -302,7 +297,6 @@ public final class ProjectDiffer {
                 return;
             }
             context.ensureBaseline(project, config, providerFactory);
-            // Trigger and memoize the assembly now; the result is reused by the first save's diff.
             context.provider.loadBaseline();
         } catch (BaselineModelException e) {
             // Config-loud: the baseline coordinate is unresolvable/malformed — user-fixable.
@@ -399,7 +393,7 @@ public final class ProjectDiffer {
 
         /**
          * (Re)builds the baseline provider when the baseline config or the resolved repositories
-         * differ from what's cached. Repositories are part of the key (finding #7) because a
+         * differ from what's cached. Repositories are part of the key because a
          * Maven provider built with stale repos would resolve against the wrong place even when the
          * coordinate is unchanged.
          */
@@ -421,8 +415,7 @@ public final class ProjectDiffer {
 
         /**
          * Returns the cached evaluators, rebuilding the class loader and re-running SPI
-         * discovery (and closing the old loader to avoid leaking dependency jar handles,
-         * finding #10) only when the resolved dependencies change.
+         * discovery only when the resolved dependencies change.
          */
         List<DiffEvaluator> evaluators(Project project) {
             List<URL> deps = project.config().resolvedDependencies();

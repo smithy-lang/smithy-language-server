@@ -198,10 +198,6 @@ public class SmithyLanguageServer implements
         registerProjectDiffer();
     }
 
-    // Release each project's diff resources (its cached evaluator class loader) when the project
-    // is removed, so dependency jar handles aren't leaked (finding #10), and clear any diff
-    // diagnostics still published to the removed project's unopened files — nothing would ever
-    // republish them once the project is gone.
     private void registerProjectDiffer() {
         state.setProjectRemovalListener(root -> {
             projectDiffer.evict(root);
@@ -209,9 +205,6 @@ public class SmithyLanguageServer implements
         });
     }
 
-    // Clears diff diagnostics previously published to unmanaged (closed) files of a removed
-    // project. Synchronized with sendDiffDiagnosticsForUnmanagedAnchoredFiles, which maintains
-    // the same tracking map.
     private synchronized void clearUnmanagedDiffDiagnostics(String root) {
         Set<String> uris = unmanagedDiffDiagnosticUrisByRoot.remove(root);
         if (uris == null || client == null) {
@@ -224,9 +217,6 @@ public class SmithyLanguageServer implements
         }
     }
 
-    // Logs a diff task that died unexpectedly; without this, an exception escaping a
-    // CompletableFuture chain nobody joins would vanish entirely. Cancellation (didChange
-    // superseding a save's task) is routine, not an error.
     private static void logDiffTaskFailure(Object ignored, Throwable e) {
         if (e != null && !(e instanceof CancellationException)) {
             LOGGER.log(Level.WARNING, "Diff task failed", e);
@@ -241,10 +231,6 @@ public class SmithyLanguageServer implements
         return serverOptions.getMinimumSeverity();
     }
 
-    // Eagerly load each loaded project's diff baseline at startup, off the message thread, so the
-    // first save isn't slowed by baseline resolution + assembly. A baseline config error surfaces
-    // via the same window message / diagnostic path as a save-time diff; projects without a diff
-    // config are skipped inside ProjectDiffer.
     private void warmDiffBaselines() {
         // Snapshot before iterating on a background thread: later LSP callbacks mutate the
         // project map concurrently with this loop.
@@ -256,8 +242,6 @@ public class SmithyLanguageServer implements
         }).whenComplete(SmithyLanguageServer::logDiffTaskFailure);
     }
 
-    // Surfaces a baseline configuration error as a window message, in addition to the
-    // diagnostic on .smithy-project.json (which is only visible when that file is open).
     private void showBaselineConfigError(String message) {
         if (client != null) {
             client.showMessage(new MessageParams(MessageType.Error, message));
@@ -704,7 +688,6 @@ public class SmithyLanguageServer implements
                         // Diff events can anchor to files other than the saved one (a removal's
                         // namespace file, or the build file). Only refresh those files when the
                         // diff actually changed them; otherwise keep the cheaper single-file path
-                        // for the saved document (finding #11).
                         String savedPath = LspAdapter.toPath(uri);
                         boolean onlySavedFileChanged =
                                 changedDiffFiles.size() == 1 && changedDiffFiles.contains(savedPath);
@@ -985,8 +968,8 @@ public class SmithyLanguageServer implements
     // Diff events re-anchor to whichever file is most relevant — a removal's namespace file, or
     // the .smithy-project.json for full-namespace removals / no-shapeId events / baseline config
     // errors. Those target files are often not open, and the managed-document refresh above only
-    // reaches open files, so the most severe breaks would never appear in the Problems panel
-    // (finding #6). publishDiagnostics populates the panel for any URI, open or not, so publish
+    // reaches open files, so the most severe breaks would never appear in the Problems panel.
+    // publishDiagnostics populates the panel for any URI, open or not, so publish
     // for each distinct unmanaged file a diff event anchored to. (Open files are already covered.)
     // Synchronized: concurrent save/reload continuations would otherwise interleave the
     // read-modify-write on unmanagedDiffDiagnosticUrisByRoot and lose stale-URI clears.

@@ -64,8 +64,6 @@ public final class DiffEventAnchoring {
             String buildFilePath
     ) {
         if (diffEvents.isEmpty()) {
-            // The common steady state (no breaking changes): skip indexing every shape in the
-            // model, which can include tens of thousands of dependency shapes.
             return diffEvents;
         }
 

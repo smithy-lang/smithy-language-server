@@ -29,7 +29,7 @@ import software.amazon.smithy.model.validation.ValidatedResult;
  *
  * <p>The assembled baseline is memoized for the lifetime of the provider, so it is fetched once
  * and reused across saves. A URL is treated as a pinned source; the {@code smithy.reloadDiffBaseline}
- * command rebuilds the provider (ADR 0004) and thus forces a re-fetch.
+ * command rebuilds the provider and thus forces a re-fetch.
  *
  * <p>A failure to reach the URL or a non-2xx response throws {@link BaselineModelException}
  * (user-fixable config problem); assembly events from the fetched body are carried in the returned

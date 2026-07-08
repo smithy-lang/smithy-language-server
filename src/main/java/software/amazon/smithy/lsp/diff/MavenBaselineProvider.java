@@ -101,14 +101,13 @@ public final class MavenBaselineProvider implements BaselineProvider {
             resolver.addDependency(coordinate);
             List<ResolvedArtifact> artifacts = resolver.resolve();
             // By default load ONLY the requested artifact, not its transitive dependencies. The
-            // baseline is then expected to be a self-contained model (e.g. a flattened JSON
-            // serialization that already includes trait definitions from its dependencies); also
+            // baseline may be a self-contained model (e.g. a flattened JSON
+            // serialization that already includes trait definitions from its dependencies), so
             // loading those dependency jars would define the same shapes twice ("Duplicate shape").
             //
             // When transitiveDependencies is enabled, every resolved jar is loaded instead, so a
             // baseline that is NOT self-contained can pull its trait definitions from its
-            // dependencies. The caller opts into this knowing the artifact won't redefine shapes
-            // its dependencies already declare.
+            // dependencies.
             String groupArtifact = groupArtifactOf(coordinate);
             List<Path> jars = new ArrayList<>();
             for (ResolvedArtifact artifact : artifacts) {
@@ -173,10 +172,6 @@ public final class MavenBaselineProvider implements BaselineProvider {
             throw new BaselineModelException("Bad baseline jar path", e);
         }
 
-        // Discover the models through a class loader scoped to ONLY the baseline jars (null
-        // parent). This reads `jar:` URLs via the standard jar URL handler rather than the zip
-        // FileSystem provider (jdk.zipfs), which may be absent from a jlink runtime image, and
-        // the null parent keeps it from pulling in models on the application classpath.
         try (URLClassLoader loader = new URLClassLoader(urls.toArray(new URL[urls.size()]), null)) {
             List<URL> modelUrls = ModelDiscovery.findModels(loader);
             // A coordinate that resolves but carries no Smithy models (no META-INF/smithy/manifest)

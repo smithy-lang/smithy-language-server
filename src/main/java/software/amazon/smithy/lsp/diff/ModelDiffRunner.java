@@ -32,10 +32,6 @@ import software.amazon.smithy.model.validation.suppressions.ModelBasedEventDecor
  * is logged and skipped without taking down the others or the server  — including an
  * evaluator that fails with a {@link LinkageError} due to Smithy version skew.
  *
- * <p>Resulting events are passed through the new model's {@link ModelBasedEventDecorator}, so
- * diff-event suppressions and severity overrides declared in the model's metadata apply exactly
- * as they do for {@code ModelDiff.compare} — keeping this a faithful, generic diff runner.
- *
  * <p>The {@code evaluatorClassLoader} should be the project's resolved-dependency class loader
  * (the same one {@code ProjectLoader} builds for model assembly). Because that loader's parent
  * is the application class loader, Smithy's own classes ({@code DiffEvaluator},
@@ -79,12 +75,6 @@ public final class ModelDiffRunner {
      */
     public static List<DiffEvaluator> discoverEvaluators(ClassLoader evaluatorClassLoader) {
         List<DiffEvaluator> evaluators = new ArrayList<>();
-        // Iterate explicitly (rather than stream().forEach) so the try/catch also covers advancing
-        // the iterator: a malformed META-INF/services entry (missing class / wrong type) throws a
-        // ServiceConfigurationError from hasNext()/next(), before any provider runs, and a
-        // provider whose class fails to LINK (e.g. its superclass is missing due to Smithy
-        // version skew) surfaces as a raw LinkageError from the same calls. Guarding the advance
-        // contains a single bad provider rather than aborting the whole diff.
         Iterator<DiffEvaluator> iterator =
                 ServiceLoader.load(DiffEvaluator.class, evaluatorClassLoader).iterator();
         while (true) {

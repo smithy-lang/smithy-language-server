@@ -44,10 +44,6 @@ record SmithyProjectJson(
 
         String outputDirectory = objectNode.getStringMemberOrDefault("outputDirectory", null);
 
-        // Kept as the raw node: DiffConfig.fromNode throws SourceException on a malformed block,
-        // and throwing from here would make the loader discard this ENTIRE file's config
-        // (sources, imports, dependencies) over a typo in the optional diff block. The loader
-        // parses it separately so its errors surface as a diagnostic without that blast radius.
         ObjectNode diff = objectNode.getObjectMember("diff").orElse(null);
 
         return new SmithyProjectJson(sources, imports, dependencies, outputDirectory, diff);

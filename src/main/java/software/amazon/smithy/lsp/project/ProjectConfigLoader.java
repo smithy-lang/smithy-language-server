@@ -167,10 +167,6 @@ final class ProjectConfigLoader {
         return Resolver.getConfiguredMavenRepos(config);
     }
 
-    // Parses the diff block on its own so a malformed block surfaces as a diagnostic on
-    // .smithy-project.json without discarding the rest of that file's config (sources, imports,
-    // dependencies) — which is what would happen if DiffConfig.fromNode threw from inside
-    // SmithyProjectJson.fromNode and loadFile dropped the whole parse.
     private DiffConfig parseDiffConfig(Node diffNode) {
         if (diffNode == null) {
             return null;

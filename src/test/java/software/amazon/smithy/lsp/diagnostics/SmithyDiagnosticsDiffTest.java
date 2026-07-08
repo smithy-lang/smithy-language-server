@@ -65,7 +65,7 @@ public class SmithyDiagnosticsDiffTest {
         ProjectFile sourceFile = project.getProjectFile(workspace.getUri("main.smithy"));
         // A removed shape re-anchored to the source file at the origin (1,1) keeps its shapeId.
         // The IDL range refiner must NOT "improve" this into the $version token at the top of the
-        // file (finding #5); it should be the neutral point range at the origin.
+        // file; it should be the neutral point range at the origin.
         ValidationEvent removed = diffEvent("example#Gone", sourceFile.path());
         project.setDiffEvents(List.of(removed));
 
