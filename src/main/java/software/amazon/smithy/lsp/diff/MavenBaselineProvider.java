@@ -27,15 +27,9 @@ import software.amazon.smithy.model.validation.ValidatedResult;
 
 /**
  * Baseline provider that resolves a Maven coordinate (e.g.
- * {@code com.disneystreaming.api.registry:registry-snapshot:1.2.3}) with the same
+ * {@code com.example:model:1.2.3}) with the same
  * {@link DependencyResolver} machinery the language server already uses, then assembles the
  * baseline model from the resolved jar(s).
- *
- * <p>Assembly mirrors {@code api-registry-cli}'s {@code ModelLoader.withoutCurrentClassloader}:
- * each resolved jar is opened as a zip {@link FileSystem} (without a class loader) and its
- * {@code META-INF/smithy/manifest} is read directly, so the baseline cannot be contaminated by
- * Smithy models that happen to be on the application classpath. Validation is disabled — the
- * baseline was validated when it was published, and only diff events are ultimately surfaced.
  */
 public final class MavenBaselineProvider implements BaselineProvider {
 
