@@ -32,6 +32,7 @@ import software.amazon.smithy.cli.dependencies.DependencyResolver;
 import software.amazon.smithy.cli.dependencies.DependencyResolverException;
 import software.amazon.smithy.cli.dependencies.MavenDependencyResolver;
 import software.amazon.smithy.cli.dependencies.ResolvedArtifact;
+import software.amazon.smithy.lsp.diff.DiffConfig;
 import software.amazon.smithy.model.SourceException;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.loader.ModelDiscovery;
@@ -76,8 +77,17 @@ final class ProjectConfigLoader {
                 case SMITHY_PROJECT -> LoadBuildFile.LOAD_SMITHY_PROJECT;
             };
 
-            loadFile(buildFile, loader, events::add, (type, node) -> {
+            Object loaded = loadFile(buildFile, loader, events::add, (type, node) -> {
             });
+            // The diff block is parsed leniently during load (see parseDiffConfig), so validate
+            // it explicitly here to keep surfacing its errors while the file is being edited.
+            if (loaded instanceof SmithyProjectJson smithyProjectJson && smithyProjectJson.diff() != null) {
+                try {
+                    DiffConfig.fromNode(smithyProjectJson.diff());
+                } catch (Exception e) {
+                    events.add(toEvent(e, buildFile));
+                }
+            }
         }
         return events;
     }
@@ -134,16 +144,39 @@ final class ProjectConfigLoader {
             }
         }
 
+        DiffConfig diffConfig = null;
         if (smithyProjectJson != null) {
             sources.addAll(smithyProjectJson.sources());
             imports.addAll(smithyProjectJson.imports());
             projectDependencies.addAll(smithyProjectJson.dependencies());
+            diffConfig = loader.parseDiffConfig(smithyProjectJson.diff());
         }
 
         var resolver = new Resolver(root, loader.events, loader.smithyNodes, dependencyResolverFactory);
-        ProjectConfig resolved = resolver.resolve(sources, imports, mavenConfig, projectDependencies);
+        ProjectConfig resolved = resolver.resolve(sources, imports, mavenConfig, projectDependencies, diffConfig);
 
         return new Result(resolved, resolver.events());
+    }
+
+    /**
+     * @param config the project's Maven configuration (may be null)
+     * @return the repositories used to resolve the project's dependencies, for reuse when
+     *  resolving a diff baseline coordinate from the same project
+     */
+    static Set<MavenRepository> configuredMavenRepos(MavenConfig config) {
+        return Resolver.getConfiguredMavenRepos(config);
+    }
+
+    private DiffConfig parseDiffConfig(Node diffNode) {
+        if (diffNode == null) {
+            return null;
+        }
+        try {
+            return DiffConfig.fromNode(diffNode);
+        } catch (Exception e) {
+            events.add(toEvent(e, buildFiles.getByType(BuildFileType.SMITHY_PROJECT)));
+            return null;
+        }
     }
 
     private SmithyBuildConfig loadSmithyBuild() {
@@ -323,7 +356,8 @@ final class ProjectConfigLoader {
                 List<String> sources,
                 List<String> imports,
                 MavenConfig mavenConfig,
-                List<SmithyProjectJson.ProjectDependency> projectDependencies
+                List<SmithyProjectJson.ProjectDependency> projectDependencies,
+                DiffConfig diffConfig
         ) {
             Set<Path> resolvedMaven = resolveMaven(mavenConfig);
             Set<Path> resolveProjectDependencies = resolveProjectDependencies(projectDependencies);
@@ -349,7 +383,8 @@ final class ProjectConfigLoader {
                     projectDependencies,
                     mavenConfig,
                     modelPaths,
-                    resolvedDependencies
+                    resolvedDependencies,
+                    diffConfig
             );
         }
 
