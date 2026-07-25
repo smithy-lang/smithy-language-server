@@ -409,8 +409,9 @@ final class Parser extends SimpleParser {
 
         int last = '"';
 
-        // Potential micro-optimization - only loop while position < line end
-        while (!isNl() && !eof()) {
+        // A quoted string can span multiple lines (NL is a valid quoted_char per the Smithy
+        // grammar), so scan until the closing quote or EOF rather than stopping at the line end.
+        while (!eof()) {
             if (is('"') && last != '\\') {
                 skip(); // '"'
                 int strEnd = position();
