@@ -63,6 +63,7 @@ public final class ProjectLoader {
                 Project.Type.DETACHED,
                 result.modelResult(),
                 result.rebuildIndex(),
+                List.of(),
                 List.of()
         );
     }
@@ -94,6 +95,7 @@ public final class ProjectLoader {
                 Project.Type.UNRESOLVED,
                 result.modelResult(),
                 result.rebuildIndex(),
+                List.of(),
                 List.of()
         );
     }
@@ -132,7 +134,8 @@ public final class ProjectLoader {
                 Project.Type.NORMAL,
                 result.modelResult(),
                 result.rebuildIndex(),
-                configResult.events()
+                configResult.events(),
+                List.of()
         );
     }
 

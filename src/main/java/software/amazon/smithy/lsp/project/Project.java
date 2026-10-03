@@ -13,10 +13,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import software.amazon.smithy.lsp.diff.DiffConfig;
 import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.model.Model;
@@ -49,6 +51,7 @@ public final class Project {
     private volatile ValidatedResult<Model> modelResult;
     private volatile RebuildIndex rebuildIndex;
     private volatile List<ValidationEvent> configEvents;
+    private volatile List<ValidationEvent> diffEvents;
 
     Project(
             Path root,
@@ -59,7 +62,8 @@ public final class Project {
             Type type,
             ValidatedResult<Model> modelResult,
             RebuildIndex rebuildIndex,
-            List<ValidationEvent> configEvents
+            List<ValidationEvent> configEvents,
+            List<ValidationEvent> diffEvents
     ) {
         this.root = root;
         this.config = config;
@@ -70,6 +74,7 @@ public final class Project {
         this.modelResult = modelResult;
         this.rebuildIndex = rebuildIndex;
         this.configEvents = configEvents;
+        this.diffEvents = diffEvents;
     }
 
     /**
@@ -117,7 +122,9 @@ public final class Project {
                 Type.EMPTY,
                 ValidatedResult.empty(),
                 new RebuildIndex(),
-                List.of());
+                List.of(),
+                List.of()
+        );
     }
 
     /**
@@ -131,8 +138,33 @@ public final class Project {
         return config;
     }
 
+    /**
+     * @return The project's diff configuration from {@code .smithy-project.json}, or empty if
+     *  the {@code diff} block is absent (the diff feature is off for this project).
+     */
+    public Optional<DiffConfig> diffConfig() {
+        return config.diffConfig();
+    }
+
     public List<ValidationEvent> configEvents() {
         return configEvents;
+    }
+
+    /**
+     * @return The diff events from the most recent diff run, re-anchored to current files.
+     *  Empty until a diff has run
+     */
+    public List<ValidationEvent> diffEvents() {
+        return diffEvents;
+    }
+
+    /**
+     * Replaces the project's diff events, e.g. after running the diff on save.
+     *
+     * @param diffEvents the re-anchored diff events to surface as diagnostics
+     */
+    public void setDiffEvents(List<ValidationEvent> diffEvents) {
+        this.diffEvents = List.copyOf(diffEvents);
     }
 
     /**

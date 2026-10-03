@@ -472,6 +472,7 @@ public class ProjectTest {
                 Project.Type.DETACHED,
                 modelResult,
                 rebuildIndex,
+                List.of(),
                 List.of()
         );
 
