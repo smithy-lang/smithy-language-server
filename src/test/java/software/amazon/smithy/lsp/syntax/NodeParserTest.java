@@ -171,7 +171,9 @@ public class NodeParserTest {
     private static Stream<Arguments> goodStringsProvider() {
         return Stream.of(
                 Arguments.of("\"foo\"", "foo"),
-                Arguments.of("\"\"", "")
+                Arguments.of("\"\"", ""),
+                // A quoted string can span multiple lines (NL is a valid quoted_char).
+                Arguments.of("\"foo\nbar\"", "foo\nbar")
         );
     }
 
