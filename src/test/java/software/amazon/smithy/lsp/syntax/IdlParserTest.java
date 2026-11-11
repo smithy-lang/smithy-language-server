@@ -194,7 +194,7 @@ public class IdlParserTest {
     public void parsesServiceAndResource() {
         String text = """
                 service Foo {
-                    version: "2024-08-15
+                    version: "2024-08-15"
                     operations: [
                         Op1
                         Op2
