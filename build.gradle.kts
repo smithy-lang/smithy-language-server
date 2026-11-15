@@ -205,7 +205,7 @@ checkstyle {
 
 runtime {
     addOptions("--compress", "zip-6", "--strip-debug", "--no-header-files", "--no-man-pages")
-    addModules("java.logging", "java.naming", "java.xml", "jdk.crypto.ec")
+    addModules("java.logging", "java.naming", "java.xml", "jdk.crypto.ec", "java.net.http")
 
     launcher {
         jvmArgs = listOf(

@@ -63,6 +63,7 @@ import software.amazon.smithy.lsp.document.Document;
 import software.amazon.smithy.lsp.ext.SelectorParams;
 import software.amazon.smithy.lsp.project.Project;
 import software.amazon.smithy.lsp.project.ProjectAndFile;
+import software.amazon.smithy.lsp.project.ProjectDiffer;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
 import software.amazon.smithy.lsp.protocol.RangeBuilder;
 import software.amazon.smithy.model.node.ArrayNode;
@@ -239,6 +240,112 @@ public class SmithyLanguageServerTest {
 
         assertThat(server.getState().findProjectAndFile(uri).project().modelResult().getValidationEvents(),
                 containsInAnyOrder(eventWithMessage(containsString("Error creating trait"))));
+    }
+
+    @Test
+    public void savingSmithyProjectJsonRerunsDiff() throws Exception {
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo {}
+                """);
+        TestWorkspace workspace = TestWorkspace.singleModel(model);
+        // The .smithy-project.json carries a diff config from the start; the diff only runs on a
+        // save, so it has not run at init time.
+        Files.writeString(workspace.getRoot().resolve(".smithy-project.json"),
+                "{ \"diff\": { \"baseline\": { \"type\": \"maven\", \"coordinate\": \"com.foo:bar:1.0.0\" } } }");
+
+        // Baseline has an extra shape (com.foo#Removed) the current model lacks, served in-memory
+        // so no Maven resolution happens.
+        software.amazon.smithy.model.Model baseline = software.amazon.smithy.model.Model.assembler()
+                .addUnparsedModel("baseline.smithy",
+                        "$version: \"2.0\"\nnamespace com.foo\nstructure Foo {}\nstructure Removed {}\n")
+                .assemble().unwrap();
+        ProjectDiffer differ = new ProjectDiffer(
+                (coordinate, repositories) ->
+                        () -> software.amazon.smithy.model.validation.ValidatedResult.fromValue(baseline),
+                message -> { });
+
+        SmithyLanguageServer server = new SmithyLanguageServer(differ);
+        server.connect(new StubClient());
+        server.initialize(RequestBuilders.initialize()
+                .workspaceFolder(workspace.getRoot().toUri().toString(), "test")
+                .build())
+                .get();
+
+        String buildUri = workspace.getUri(".smithy-project.json");
+        server.didOpen(new RequestBuilders.DidOpen().uri(buildUri).text(
+                workspace.readFile(".smithy-project.json")).build());
+
+        // No diff has run yet, so there are no diff events.
+        assertThat(server.getState().findProjectAndFile(buildUri).project().diffEvents(), empty());
+
+        // Saving the build file rebuilds the project AND re-runs the diff.
+        server.didSave(new RequestBuilders.DidSave().uri(buildUri).build());
+        server.getState().lifecycleTasks().waitForAllTasks();
+
+        List<String> removed = server.getState().findProjectAndFile(buildUri).project().diffEvents().stream()
+                .filter(e -> e.getId().startsWith("RemovedShape"))
+                .map(e -> e.getShapeId().map(Object::toString).orElse(""))
+                .collect(java.util.stream.Collectors.toList());
+        assertThat(removed, hasItem("com.foo#Removed"));
+    }
+
+    @Test
+    public void publishesDiffDiagnosticsForUnopenedAnchoredFile() throws Exception {
+        // The current model is in namespace com.foo; the baseline has an extra shape in a
+        // DIFFERENT namespace (other#Gone), so its removal can't anchor to a current source file
+        // and instead anchors to .smithy-project.json. That file is never opened, so before the
+        // fix the most severe break would never reach the Problems panel.
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure Foo {}
+                """);
+        TestWorkspace workspace = TestWorkspace.singleModel(model);
+        Files.writeString(workspace.getRoot().resolve(".smithy-project.json"),
+                "{ \"diff\": { \"baseline\": { \"type\": \"maven\", \"coordinate\": \"com.foo:bar:1.0.0\" } } }");
+
+        software.amazon.smithy.model.Model baseline = software.amazon.smithy.model.Model.assembler()
+                .addUnparsedModel("foo.smithy", "$version: \"2.0\"\nnamespace com.foo\nstructure Foo {}\n")
+                .addUnparsedModel("other.smithy", "$version: \"2.0\"\nnamespace other\nstructure Gone {}\n")
+                .assemble().unwrap();
+        ProjectDiffer differ = new ProjectDiffer(
+                (coordinate, repositories) ->
+                        () -> software.amazon.smithy.model.validation.ValidatedResult.fromValue(baseline),
+                message -> { });
+
+        StubClient client = new StubClient();
+        SmithyLanguageServer server = new SmithyLanguageServer(differ);
+        server.connect(client);
+        server.initialize(RequestBuilders.initialize()
+                .workspaceFolder(workspace.getRoot().toUri().toString(), "test")
+                .build())
+                .get();
+
+        // Only the Smithy source file is opened; .smithy-project.json stays closed.
+        String sourceUri = workspace.getUri("main.smithy");
+        server.didOpen(new RequestBuilders.DidOpen().uri(sourceUri).text(model).build());
+        client.clear();
+
+        // Save the source file -> diff runs -> other#Gone anchors to .smithy-project.json.
+        server.didSave(new RequestBuilders.DidSave().uri(sourceUri).build());
+        server.getState().lifecycleTasks().waitForAllTasks();
+
+        String buildUri = workspace.getUri(".smithy-project.json");
+        // A publishDiagnostics was sent for the (unopened) build file, carrying the diff diagnostic.
+        List<Diagnostic> buildDiagnostics = client.diagnostics.stream()
+                .filter(params -> params.getUri().equals(buildUri))
+                .reduce((first, second) -> second) // last publish for that uri
+                .map(PublishDiagnosticsParams::getDiagnostics)
+                .orElse(List.of());
+        assertThat(buildDiagnostics.stream()
+                        .filter(d -> SmithyDiagnostics.DIFF_SOURCE.equals(d.getSource()))
+                        .map(Diagnostic::getMessage)
+                        .collect(java.util.stream.Collectors.toList()),
+                hasItem(containsString("other#Gone")));
     }
 
     @Test
