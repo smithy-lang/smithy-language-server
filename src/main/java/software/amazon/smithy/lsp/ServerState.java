@@ -166,7 +166,10 @@ public final class ServerState implements ManagedFiles {
             }
 
             LOGGER.finest("Initialized project at " + root);
-            return List.of();
+            return updatedProject.configEvents().stream()
+                    .filter(event -> event.getId().equals("DependencyResolver"))
+                    .map(event -> (Exception) new RuntimeException(event.getMessage()))
+                    .toList();
         } catch (Exception e) {
             LOGGER.severe("Failed to load project at " + root);
 
@@ -178,17 +181,19 @@ public final class ServerState implements ManagedFiles {
         }
     }
 
-    void loadWorkspace(WorkspaceFolder workspaceFolder) {
+    List<Exception> loadWorkspace(WorkspaceFolder workspaceFolder) {
         Path workspaceRoot = Paths.get(URI.create(workspaceFolder.getUri()));
         workspacePaths.add(workspaceRoot);
+        List<Exception> errors = new ArrayList<>();
         try {
             List<Path> projectRoots = ProjectRootVisitor.findProjectRoots(workspaceRoot);
             for (Path root : projectRoots) {
-                tryInitProject(root);
+                errors.addAll(tryInitProject(root));
             }
         } catch (IOException e) {
             LOGGER.severe(e.getMessage());
         }
+        return errors;
     }
 
     void removeWorkspace(WorkspaceFolder folder) {
