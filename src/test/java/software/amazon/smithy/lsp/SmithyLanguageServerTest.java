@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionParams;
@@ -49,6 +50,7 @@ import org.eclipse.lsp4j.FormattingOptions;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
@@ -57,6 +59,7 @@ import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.junit.jupiter.api.Test;
 import software.amazon.smithy.build.model.MavenConfig;
+import software.amazon.smithy.build.model.MavenRepository;
 import software.amazon.smithy.build.model.SmithyBuildConfig;
 import software.amazon.smithy.lsp.diagnostics.SmithyDiagnostics;
 import software.amazon.smithy.lsp.document.Document;
@@ -2243,6 +2246,115 @@ public class SmithyLanguageServerTest {
         assertThat(projectAndFile, notNullValue());
         assertThat(projectAndFile.project().type(), equalTo(expectedType));
         assertThat(projectAndFile.project().root(), equalTo(expectedRootPath));
+    }
+
+    @Test
+    public void reportsDependencyResolutionFailureOnInitialize() {
+        TestWorkspace workspace = TestWorkspace.builder()
+                .withSourceFile("main.smithy", """
+                        $version: "2"
+                        namespace com.foo
+                        string Foo
+                        """)
+                .withConfig(SmithyBuildConfig.builder()
+                        .version("1")
+                        .sources(List.of("main.smithy"))
+                        .maven(MavenConfig.builder()
+                                .repositories(Set.of(MavenRepository.builder()
+                                        .url("http://localhost:1/")
+                                        .build()))
+                                .dependencies(List.of("com.example:does-not-exist:1.0.0"))
+                                .build())
+                        .build())
+                .build();
+        StubClient client = new StubClient();
+
+        initFromWorkspace(workspace, client);
+
+        assertThat(client.logged.stream().map(MessageParams::getMessage).toList(), hasItem(allOf(
+                containsString("Failed to load Smithy projects"),
+                containsString("Dependency resolution failed"))));
+    }
+
+    @Test
+    public void reportsDependencyResolutionFailureOnceForMultipleBuildFiles() throws Exception {
+        MavenConfig maven = MavenConfig.builder()
+                .repositories(Set.of(MavenRepository.builder()
+                        .url("http://localhost:1/")
+                        .build()))
+                .dependencies(List.of("com.example:does-not-exist:1.0.0"))
+                .build();
+        TestWorkspace workspace = TestWorkspace.builder()
+                .withSourceFile("main.smithy", """
+                        $version: "2"
+                        namespace com.foo
+                        string Foo
+                        """)
+                .withConfig(SmithyBuildConfig.builder()
+                        .version("1")
+                        .sources(List.of("main.smithy"))
+                        .maven(maven)
+                        .build())
+                .build();
+        Files.writeString(workspace.getRoot().resolve(".smithy.json"), """
+                {
+                    "maven": {
+                        "dependencies": ["com.example:does-not-exist:1.0.0"],
+                        "repositories": [{"url": "http://localhost:1/"}]
+                    }
+                }
+                """);
+        StubClient client = new StubClient();
+
+        initFromWorkspace(workspace, client);
+
+        List<String> loadErrors = client.logged.stream()
+                .map(MessageParams::getMessage)
+                .filter(message -> message.startsWith("Failed to load Smithy projects"))
+                .toList();
+        assertThat(loadErrors, hasSize(1));
+        assertThat(loadErrors.get(0).split("Dependency resolution failed", -1).length - 1, equalTo(1));
+    }
+
+    @Test
+    public void reportsDependencyResolutionFailureOnAddedWorkspaceFolder() {
+        TestWorkspace workspaceFoo = TestWorkspace.builder()
+                .withPath("foo")
+                .withSourceFile("foo.smithy", """
+                        $version: "2"
+                        namespace com.foo
+                        string Foo
+                        """)
+                .build();
+        TestWorkspace workspaceBar = TestWorkspace.builder()
+                .withPath("bar")
+                .withSourceFile("bar.smithy", """
+                        $version: "2"
+                        namespace com.bar
+                        string Bar
+                        """)
+                .withConfig(SmithyBuildConfig.builder()
+                        .version("1")
+                        .sources(List.of("bar.smithy"))
+                        .maven(MavenConfig.builder()
+                                .repositories(Set.of(MavenRepository.builder()
+                                        .url("http://localhost:1/")
+                                        .build()))
+                                .dependencies(List.of("com.example:does-not-exist:1.0.0"))
+                                .build())
+                        .build())
+                .build();
+        StubClient client = new StubClient();
+        SmithyLanguageServer server = initFromWorkspace(workspaceFoo, client);
+        client.clear();
+
+        server.didChangeWorkspaceFolders(RequestBuilders.didChangeWorkspaceFolders()
+                .added(workspaceBar.getRoot().toUri().toString(), "bar")
+                .build());
+
+        assertThat(client.logged.stream().map(MessageParams::getMessage).toList(), hasItem(allOf(
+                containsString("Failed to load Smithy projects"),
+                containsString("Dependency resolution failed"))));
     }
 
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {

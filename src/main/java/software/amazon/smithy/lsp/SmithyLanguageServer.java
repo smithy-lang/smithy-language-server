@@ -210,7 +210,7 @@ public class SmithyLanguageServer implements
             }
 
             for (WorkspaceFolder workspaceFolder : params.getWorkspaceFolders()) {
-                state.loadWorkspace(workspaceFolder);
+                reportProjectLoadErrors(state.loadWorkspace(workspaceFolder));
             }
 
             if (workDoneProgressToken != null) {
@@ -429,7 +429,7 @@ public class SmithyLanguageServer implements
         LOGGER.finest("DidChangeWorkspaceFolders");
 
         for (WorkspaceFolder folder : params.getEvent().getAdded()) {
-            state.loadWorkspace(folder);
+            reportProjectLoadErrors(state.loadWorkspace(folder));
         }
 
         for (WorkspaceFolder folder : params.getEvent().getRemoved()) {
