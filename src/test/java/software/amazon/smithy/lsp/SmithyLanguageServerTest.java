@@ -2316,6 +2316,47 @@ public class SmithyLanguageServerTest {
         assertThat(loadErrors.get(0).split("Dependency resolution failed", -1).length - 1, equalTo(1));
     }
 
+    @Test
+    public void reportsDependencyResolutionFailureOnAddedWorkspaceFolder() {
+        TestWorkspace workspaceFoo = TestWorkspace.builder()
+                .withPath("foo")
+                .withSourceFile("foo.smithy", """
+                        $version: "2"
+                        namespace com.foo
+                        string Foo
+                        """)
+                .build();
+        TestWorkspace workspaceBar = TestWorkspace.builder()
+                .withPath("bar")
+                .withSourceFile("bar.smithy", """
+                        $version: "2"
+                        namespace com.bar
+                        string Bar
+                        """)
+                .withConfig(SmithyBuildConfig.builder()
+                        .version("1")
+                        .sources(List.of("bar.smithy"))
+                        .maven(MavenConfig.builder()
+                                .repositories(Set.of(MavenRepository.builder()
+                                        .url("http://localhost:1/")
+                                        .build()))
+                                .dependencies(List.of("com.example:does-not-exist:1.0.0"))
+                                .build())
+                        .build())
+                .build();
+        StubClient client = new StubClient();
+        SmithyLanguageServer server = initFromWorkspace(workspaceFoo, client);
+        client.clear();
+
+        server.didChangeWorkspaceFolders(RequestBuilders.didChangeWorkspaceFolders()
+                .added(workspaceBar.getRoot().toUri().toString(), "bar")
+                .build());
+
+        assertThat(client.logged.stream().map(MessageParams::getMessage).toList(), hasItem(allOf(
+                containsString("Failed to load Smithy projects"),
+                containsString("Dependency resolution failed"))));
+    }
+
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {
         return initFromWorkspace(workspace, new StubClient());
     }
