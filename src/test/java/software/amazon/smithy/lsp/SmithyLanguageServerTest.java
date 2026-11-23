@@ -2276,6 +2276,46 @@ public class SmithyLanguageServerTest {
                 containsString("Dependency resolution failed"))));
     }
 
+    @Test
+    public void reportsDependencyResolutionFailureOnceForMultipleBuildFiles() throws Exception {
+        MavenConfig maven = MavenConfig.builder()
+                .repositories(Set.of(MavenRepository.builder()
+                        .url("http://localhost:1/")
+                        .build()))
+                .dependencies(List.of("com.example:does-not-exist:1.0.0"))
+                .build();
+        TestWorkspace workspace = TestWorkspace.builder()
+                .withSourceFile("main.smithy", """
+                        $version: "2"
+                        namespace com.foo
+                        string Foo
+                        """)
+                .withConfig(SmithyBuildConfig.builder()
+                        .version("1")
+                        .sources(List.of("main.smithy"))
+                        .maven(maven)
+                        .build())
+                .build();
+        Files.writeString(workspace.getRoot().resolve(".smithy.json"), """
+                {
+                    "maven": {
+                        "dependencies": ["com.example:does-not-exist:1.0.0"],
+                        "repositories": [{"url": "http://localhost:1/"}]
+                    }
+                }
+                """);
+        StubClient client = new StubClient();
+
+        initFromWorkspace(workspace, client);
+
+        List<String> loadErrors = client.logged.stream()
+                .map(MessageParams::getMessage)
+                .filter(message -> message.startsWith("Failed to load Smithy projects"))
+                .toList();
+        assertThat(loadErrors, hasSize(1));
+        assertThat(loadErrors.get(0).split("Dependency resolution failed", -1).length - 1, equalTo(1));
+    }
+
     public static SmithyLanguageServer initFromWorkspace(TestWorkspace workspace) {
         return initFromWorkspace(workspace, new StubClient());
     }

@@ -26,6 +26,7 @@ import software.amazon.smithy.lsp.project.ProjectChange;
 import software.amazon.smithy.lsp.project.ProjectFile;
 import software.amazon.smithy.lsp.project.ProjectLoader;
 import software.amazon.smithy.lsp.protocol.LspAdapter;
+import software.amazon.smithy.model.validation.ValidationEvent;
 
 /**
  * Keeps track of the state of the server.
@@ -168,7 +169,9 @@ public final class ServerState implements ManagedFiles {
             LOGGER.finest("Initialized project at " + root);
             return updatedProject.configEvents().stream()
                     .filter(event -> event.getId().equals("DependencyResolver"))
-                    .map(event -> (Exception) new RuntimeException(event.getMessage()))
+                    .map(ValidationEvent::getMessage)
+                    .distinct()
+                    .map(message -> (Exception) new RuntimeException(message))
                     .toList();
         } catch (Exception e) {
             LOGGER.severe("Failed to load project at " + root);
