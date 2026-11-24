@@ -1,5 +1,16 @@
 # Smithy Language Server Changelog
 
+## 0.10.0 (2026-11-25)
+
+### Bug fixes
+
+* Fixed project load errors, such as Maven dependency resolution failures, not being reported on initial workspace load ([#269](https://github.com/smithy-lang/smithy-language-server/pull/269))
+
+### Other
+
+* Updated the bundled runtime images to include the latest Amazon Corretto 21 fixes.
+* Bumped minimum Smithy version to 1.75.0. ([#267](https://github.com/smithy-lang/smithy-language-server/pull/267))
+
 ## 0.9.0 (2026-06-04)
 
 ### Other
