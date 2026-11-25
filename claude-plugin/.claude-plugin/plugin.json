@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "smithy-lsp",
+  "version": "0.8.0",
+  "description": "Smithy language server — diagnostics, go-to-definition, hover, and completions for .smithy files",
+  "author": {
+    "name": "Smithy",
+    "url": "https://smithy.io"
+  },
+  "homepage": "https://github.com/smithy-lang/smithy-language-server",
+  "license": "Apache-2.0",
+  "keywords": ["smithy", "lsp", "aws", "api", "idl"],
+  "lspServers": {
+    "smithy": {
+      "command": "smithy-language-server",
+      "extensionToLanguage": {
+        ".smithy": "smithy"
+      },
+      "startupTimeout": 30000
+    }
+  }
+}
