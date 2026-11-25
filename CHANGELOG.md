@@ -1,6 +1,6 @@
 # Smithy Language Server Changelog
 
-## 0.10.0 (2026-11-25)
+## 0.10.0 (2026-11-24)
 
 ### Bug fixes
 
