@@ -14,10 +14,11 @@ record SmithyProjectJson(
         List<String> sources,
         List<String> imports,
         List<ProjectDependency> dependencies,
-        String outputDirectory
+        String outputDirectory,
+        ObjectNode diff
 ) {
     static SmithyProjectJson empty() {
-        return new SmithyProjectJson(List.of(), List.of(), List.of(), null);
+        return new SmithyProjectJson(List.of(), List.of(), List.of(), null, null);
     }
 
     static SmithyProjectJson fromNode(Node node) {
@@ -43,7 +44,9 @@ record SmithyProjectJson(
 
         String outputDirectory = objectNode.getStringMemberOrDefault("outputDirectory", null);
 
-        return new SmithyProjectJson(sources, imports, dependencies, outputDirectory);
+        ObjectNode diff = objectNode.getObjectMember("diff").orElse(null);
+
+        return new SmithyProjectJson(sources, imports, dependencies, outputDirectory, diff);
     }
 
     /**
