@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionParams;
+import org.eclipse.lsp4j.DeclarationParams;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
@@ -438,6 +439,45 @@ public class SmithyLanguageServerTest {
                 .get();
         String content = appliedTraitInPreludeHover.getContents().getRight().getValue();
         assertThat(content, containsString("document default"));
+    }
+
+    @Test
+    public void declarationReturnsDefinition() throws Exception {
+        String model = safeString("""
+                $version: "2"
+                namespace com.foo
+
+                structure GetCityInput {
+                    cityId: CityId
+                }
+
+                string CityId
+                """);
+        TestWorkspace workspace = TestWorkspace.singleModel(model);
+        SmithyLanguageServer server = initFromWorkspace(workspace);
+
+        String uri = workspace.getUri("main.smithy");
+
+        server.didOpen(RequestBuilders.didOpen()
+                .uri(uri)
+                .text(model)
+                .build());
+
+        List<? extends Location> definition = server.definition(RequestBuilders.positionRequest()
+                .uri(uri)
+                .line(4)
+                .character(12)
+                .buildDefinition())
+                .get()
+                .getLeft();
+        List<? extends Location> declaration = server.declaration(new DeclarationParams(
+                new TextDocumentIdentifier(uri), new Position(4, 12)))
+                .get()
+                .getLeft();
+
+        assertThat(definition, hasSize(1));
+        assertThat(definition.get(0).getRange().getStart(), equalTo(new Position(7, 0)));
+        assertThat(declaration, equalTo(definition));
     }
 
     @Test

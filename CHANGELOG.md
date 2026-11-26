@@ -1,5 +1,12 @@
 # Smithy Language Server Changelog
 
+## next
+
+### Bug fixes
+
+* Fixed textDocument/declaration requests failing with an internal error ([#278](https://github.com/smithy-lang/smithy-language-server/pull/278))
+
+
 ## 0.10.0 (2026-11-24)
 
 ### Bug fixes
