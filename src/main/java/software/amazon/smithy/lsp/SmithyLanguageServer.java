@@ -38,6 +38,7 @@ import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.CompletionParams;
+import org.eclipse.lsp4j.DeclarationParams;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DidChangeConfigurationParams;
@@ -664,6 +665,13 @@ public class SmithyLanguageServer implements
         Project project = projectAndFile.project();
         var handler = new DefinitionHandler(project, smithyFile);
         return CompletableFuture.supplyAsync(() -> Either.forLeft(handler.handle(params)));
+    }
+
+    @Override
+    public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>>
+    declaration(DeclarationParams params) {
+        // Smithy shapes have no declaration separate from their definition.
+        return definition(new DefinitionParams(params.getTextDocument(), params.getPosition()));
     }
 
     @Override
